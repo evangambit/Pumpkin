@@ -8,6 +8,7 @@
 
 #include "../game/Position.h"
 #include "../game/utils.h"
+#include "../game/movegen/movegen.h"
 
 namespace ChessEngine {
 
