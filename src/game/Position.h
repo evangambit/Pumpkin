@@ -101,7 +101,7 @@ class Position {
     this->boardListener_->place_piece(cp, sq);
   }
   inline void decrement_piece_map(ColoredPiece cp, SafeSquare sq) {
-    this->boardListener_->remove_piece(sq);
+    this->boardListener_->remove_piece(cp, sq);
   }
 
   void assert_valid_state() const;

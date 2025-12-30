@@ -17,7 +17,7 @@ struct FakeBoardListener : public BoardListener {
   void place_piece(ColoredPiece cp, SafeSquare square) override {
     placedPieces.push_back({cp, square});
   }
-  void remove_piece(SafeSquare square) override {
+  void remove_piece(ColoredPiece cp, SafeSquare square) override {
     removedSquares.push_back(square);
   }
 };

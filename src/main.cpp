@@ -1,5 +1,6 @@
 #include "search/search.h"
-#include "search/Evaluator.h"
+#include "search/evaluator.h"
+#include "search/PieceSquareEvaluator.h"
 #include "game/Position.h"
 #include "string_utils.h"
 
@@ -14,12 +15,10 @@ int main(int argc, char** argv) {
     std::string fen = join(fenParts, " ");
 
     Position pos(fen);
-    auto evaluator = std::make_shared<SimpleEvaluator>();
+    auto evaluator = std::make_shared<PieceSquareEvaluator>();
+    std::pair<ColoredEvaluation<Color::WHITE>, Move> result = search(pos, evaluator, 4);
 
-    Thread thread(0, pos, evaluator, std::unordered_set<Move>());
-    SearchResult<Color::WHITE> result = negamax<Color::WHITE, SearchType::ROOT>(&thread, 3, ColoredEvaluation<Color::WHITE>(kMinEval), ColoredEvaluation<Color::WHITE>(kMaxEval));
-
-    std::cout << "Best Move: " << result.bestMove.uci() << ", Evaluation: " << result.evaluation << std::endl;
+    std::cout << "Best Move: " << result.second.uci() << ", Evaluation: " << result.first << std::endl;
 
     return 0;
 }

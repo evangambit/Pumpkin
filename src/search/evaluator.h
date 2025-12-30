@@ -3,6 +3,7 @@
 
 #include <memory>
 #include "../game/Position.h"
+#include "../game/utils.h"
 #include "../game/BoardListener.h"
 #include "ColoredEvaluation.h"
 
@@ -53,7 +54,7 @@ struct SimpleEvaluator : public EvaluatorInterface {
 
   void empty() override {}
   void place_piece(ColoredPiece cp, SafeSquare square) override {}
-  void remove_piece(SafeSquare square) override {}
+  void remove_piece(ColoredPiece cp, SafeSquare square) override {}
 };
 
 } // namespace ChessEngine
