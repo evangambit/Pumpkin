@@ -240,4 +240,74 @@ TEST_F(SearchTest, SearchHandlesCheck) {
   EXPECT_EQ(result.bestMove.to, SafeSquare::SF7);
 }
 
+TEST_F(SearchTest, PermittedMovesFilterRestrictsSearch) {
+  Position pos = Position::init();
+  auto evaluator = std::make_shared<SimpleEvaluator>();
+  
+  // Only permit the move c2c3.
+  Move permittedMove;
+  permittedMove.from = SafeSquare::SC2;
+  permittedMove.to = SafeSquare::SC3;
+  permittedMove.moveType = MoveType::NORMAL;
+  permittedMove.promotion = 0;
+
+  std::unordered_set<Move> permittedMoves;
+  permittedMoves.insert(permittedMove);
+  
+  Thread thread(0, pos, evaluator, permittedMoves);
+  
+  SearchResult<Color::WHITE> result = negamax<Color::WHITE, SearchType::ROOT>(&thread, 2, ColoredEvaluation<Color::WHITE>(kMinEval), ColoredEvaluation<Color::WHITE>(kMaxEval));
+  
+  // Best move should be forced to c2c3 since that's the only permitted move.
+  EXPECT_EQ(result.bestMove, permittedMove);
+}
+
+// Test that empty permitted moves set allows all moves
+TEST_F(SearchTest, EmptyPermittedMovesAllowsAllMoves) {
+  // Same position as above - without restrictions, Bf3xd5 should be chosen
+  Position pos("3k4/8/8/3q4/8/5B2/8/1K6 w - - 0 1");
+  auto evaluator = std::make_shared<SimpleEvaluator>();
+  std::unordered_set<Move> permittedMoves;  // Empty set
+  
+  Thread thread(0, pos, evaluator, permittedMoves);
+  
+  SearchResult<Color::WHITE> result = negamax<Color::WHITE, SearchType::ROOT>(&thread, 2, ColoredEvaluation<Color::WHITE>(kMinEval), ColoredEvaluation<Color::WHITE>(kMaxEval));
+  
+  // Best move should be bishop captures queen (Bf3xd5)
+  EXPECT_EQ(result.bestMove.from, SafeSquare::SF3);
+  EXPECT_EQ(result.bestMove.to, SafeSquare::SD5);
+}
+
+// Test permitted moves with multiple allowed moves
+TEST_F(SearchTest, PermittedMovesWithMultipleMoves) {
+  // Position where white can capture queen with Bf3xd5 or make various king moves
+  Position pos("3k4/8/8/3q4/8/5B2/8/1K6 w - - 0 1");
+  auto evaluator = std::make_shared<SimpleEvaluator>();
+  
+  // Permit both the bishop capture and a king move
+  Move bishopCapture;
+  bishopCapture.from = SafeSquare::SF3;
+  bishopCapture.to = SafeSquare::SD5;
+  bishopCapture.moveType = MoveType::NORMAL;
+  bishopCapture.promotion = 0;
+  
+  Move kingMove;
+  kingMove.from = SafeSquare::SF2;
+  kingMove.to = SafeSquare::SE3;
+  kingMove.moveType = MoveType::NORMAL;
+  kingMove.promotion = 0;
+  
+  std::unordered_set<Move> permittedMoves;
+  permittedMoves.insert(bishopCapture);
+  permittedMoves.insert(kingMove);
+  
+  Thread thread(0, pos, evaluator, permittedMoves);
+  
+  SearchResult<Color::WHITE> result = negamax<Color::WHITE, SearchType::ROOT>(&thread, 2, ColoredEvaluation<Color::WHITE>(kMinEval), ColoredEvaluation<Color::WHITE>(kMaxEval));
+  
+  // Best move should still be Bxd5 since it captures the queen
+  EXPECT_EQ(result.bestMove.from, SafeSquare::SF3);
+  EXPECT_EQ(result.bestMove.to, SafeSquare::SD5);
+}
+
 }  // namespace ChessEngine

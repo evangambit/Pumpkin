@@ -150,6 +150,19 @@ SearchResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> al
     end = compute_moves<TURN, MoveGenType::ALL_MOVES>(thread->position_, moves);
   }
 
+  if (SEARCH_TYPE == SearchType::ROOT) {
+    // If there are permitted moves, filter the move list to only include those moves.
+    if (!thread->permittedMoves_.empty()) {
+      ExtMove* writePtr = moves;
+      for (ExtMove* move = moves; move < end; ++move) {
+        if (thread->permittedMoves_.count(move->move) > 0) {
+          *writePtr++ = *move;
+        }
+      }
+      end = writePtr;
+    }
+  }
+
   constexpr ColoredPiece moverKing = coloredPiece<TURN, Piece::KING>();
   const bool inCheck = can_enemy_attack<TURN>(
     thread->position_,
