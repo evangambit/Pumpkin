@@ -113,7 +113,7 @@ TEST_F(SearchTest, NegamaxFindsBackRankMateIn1) {
   
   Thread thread(0, pos, evaluator, permittedMoves);
   
-  SearchResult<Color::WHITE> result = negamax<Color::WHITE, SearchType::ROOT>(&thread, 2, ColoredEvaluation<Color::WHITE>(kMinEval), ColoredEvaluation<Color::WHITE>(kMaxEval));
+  SearchResult<Color::WHITE> result = negamax<Color::WHITE, SearchType::ROOT>(&thread, 2, ColoredEvaluation<Color::WHITE>(kMinEval), ColoredEvaluation<Color::WHITE>(kMaxEval), 0);
   
   // The best move should be Qd4d8#.
   EXPECT_EQ(result.bestMove.from, SafeSquare::SD4);
@@ -131,7 +131,7 @@ TEST_F(SearchTest, NegamaxIdentifiesStalemate) {
   
   Thread thread(0, pos, evaluator, permittedMoves);
   
-  SearchResult<Color::BLACK> result = negamax<Color::BLACK, SearchType::ROOT>(&thread, 1, ColoredEvaluation<Color::BLACK>(kMinEval), ColoredEvaluation<Color::BLACK>(kMaxEval));
+  SearchResult<Color::BLACK> result = negamax<Color::BLACK, SearchType::ROOT>(&thread, 1, ColoredEvaluation<Color::BLACK>(kMinEval), ColoredEvaluation<Color::BLACK>(kMaxEval), 0);
   
   // Stalemate should return evaluation close to 0 (draw)
   EXPECT_EQ(result.bestMove, kNullMove);
@@ -147,7 +147,7 @@ TEST_F(SearchTest, MaterialEvaluationStartingPosition) {
   Thread thread(0, pos, evaluator, permittedMoves);
   
   // At depth 0, should just evaluate the position
-  SearchResult<Color::WHITE> result = negamax<Color::WHITE, SearchType::ROOT>(&thread, 0, ColoredEvaluation<Color::WHITE>(kMinEval), ColoredEvaluation<Color::WHITE>(kMaxEval));
+  SearchResult<Color::WHITE> result = negamax<Color::WHITE, SearchType::ROOT>(&thread, 0, ColoredEvaluation<Color::WHITE>(kMinEval), ColoredEvaluation<Color::WHITE>(kMaxEval), 0);
   
   // Starting position should be equal (evaluation near 0)
   EXPECT_EQ(result.evaluation, ColoredEvaluation<Color::WHITE>(0));
@@ -162,7 +162,7 @@ TEST_F(SearchTest, SearchPrefersCapturingMaterial) {
   
   Thread thread(0, pos, evaluator, permittedMoves);
   
-  SearchResult<Color::WHITE> result = negamax<Color::WHITE, SearchType::ROOT>(&thread, 2, ColoredEvaluation<Color::WHITE>(kMinEval), ColoredEvaluation<Color::WHITE>(kMaxEval));
+  SearchResult<Color::WHITE> result = negamax<Color::WHITE, SearchType::ROOT>(&thread, 2, ColoredEvaluation<Color::WHITE>(kMinEval), ColoredEvaluation<Color::WHITE>(kMaxEval), 0);
   
   // Best move should be bishop captures queen (Bxd5)
   EXPECT_EQ(result.bestMove.from, SafeSquare::SF3);
@@ -177,7 +177,7 @@ TEST_F(SearchTest, CheckmateDetectionDepth1) {
   
   Thread thread(0, pos, evaluator, permittedMoves);
   
-  SearchResult<Color::WHITE> result = negamax<Color::WHITE, SearchType::ROOT>(&thread, 4, ColoredEvaluation<Color::WHITE>(kMinEval), ColoredEvaluation<Color::WHITE>(kMaxEval));
+  SearchResult<Color::WHITE> result = negamax<Color::WHITE, SearchType::ROOT>(&thread, 4, ColoredEvaluation<Color::WHITE>(kMinEval), ColoredEvaluation<Color::WHITE>(kMaxEval), 0);
   
   EXPECT_EQ(result.evaluation, ColoredEvaluation<Color::WHITE>(-kCheckmate - 3));  // Mate in 3 ply.
   EXPECT_EQ(result.bestMove.from, SafeSquare::SD4);
@@ -194,7 +194,7 @@ TEST_F(SearchTest, FiftyMoveRuleDetection) {
   Thread thread(0, pos, evaluator, permittedMoves);
   
   // With depth > 0, should detect fifty move rule and return draw
-  SearchResult<Color::WHITE> result = negamax<Color::WHITE, SearchType::ROOT>(&thread, 3, ColoredEvaluation<Color::WHITE>(kMinEval), ColoredEvaluation<Color::WHITE>(kMaxEval));
+  SearchResult<Color::WHITE> result = negamax<Color::WHITE, SearchType::ROOT>(&thread, 3, ColoredEvaluation<Color::WHITE>(kMinEval), ColoredEvaluation<Color::WHITE>(kMaxEval), 0);
   
   // Position should be evaluated as draw due to fifty move rule
   // (after any move, fifty move rule kicks in)
@@ -210,7 +210,7 @@ TEST_F(SearchTest, NegamaxBlackToMove) {
   
   Thread thread(0, pos, evaluator, permittedMoves);
   
-  SearchResult<Color::BLACK> result = negamax<Color::BLACK, SearchType::ROOT>(&thread, 2, ColoredEvaluation<Color::BLACK>(kMinEval), ColoredEvaluation<Color::BLACK>(kMaxEval));
+  SearchResult<Color::BLACK> result = negamax<Color::BLACK, SearchType::ROOT>(&thread, 2, ColoredEvaluation<Color::BLACK>(kMinEval), ColoredEvaluation<Color::BLACK>(kMaxEval), 0);
   
   // Best move should be knight forking king and queen (Ne7-f5)
   EXPECT_EQ(result.bestMove.from, SafeSquare::SE7);
@@ -219,7 +219,7 @@ TEST_F(SearchTest, NegamaxBlackToMove) {
   make_move<Color::BLACK>(&thread.position_, result.bestMove);
   make_move<Color::WHITE>(&thread.position_, make_move_from_uci("e3e4", thread.position_));
 
-  result = negamax<Color::BLACK, SearchType::ROOT>(&thread, 2, ColoredEvaluation<Color::BLACK>(kMinEval), ColoredEvaluation<Color::BLACK>(kMaxEval));
+  result = negamax<Color::BLACK, SearchType::ROOT>(&thread, 2, ColoredEvaluation<Color::BLACK>(kMinEval), ColoredEvaluation<Color::BLACK>(kMaxEval), 0);
   // Next best move should be knight captures queen (Nxf5)
   EXPECT_EQ(result.bestMove.from, SafeSquare::SF5);
   EXPECT_EQ(result.bestMove.to, SafeSquare::SD6);
@@ -234,7 +234,7 @@ TEST_F(SearchTest, SearchHandlesCheck) {
   
   Thread thread(0, pos, evaluator, permittedMoves);
   
-  SearchResult<Color::BLACK> result = negamax<Color::BLACK, SearchType::ROOT>(&thread, 1, ColoredEvaluation<Color::BLACK>(kMinEval), ColoredEvaluation<Color::BLACK>(kMaxEval));
+  SearchResult<Color::BLACK> result = negamax<Color::BLACK, SearchType::ROOT>(&thread, 1, ColoredEvaluation<Color::BLACK>(kMinEval), ColoredEvaluation<Color::BLACK>(kMaxEval), 0);
   
   EXPECT_EQ(result.bestMove.from, SafeSquare::SE8);
   EXPECT_EQ(result.bestMove.to, SafeSquare::SF7);
@@ -256,7 +256,7 @@ TEST_F(SearchTest, PermittedMovesFilterRestrictsSearch) {
   
   Thread thread(0, pos, evaluator, permittedMoves);
   
-  SearchResult<Color::WHITE> result = negamax<Color::WHITE, SearchType::ROOT>(&thread, 2, ColoredEvaluation<Color::WHITE>(kMinEval), ColoredEvaluation<Color::WHITE>(kMaxEval));
+  SearchResult<Color::WHITE> result = negamax<Color::WHITE, SearchType::ROOT>(&thread, 2, ColoredEvaluation<Color::WHITE>(kMinEval), ColoredEvaluation<Color::WHITE>(kMaxEval), 0);
   
   // Best move should be forced to c2c3 since that's the only permitted move.
   EXPECT_EQ(result.bestMove, permittedMove);
@@ -271,7 +271,7 @@ TEST_F(SearchTest, EmptyPermittedMovesAllowsAllMoves) {
   
   Thread thread(0, pos, evaluator, permittedMoves);
   
-  SearchResult<Color::WHITE> result = negamax<Color::WHITE, SearchType::ROOT>(&thread, 2, ColoredEvaluation<Color::WHITE>(kMinEval), ColoredEvaluation<Color::WHITE>(kMaxEval));
+  SearchResult<Color::WHITE> result = negamax<Color::WHITE, SearchType::ROOT>(&thread, 2, ColoredEvaluation<Color::WHITE>(kMinEval), ColoredEvaluation<Color::WHITE>(kMaxEval), 0);
   
   // Best move should be bishop captures queen (Bf3xd5)
   EXPECT_EQ(result.bestMove.from, SafeSquare::SF3);
@@ -303,7 +303,7 @@ TEST_F(SearchTest, PermittedMovesWithMultipleMoves) {
   
   Thread thread(0, pos, evaluator, permittedMoves);
   
-  SearchResult<Color::WHITE> result = negamax<Color::WHITE, SearchType::ROOT>(&thread, 2, ColoredEvaluation<Color::WHITE>(kMinEval), ColoredEvaluation<Color::WHITE>(kMaxEval));
+  SearchResult<Color::WHITE> result = negamax<Color::WHITE, SearchType::ROOT>(&thread, 2, ColoredEvaluation<Color::WHITE>(kMinEval), ColoredEvaluation<Color::WHITE>(kMaxEval), 0);
   
   // Best move should still be Bxd5 since it captures the queen
   EXPECT_EQ(result.bestMove.from, SafeSquare::SF3);

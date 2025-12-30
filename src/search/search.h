@@ -27,7 +27,7 @@ struct Thread {
     std::shared_ptr<EvaluatorInterface> evaluator,
     const std::unordered_set<Move>& permittedMoves
   )
-    : id_(id), position_(pos), evaluator_(evaluator->clone()), permittedMoves_(permittedMoves) {}
+    : id_(id), position_(pos), evaluator_(evaluator), permittedMoves_(permittedMoves) {}
   std::atomic<bool> stopSearchFlag{false};
 };
 
@@ -57,16 +57,23 @@ enum SearchType {
   NORMAL_SEARCH,
 };
 
+template<Color TURN>
+SearchResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, ColoredEvaluation<TURN> beta, int plyFromRoot) {
+  // TODO: Implement quiescence search
+  return SearchResult<TURN>(kNullMove, evaluate<TURN>(thread->evaluator_, thread->position_).value);
+}
+
 template<Color TURN, SearchType SEARCH_TYPE>
-SearchResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> alpha, ColoredEvaluation<TURN> beta) {
+SearchResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> alpha, ColoredEvaluation<TURN> beta, int plyFromRoot) {
   if (depth == 0) {
-    return SearchResult<TURN>(kNullMove, evaluate<TURN>(thread->evaluator_, thread->position_).value);
+    return qsearch(thread, alpha, beta, plyFromRoot);
   }
 
   ExtMove moves[kMaxNumMoves];
   ExtMove* end;
   if (SEARCH_TYPE == SearchType::ROOT) {
     end = compute_legal_moves<TURN>(&thread->position_, moves);
+    std::cout << "Generated " << (end - moves) << " legal moves at root." << std::endl;
   } else {
     end = compute_moves<TURN, MoveGenType::ALL_MOVES>(thread->position_, moves);
   }
@@ -92,7 +99,7 @@ SearchResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> al
 
   if (moves == end) {
     if (inCheck) {
-      return SearchResult<TURN>(kNullMove, kCheckmate);
+      return SearchResult<TURN>(kNullMove, kCheckmate + plyFromRoot);
     } else {
       return SearchResult<TURN>(kNullMove, 0);
     }
@@ -106,7 +113,7 @@ SearchResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> al
   SearchResult<TURN> bestResult(kNullMove, kMinEval);
   for (ExtMove* move = moves; move < end; ++move) {
     make_move<TURN>(&thread->position_, move->move);
-    ColoredEvaluation<TURN> eval = -negamax<opposite_color<TURN>(), SearchType::NORMAL_SEARCH>(thread, depth - 1, -beta, -alpha).evaluation;
+    ColoredEvaluation<TURN> eval = -negamax<opposite_color<TURN>(), SearchType::NORMAL_SEARCH>(thread, depth - 1, -beta, -alpha, plyFromRoot + 1).evaluation;
     undo<TURN>(&thread->position_);
     if (eval.value > bestResult.evaluation.value) {
       bestResult = SearchResult<TURN>(move->move, eval.value);
@@ -119,13 +126,14 @@ SearchResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> al
     }
   }
 
-  if (bestResult.evaluation.value < kLongestForcedMate) {
-    bestResult.evaluation = ColoredEvaluation<TURN>(bestResult.evaluation.value + 1);
-  } else if (bestResult.evaluation.value > -kLongestForcedMate) {
-    bestResult.evaluation = ColoredEvaluation<TURN>(bestResult.evaluation.value - 1);
-  }
-
   return bestResult;
+}
+
+inline std::pair<ColoredEvaluation<Color::WHITE>, Move> search(Position pos, std::shared_ptr<EvaluatorInterface> evaluator, int depth) {
+  pos.set_listener(evaluator);
+  Thread thread(0, pos, evaluator, std::unordered_set<Move>());
+  SearchResult<Color::WHITE> result = negamax<Color::WHITE, SearchType::ROOT>(&thread, depth, ColoredEvaluation<Color::WHITE>(kMinEval), ColoredEvaluation<Color::WHITE>(kMaxEval), 0);
+  return {result.evaluation, result.bestMove};
 }
 
 }  // namespace ChessEngine
