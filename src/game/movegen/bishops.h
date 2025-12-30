@@ -208,27 +208,27 @@ const uint8_t kSouthWestOffBoard[65] = {
 
 constexpr Bitboard kBishopMagic = bb(56) | bb(48) | bb(40) | bb(32) | bb(24) | bb(16) | bb(8) | bb(0);
 
-uint8_t southeast_diag_to_byte(UnsafeSquare sq, Bitboard b) {
+inline uint8_t southeast_diag_to_byte(UnsafeSquare sq, Bitboard b) {
   b &= kSouthEastDiagonalMask[sq];
   b >>= kSouthEastShift[sq];
   return (b * kBishopMagic) >> 56;
 }
 
-uint8_t southeast_diag_to_byte(SafeSquare sq, Bitboard b) {
+inline uint8_t southeast_diag_to_byte(SafeSquare sq, Bitboard b) {
   return southeast_diag_to_byte(UnsafeSquare(sq), b);
 }
 
-uint8_t southwest_diag_to_byte(UnsafeSquare sq, Bitboard b) {
+inline uint8_t southwest_diag_to_byte(UnsafeSquare sq, Bitboard b) {
   b &= kSouthWestDiagonalMask[sq];
   b <<= kSouthWestShift[sq];
   return (b * kBishopMagic) >> 56;
 }
 
-uint8_t southwest_diag_to_byte(SafeSquare sq, Bitboard b) {
+inline uint8_t southwest_diag_to_byte(SafeSquare sq, Bitboard b) {
   return southwest_diag_to_byte(UnsafeSquare(sq), b);
 }
 
-Bitboard byte_to_southeast_diag(UnsafeSquare sq, Bitboard byte) {
+inline Bitboard byte_to_southeast_diag(UnsafeSquare sq, Bitboard byte) {
   assert(byte < 256);
   byte *= kBishopMagic;
   byte <<= diag::kSouthEastShift[sq];
@@ -236,11 +236,11 @@ Bitboard byte_to_southeast_diag(UnsafeSquare sq, Bitboard byte) {
   return byte;
 }
 
-Bitboard byte_to_southeast_diag(SafeSquare sq, Bitboard byte) {
+inline Bitboard byte_to_southeast_diag(SafeSquare sq, Bitboard byte) {
   return byte_to_southeast_diag(UnsafeSquare(sq), byte);
 }
 
-Bitboard byte_to_southwest_diag(UnsafeSquare sq, Bitboard byte) {
+inline Bitboard byte_to_southwest_diag(UnsafeSquare sq, Bitboard byte) {
   assert(byte < 256);
   byte *= kBishopMagic;
   byte >>= diag::kSouthWestShift[sq];
@@ -248,13 +248,13 @@ Bitboard byte_to_southwest_diag(UnsafeSquare sq, Bitboard byte) {
   return byte;
 }
 
-Bitboard byte_to_southwest_diag(SafeSquare sq, Bitboard byte) {
+inline Bitboard byte_to_southwest_diag(SafeSquare sq, Bitboard byte) {
   return byte_to_southwest_diag(UnsafeSquare(sq), byte);
 }
 
 }  // namespace diag
 
-Bitboard compute_one_bishops_targets(SafeSquare from, const Bitboard occupied) {
+inline Bitboard compute_one_bishops_targets(SafeSquare from, const Bitboard occupied) {
   Location fromLoc = square2location(from);
   Bitboard r = kEmptyBitboard;
   {  // Southeast/Northwest diagonal.
@@ -270,7 +270,7 @@ Bitboard compute_one_bishops_targets(SafeSquare from, const Bitboard occupied) {
   return r;
 }
 
-Bitboard compute_bishoplike_targets(Bitboard bishopLikePieces, const Bitboard occupied) {
+inline Bitboard compute_bishoplike_targets(Bitboard bishopLikePieces, const Bitboard occupied) {
   Bitboard r = kEmptyBitboard;
 
   while (bishopLikePieces) {
@@ -299,7 +299,7 @@ Bitboard compute_bishoplike_targets(const Position& pos, Bitboard bishopLikePiec
   return compute_bishoplike_targets(bishopLikePieces, occupied);
 }
 
-Bitboard compute_bishop_check_mask(const SafeSquare kingSq, const Bitboard everyone) {
+inline Bitboard compute_bishop_check_mask(const SafeSquare kingSq, const Bitboard everyone) {
   Bitboard checkMask = kEmptyBitboard;
   const Location king = bb(kingSq);
   {  // Southeast/Northwest diagonal.
