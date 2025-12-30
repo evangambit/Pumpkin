@@ -91,14 +91,14 @@ struct NNUE {
   ActivationVector<8> hidden2;
 
   int16_t forward() {
-  // Layer 1
-  multiply_crelu_optimized(&layer1, acc.accumulation, &hidden1);
-  iadd(&hidden1, bias1);
+    // Layer 1
+    multiply_crelu_optimized(&layer1, acc.accumulation, &hidden1);
+    iadd(&hidden1, bias1);
   
-  // Layer 2
-  multiply_crelu_optimized(&layer2, hidden1, &hidden2);
-  iadd(&hidden2, bias2);
+    // Layer 2
+    multiply_crelu_optimized(&layer2, hidden1, &hidden2);
+    iadd(&hidden2, bias2);
   
-  return hidden2.activations[0];
+    return hidden2.activations[0];
   }
 };
