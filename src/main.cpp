@@ -1,4 +1,5 @@
 #include "search/search.h"
+#include "search/Evaluator.h"
 #include "game/Position.h"
 #include "string_utils.h"
 
@@ -16,7 +17,7 @@ int main(int argc, char** argv) {
     auto evaluator = std::make_shared<SimpleEvaluator>();
 
     Thread thread(0, pos, evaluator, std::unordered_set<Move>());
-    SearchResult<Color::WHITE> result = negamax<Color::WHITE, SearchType::ROOT>(&thread, 4, ColoredEvaluation<Color::WHITE>(kMinEval), ColoredEvaluation<Color::WHITE>(kMaxEval));
+    SearchResult<Color::WHITE> result = negamax<Color::WHITE, SearchType::ROOT>(&thread, 3, ColoredEvaluation<Color::WHITE>(kMinEval), ColoredEvaluation<Color::WHITE>(kMaxEval));
 
     std::cout << "Best Move: " << result.bestMove.uci() << ", Evaluation: " << result.evaluation << std::endl;
 
