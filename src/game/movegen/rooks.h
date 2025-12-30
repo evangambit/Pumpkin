@@ -10,7 +10,7 @@ namespace ChessEngine {
 // Rotates east-most file to south-most rank.
 constexpr Bitboard kRookMagic = bb(SafeSquare(49)) | bb(SafeSquare(42)) | bb(SafeSquare(35)) | bb(SafeSquare(28)) | bb(SafeSquare(21)) | bb(SafeSquare(14)) | bb(SafeSquare(7)) | bb(SafeSquare(0));
 
-Bitboard compute_single_rook_moves(SafeSquare rookSquare, const Bitboard occupied) {
+inline Bitboard compute_single_rook_moves(SafeSquare rookSquare, const Bitboard occupied) {
   Bitboard r = kEmptyBitboard;
 
   const Location fromLoc = square2location(rookSquare);
@@ -35,7 +35,7 @@ Bitboard compute_single_rook_moves(SafeSquare rookSquare, const Bitboard occupie
   return r;
 }
 
-Bitboard compute_rooklike_targets(Bitboard rookLikePieces, const Bitboard occupied) {
+inline Bitboard compute_rooklike_targets(Bitboard rookLikePieces, const Bitboard occupied) {
   Bitboard r = kEmptyBitboard;
 
   while (rookLikePieces) {
@@ -52,7 +52,7 @@ Bitboard compute_rooklike_targets(const Position& pos, Bitboard rookLikePieces) 
   return compute_rooklike_targets(rookLikePieces, occupied);
 }
 
-Bitboard compute_rook_check_mask(const SafeSquare kingSq, const Bitboard everyone) {
+inline Bitboard compute_rook_check_mask(const SafeSquare kingSq, const Bitboard everyone) {
   Bitboard checkMask = kEmptyBitboard;
   Location king = square2location(kingSq);
   {  // East/west.

@@ -51,4 +51,19 @@ const ExtMove kNullExtMove = ExtMove(Piece::NO_PIECE, kNullMove);
 
 }  // namespace ChessEngine
 
+// Hash specialization for Move to allow use in unordered containers
+namespace std {
+template <>
+struct hash<ChessEngine::Move> {
+  size_t operator()(const ChessEngine::Move& m) const {
+    // Pack all fields into a single value for hashing
+    return hash<uint16_t>()(
+        (static_cast<uint16_t>(m.from) << 10) |
+        (static_cast<uint16_t>(m.to) << 4) |
+        (static_cast<uint16_t>(m.promotion) << 2) |
+        static_cast<uint16_t>(m.moveType));
+  }
+};
+}  // namespace std
+
 #endif  // SRC_GAME_MOVE_H

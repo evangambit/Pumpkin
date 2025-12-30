@@ -308,12 +308,12 @@ uint8_t kPinLookup[8*256*256];
 
 // loc *must* be non-zero, which generally means functions calling
 // this function should accept SafeSquares.
-uint8_t sliding_moves(uint8_t loc, uint8_t occ) {
+inline uint8_t sliding_moves(uint8_t loc, uint8_t occ) {
   assert(std::popcount(loc) == 1);
   return kSlideLookup[256 * __builtin_ctzll(loc) + occ];
 }
 
-void initialize_sliding() {
+inline void initialize_sliding() {
   for (int i = 0; i < 8; ++i) {
     const uint8_t piece = 1 << i;
     for (int j = 0; j < 256; ++j) {

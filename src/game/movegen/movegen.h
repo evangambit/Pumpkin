@@ -16,9 +16,9 @@ namespace ChessEngine {
 
 // For each piece type and each square, we have a bitboard of all squares the piece
 // can move to, from that square.
-Bitboard kFreePieceMoves[Piece::NUM_PIECES][kNumSquares];
+inline Bitboard kFreePieceMoves[Piece::NUM_PIECES][kNumSquares];
 
-void initialize_movegen() {
+inline void initialize_movegen() {
   initialize_sliding();
   for (SafeSquare sq = SafeSquare(0); sq < kNumSquares; sq = SafeSquare(sq + 1)) {
     const Bitboard b = bb(sq);
@@ -300,7 +300,7 @@ PinMasks compute_pin_masks(const Position& pos, const SafeSquare sq) {
   return compute_pin_masks(sq, occ, enemyRooks, enemyBishops);
 }
 
-PinMasks compute_pin_masks(const SafeSquare sq, const Bitboard occ, const Bitboard enemyRooks, const Bitboard enemyBishops) {
+inline PinMasks compute_pin_masks(const SafeSquare sq, const Bitboard occ, const Bitboard enemyRooks, const Bitboard enemyBishops) {
   const Bitboard sqBitboard = bb(sq);
   const unsigned y = sq / 8;
   const unsigned x = sq % 8;
