@@ -26,6 +26,7 @@ class PositionTest : public ::testing::Test {
  protected:
   void SetUp() override {
     initialize_zorbrist();
+    initialize_geometry();
   }
 };
 
