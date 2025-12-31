@@ -20,7 +20,6 @@ struct PieceSquareEvaluator : public EvaluatorInterface {
   ColoredEvaluation<Color::WHITE> evaluate_white(const Position& pos) override {
     int32_t stage = earliness(pos);
     int32_t eval = early * stage + late * (16 - stage);
-    // std::cout << stage << " " << early << " " << late << " " << eval << std::endl;
     return ColoredEvaluation<Color::WHITE>(eval / 16);
   }
 
@@ -38,7 +37,9 @@ struct PieceSquareEvaluator : public EvaluatorInterface {
   }
   void place_piece(ColoredPiece cp, SafeSquare square) override {
     const int index = index_for(cp, square);
-    // std::cout << "Placing piece " << int(cp) << " at square " << square_to_string(square) << " (" << kDefaultPieceSquareTables[index] << ")" << std::endl;
+    if (cp == ColoredPiece::NO_COLORED_PIECE) {
+      return;
+    }
     if (cp2color(cp) == Color::WHITE) {
         early += kDefaultPieceSquareTables[index];
         late += kDefaultPieceSquareTables[index + 7 * 64];
@@ -49,6 +50,9 @@ struct PieceSquareEvaluator : public EvaluatorInterface {
   }
   void remove_piece(ColoredPiece cp, SafeSquare square) override {
     const int index = index_for(cp, square);
+    if (cp == ColoredPiece::NO_COLORED_PIECE) {
+      return;
+    }
     if (cp2color(cp) == Color::WHITE) {
         early -= kDefaultPieceSquareTables[index];
         late -= kDefaultPieceSquareTables[index + 7 * 64];
@@ -63,8 +67,8 @@ struct PieceSquareEvaluator : public EvaluatorInterface {
     int32_t t = 0;
     t += std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_QUEEN]) * 4;
     t += std::popcount(pos.pieceBitboards_[ColoredPiece::BLACK_QUEEN]) * 4;
-    t += std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_ROOK]) * 2;
-    t += std::popcount(pos.pieceBitboards_[ColoredPiece::BLACK_ROOK]) * 2;
+    t += std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_ROOK]) * 1;
+    t += std::popcount(pos.pieceBitboards_[ColoredPiece::BLACK_ROOK]) * 1;
     t += std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_BISHOP]) * 1;
     t += std::popcount(pos.pieceBitboards_[ColoredPiece::BLACK_BISHOP]) * 1;
     return t;

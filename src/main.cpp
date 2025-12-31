@@ -16,13 +16,17 @@ using namespace ChessEngine;
 int main(int argc, char** argv) {
     gflags::ParseCommandLineFlags(&argc, &argv, true);
 
+    initialize_geometry();
+    initialize_zorbrist();
+    initialize_movegen();
+
     if (FLAGS_fen.empty()) {
         std::cerr << "Error: --fen flag is required." << std::endl;
         return 1;
     }
 
     Position pos(FLAGS_fen);
-    auto evaluator = std::make_shared<SimpleEvaluator>();
+    auto evaluator = std::make_shared<PieceSquareEvaluator>();
     auto result = search(pos, evaluator, FLAGS_depth, FLAGS_multi_pv);
 
     std::cout << "Best Move: " << result.bestMove.uci() << ", Evaluation: " << result.evaluation << std::endl;

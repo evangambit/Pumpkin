@@ -38,6 +38,7 @@ template<Color TURN>
 struct NegamaxResult {
   NegamaxResult() : bestMove(kNullMove), evaluation(0) {}
   NegamaxResult(Move move, Evaluation eval) : bestMove(move), evaluation(ColoredEvaluation<TURN>(eval)) {}
+  NegamaxResult(Move move, ColoredEvaluation<TURN> eval) : bestMove(move), evaluation(eval) {}
   Move bestMove;
   ColoredEvaluation<TURN> evaluation;
 
@@ -61,15 +62,61 @@ enum SearchType {
 };
 
 template<Color TURN>
-NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, ColoredEvaluation<TURN> beta, int plyFromRoot) {
-  // TODO: Implement quiescence search
-  return NegamaxResult<TURN>(kNullMove, evaluate<TURN>(thread->evaluator_, thread->position_).value);
+NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, ColoredEvaluation<TURN> beta, int plyFromRoot, int quiescenceDepth) {
+  ExtMove moves[kMaxNumMoves];
+  ExtMove *end;
+  if (quiescenceDepth <= 4) {
+    end = compute_moves<TURN, MoveGenType::CHECKS_AND_CAPTURES>(thread->position_, moves);
+  } else {
+    end = compute_moves<TURN, MoveGenType::CAPTURES>(thread->position_, moves);
+  }
+
+  constexpr ColoredPiece enemyKing = coloredPiece<opposite_color<TURN>(), Piece::KING>();
+  constexpr ColoredPiece moverKing = coloredPiece<TURN, Piece::KING>();
+  const bool inCheck = can_enemy_attack<TURN>(
+    thread->position_,
+    lsb_i_promise_board_is_not_empty(thread->position_.pieceBitboards_[moverKing])
+  );
+  if (moves == end && inCheck) {
+    return NegamaxResult<TURN>(kNullMove, kCheckmate + plyFromRoot);
+  }
+
+  NegamaxResult<TURN> bestResult(kNullMove, evaluate<TURN>(thread->evaluator_, thread->position_));
+  if (!inCheck) {
+    if (bestResult.evaluation >= beta) {
+      return bestResult;
+    }
+    if (bestResult.evaluation > alpha) {
+      alpha = bestResult.evaluation;
+    }
+  }
+  for (ExtMove* move = moves; move < end; ++move) {
+    if (thread->position_.pieceBitboards_[enemyKing] & bb(move->move.to)) {
+      // Don't capture the king. TODO: remove this check by fixing move generation.
+      continue;
+    }
+    make_move<TURN>(&thread->position_, move->move);
+    ColoredEvaluation<TURN> eval = -qsearch<opposite_color<TURN>()>(thread, -beta, -alpha, plyFromRoot + 1, quiescenceDepth + 1).evaluation;
+    undo<TURN>(&thread->position_);
+    if (eval > bestResult.evaluation) {
+      bestResult.bestMove = move->move;
+      bestResult.evaluation = eval;
+    }
+    if (eval > alpha) {
+      alpha = ColoredEvaluation<TURN>(eval.value);
+      if (alpha >= beta) {
+        break;
+      }
+    }
+  }
+
+  return bestResult;
 }
 
 template<Color TURN, SearchType SEARCH_TYPE>
 NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> alpha, ColoredEvaluation<TURN> beta, int plyFromRoot) {
   if (depth == 0) {
-    return qsearch(thread, alpha, beta, plyFromRoot);
+    return qsearch(thread, alpha, beta, plyFromRoot, 0);
   }
 
   ExtMove moves[kMaxNumMoves];
@@ -93,13 +140,13 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     }
   }
 
-  constexpr ColoredPiece moverKing = coloredPiece<TURN, Piece::KING>();
-  const bool inCheck = can_enemy_attack<TURN>(
-    thread->position_,
-    lsb_i_promise_board_is_not_empty(thread->position_.pieceBitboards_[moverKing])
-  );
-
+  constexpr ColoredPiece enemyKing = coloredPiece<opposite_color<TURN>(), Piece::KING>();
   if (moves == end) {
+    constexpr ColoredPiece moverKing = coloredPiece<TURN, Piece::KING>();
+    const bool inCheck = can_enemy_attack<TURN>(
+      thread->position_,
+      lsb_i_promise_board_is_not_empty(thread->position_.pieceBitboards_[moverKing])
+    );
     if (inCheck) {
       return NegamaxResult<TURN>(kNullMove, kCheckmate + plyFromRoot);
     } else {
@@ -114,6 +161,10 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
 
   NegamaxResult<TURN> bestResult(kNullMove, kMinEval);
   for (ExtMove* move = moves; move < end; ++move) {
+    if (thread->position_.pieceBitboards_[enemyKing] & bb(move->move.to)) {
+      // Don't capture the king. TODO: remove this check by fixing move generation.
+      continue;
+    }
     make_move<TURN>(&thread->position_, move->move);
     ColoredEvaluation<TURN> eval = -negamax<opposite_color<TURN>(), SearchType::NORMAL_SEARCH>(thread, depth - 1, -beta, -alpha, plyFromRoot + 1).evaluation;
     undo<TURN>(&thread->position_);
