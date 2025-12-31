@@ -155,39 +155,40 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   return bestResult;
 }
 
+template<Color TURN>
 struct SearchResult {
-  std::vector<std::pair<Move, ColoredEvaluation<Color::WHITE>>> primaryVariations;
+  std::vector<std::pair<Move, ColoredEvaluation<TURN>>> primaryVariations;
   Move bestMove;
-  ColoredEvaluation<Color::WHITE> evaluation;
+  ColoredEvaluation<TURN> evaluation;
 };
 
-inline SearchResult search(Position pos, std::shared_ptr<EvaluatorInterface> evaluator, int depth, int multiPV = 1) {
+template<Color TURN>
+SearchResult<TURN> _search(Position pos, std::shared_ptr<EvaluatorInterface> evaluator, int depth, int multiPV = 1) {
   pos.set_listener(evaluator);
   Thread thread(0, pos, evaluator, multiPV, std::unordered_set<Move>());
+  NegamaxResult<TURN> result = negamax<TURN, SearchType::ROOT>(
+    &thread, depth,
+    /*alpha=*/ColoredEvaluation<TURN>(kMinEval),
+    /*beta=*/ColoredEvaluation<TURN>(kMaxEval),
+    /*plyFromRoot=*/0
+  );
+  std::vector<std::pair<Move, ColoredEvaluation<TURN>>> convertedPVs;
+  for (const auto& pv : thread.primaryVariations_) {
+    convertedPVs.push_back(std::make_pair(pv.first, ColoredEvaluation<TURN>(pv.second)));
+  }
+  return SearchResult{convertedPVs, result.bestMove, result.evaluation};
+}
+
+inline SearchResult<Color::WHITE> search(Position pos, std::shared_ptr<EvaluatorInterface> evaluator, int depth, int multiPV = 1) {
   if (pos.turn_ == Color::WHITE) {
-    NegamaxResult<Color::WHITE> result = negamax<Color::WHITE, SearchType::ROOT>(
-      &thread, depth,
-      /*alpha=*/ColoredEvaluation<Color::WHITE>(kMinEval),
-      /*beta=*/ColoredEvaluation<Color::WHITE>(kMaxEval),
-      /*plyFromRoot=*/0
-    );
-    std::vector<std::pair<Move, ColoredEvaluation<Color::WHITE>>> convertedPVs;
-    for (const auto& pv : thread.primaryVariations_) {
-      convertedPVs.push_back(std::make_pair(pv.first, ColoredEvaluation<Color::WHITE>(pv.second)));
-    }
-    return SearchResult{convertedPVs, result.bestMove, result.evaluation};
+    return _search<Color::WHITE>(pos, evaluator, depth, multiPV);
   } else {
-    NegamaxResult<Color::BLACK> result = negamax<Color::BLACK, SearchType::ROOT>(
-      &thread, depth,
-      /*alpha=*/ColoredEvaluation<Color::BLACK>(kMinEval),
-      /*beta=*/ColoredEvaluation<Color::BLACK>(kMaxEval),
-      /*plyFromRoot=*/0
-    );
-    std::vector<std::pair<Move, ColoredEvaluation<Color::WHITE>>> convertedPVs;
-    for (const auto& pv : thread.primaryVariations_) {
-      convertedPVs.push_back(std::make_pair(pv.first, -ColoredEvaluation<Color::BLACK>(pv.second)));
+    SearchResult<Color::BLACK> result = _search<Color::BLACK>(pos, evaluator, depth, multiPV);
+    std::vector<std::pair<Move, ColoredEvaluation<Color::WHITE>>> convertedVariations;
+    for (const auto& pv : result.primaryVariations) {
+      convertedVariations.push_back(std::make_pair(pv.first, -pv.second));
     }
-    return SearchResult{convertedPVs, result.bestMove, -result.evaluation};
+    return SearchResult<Color::WHITE>{convertedVariations, result.bestMove, -result.evaluation};
   }
 }
 
