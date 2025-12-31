@@ -117,35 +117,36 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     make_move<TURN>(&thread->position_, move->move);
     ColoredEvaluation<TURN> eval = -negamax<opposite_color<TURN>(), SearchType::NORMAL_SEARCH>(thread, depth - 1, -beta, -alpha, plyFromRoot + 1).evaluation;
     undo<TURN>(&thread->position_);
-    if (eval.value > bestResult.evaluation.value) {
-      bestResult = NegamaxResult<TURN>(move->move, eval.value);
-      if (bestResult.evaluation.value > alpha.value) {
-        if (SEARCH_TYPE == SearchType::ROOT && thread->multiPV_ > 1) {
-          // In multi-PV search, we want to keep track of multiple best moves and
-          // only raise alpha if we have the top N moves.
+    if (eval > bestResult.evaluation) {
+      bestResult.bestMove = move->move;
+      bestResult.evaluation = eval;
+    }
+    if (eval > alpha) {
+      if (SEARCH_TYPE == SearchType::ROOT && thread->multiPV_ > 1) {
+        // In multi-PV search, we want to keep track of multiple best moves and
+        // only raise alpha if we have the top N moves.
 
-          // We don't really care about optimizing this too much since it only happens
-          // at the root of the search.
-          thread->primaryVariations_.push_back(std::make_pair(move->move, eval.value));
-          std::sort(
-            thread->primaryVariations_.begin(),
-            thread->primaryVariations_.end(),
-            [](const std::pair<Move, Evaluation>& a, const std::pair<Move, Evaluation>& b) {
-              return a.second > b.second;
-            }
-          );
-          if (thread->primaryVariations_.size() >= thread->multiPV_) {
-            alpha = ColoredEvaluation<TURN>(thread->primaryVariations_[thread->multiPV_ - 1].second);
-            if (thread->primaryVariations_.size() > thread->multiPV_) {
-              thread->primaryVariations_.pop_back();
-            }
+        // We don't really care about optimizing this too much since it only happens
+        // at the root of the search.
+        thread->primaryVariations_.push_back(std::make_pair(move->move, eval.value));
+        std::sort(
+          thread->primaryVariations_.begin(),
+          thread->primaryVariations_.end(),
+          [](const std::pair<Move, Evaluation>& a, const std::pair<Move, Evaluation>& b) {
+            return a.second > b.second;
           }
-        } else {
-          // If we're not at the root, just update alpha.
-          alpha = ColoredEvaluation<TURN>(bestResult.evaluation.value);
+        );
+        if (thread->primaryVariations_.size() >= thread->multiPV_) {
+          alpha = ColoredEvaluation<TURN>(thread->primaryVariations_[thread->multiPV_ - 1].second);
+          if (thread->primaryVariations_.size() > thread->multiPV_) {
+            thread->primaryVariations_.pop_back();
+          }
         }
+      } else {
+        // If we're not at the root, just update alpha.
+        alpha = ColoredEvaluation<TURN>(eval.value);
       }
-      if (alpha.value >= beta.value) {
+      if (alpha >= beta) {
         break;
       }
     }
