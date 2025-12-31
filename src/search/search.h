@@ -73,7 +73,6 @@ SearchResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> al
   ExtMove* end;
   if (SEARCH_TYPE == SearchType::ROOT) {
     end = compute_legal_moves<TURN>(&thread->position_, moves);
-    std::cout << "Generated " << (end - moves) << " legal moves at root." << std::endl;
   } else {
     end = compute_moves<TURN, MoveGenType::ALL_MOVES>(thread->position_, moves);
   }
@@ -105,9 +104,9 @@ SearchResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> al
     }
   }
 
-  // We need to check this *after* we do the checkmate test above.
+  // We need to check this *after* we do the checkmate test above, since you can win on the 50th move.
   if (thread->position_.is_fifty_move_rule()) {
-    return SearchResult<TURN>(kNullMove, 0);  // Draw by fifty-move rule
+    return SearchResult<TURN>(kNullMove, 0);
   }
 
   SearchResult<TURN> bestResult(kNullMove, kMinEval);
