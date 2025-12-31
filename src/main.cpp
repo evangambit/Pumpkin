@@ -9,6 +9,7 @@
 
 DEFINE_string(fen, "", "FEN string for the chess position");
 DEFINE_int32(depth, 5, "Search depth");
+DEFINE_int32(multi_pv, 1, "Number of principal variations to search for");
 
 using namespace ChessEngine;
 
@@ -22,9 +23,12 @@ int main(int argc, char** argv) {
 
     Position pos(FLAGS_fen);
     auto evaluator = std::make_shared<PieceSquareEvaluator>();
-    std::pair<ColoredEvaluation<Color::WHITE>, Move> result = search(pos, evaluator, FLAGS_depth);
+    auto result = search(pos, evaluator, FLAGS_depth, FLAGS_multi_pv);
 
-    std::cout << "Best Move: " << result.second.uci() << ", Evaluation: " << result.first << std::endl;
+    std::cout << "Best Move: " << result.bestMove.uci() << ", Evaluation: " << result.evaluation << std::endl;
+    for (const auto& v : result.primaryVariations) {
+        std::cout << "PV Move: " << v.first.uci() << ", Eval: " << v.second << std::endl;
+    }
 
     return 0;
 }
