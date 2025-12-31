@@ -22,7 +22,7 @@ int main(int argc, char** argv) {
     }
 
     Position pos(FLAGS_fen);
-    auto evaluator = std::make_shared<PieceSquareEvaluator>();
+    auto evaluator = std::make_shared<SimpleEvaluator>();
     auto result = search(pos, evaluator, FLAGS_depth, FLAGS_multi_pv);
 
     std::cout << "Best Move: " << result.bestMove.uci() << ", Evaluation: " << result.evaluation << std::endl;
