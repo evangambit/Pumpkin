@@ -4,10 +4,11 @@
 #include <unordered_set>
 
 #include "../search.h"
+#include "../PieceSquareEvaluator.h"
 #include "../../game/Position.h"
 #include "../../game/movegen/movegen.h"
 
-namespace ChessEngine {
+using namespace ChessEngine;
 
 class SearchTest : public ::testing::Test {
  protected:
@@ -310,13 +311,24 @@ TEST_F(SearchTest, PermittedMovesWithMultipleMoves) {
   EXPECT_EQ(result.bestMove.to, SafeSquare::SD5);
 }
 
-}  // namespace ChessEngine
+// Test that PieceSquareEvaluator evaluates the starting position to 0
+// Searches to a depth of 4, then checks that the evaluation is 0
+TEST_F(SearchTest, PieceSquareEvaluatorStartingPosition) {
+  Position pos = Position::init();
+  auto evaluator = std::make_shared<PieceSquareEvaluator>();
+  std::unordered_set<Move> permittedMoves;
+  
+  Thread thread(0, pos, evaluator, 1, permittedMoves);
+  
+  NegamaxResult<Color::WHITE> result = negamax<Color::WHITE, SearchType::ROOT>(&thread, 4, ColoredEvaluation<Color::WHITE>(kMinEval), ColoredEvaluation<Color::WHITE>(kMaxEval), 0);
+  
+  // Starting position should be evaluated as equal (0)
+  EXPECT_EQ(result.evaluation, ColoredEvaluation<Color::WHITE>(0));
+}
 
 
 // MultiPV tests
 namespace {
-
-using namespace ChessEngine;
 
 class MultiPVTest : public ::testing::Test {
  protected:
