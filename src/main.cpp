@@ -26,10 +26,11 @@ int main(int argc, char** argv) {
     }
 
     Position pos(FLAGS_fen);
+    TranspositionTable* transpositionTable = new TranspositionTable(1 << 24); // 16MB table
     auto evaluator = std::make_shared<PieceSquareEvaluator>();
-    auto result = search(pos, evaluator, FLAGS_depth, FLAGS_multi_pv);
+    auto result = search(pos, evaluator, FLAGS_depth, FLAGS_multi_pv, transpositionTable);
 
-    std::cout << "Best Move: " << result.bestMove.uci() << ", Evaluation: " << result.evaluation << std::endl;
+    std::cout << "Best Move: " << result.bestMove.uci() << ", Evaluation: " << result.evaluation << ", Nodes: " << result.nodeCount_ << std::endl;
     for (const auto& v : result.primaryVariations) {
         std::cout << "PV Move: " << v.first.uci() << ", Eval: " << v.second << std::endl;
     }

@@ -326,6 +326,25 @@ TEST_F(SearchTest, PieceSquareEvaluatorStartingPosition) {
   EXPECT_EQ(result.evaluation, ColoredEvaluation<Color::WHITE>(0));
 }
 
+// Test that transposition table is used and stores entries
+TEST_F(SearchTest, TranspositionTableStoresAndProbes) {
+  Position pos = Position::init();
+  auto evaluator = std::make_shared<SimpleEvaluator>();
+  TranspositionTable tt(1024); // Small table for test
+  // First search: should fill the table
+  auto result1 = search(pos, evaluator, 2, 1, &tt);
+  // Probe directly
+  TTEntry entry;
+  bool found = tt.probe(pos.currentState_.hash, entry);
+  EXPECT_TRUE(found);
+  EXPECT_EQ(entry.depth, 2);
+  // Second search: should hit the table
+  auto result2 = search(pos, evaluator, 2, 1, &tt);
+  // Results should be the same
+  EXPECT_EQ(result1.bestMove, result2.bestMove);
+  EXPECT_EQ(result1.evaluation, result2.evaluation);
+}
+
 
 // MultiPV tests
 namespace {
