@@ -3,7 +3,7 @@
 
 namespace ChessEngine {
 
-TranspositionTable::TranspositionTable(size_t size) : size_(size), table_(size) {
+TranspositionTable::TranspositionTable(size_t kilobytes) : size_(kilobytes * 1024 / sizeof(TTEntry) + 1), table_(size_) {
     clear();
 }
 

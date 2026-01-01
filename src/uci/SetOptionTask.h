@@ -38,8 +38,7 @@ class SetOptionTask : public Task {
     command.pop_front();
 
     if(does_pattern_match(command, {"Move", "Overhead", "value", "*"})) {
-      // TODO
-      //   state->thinkerInterface()->set_move_overhead_ms(std::stoi(command[3]));
+      state->moveOverheadMs = std::stoi(command[3]);
     } else if (does_pattern_match(command, {"Clear", "Hash"})) {
       state->thread.tt_->clear();
       return;
@@ -58,8 +57,7 @@ class SetOptionTask : public Task {
         std::cout << "Value must be positive" << std::endl;
         return;
       }
-      // TODO
-      // state->thinkerInterface()->set_multi_pv(multiPV);
+      state->thread.multiPV_ = multiPV;
       return;
     } else if (does_pattern_match(command, {"Threads", "value", "*"})) {
       int numThreads;
@@ -76,8 +74,7 @@ class SetOptionTask : public Task {
         std::cout << "Value must be positive" << std::endl;
         return;
       }
-      // TODO
-      // state->thinkerInterface()->set_num_threads(numThreads);
+      state->numThreads = numThreads;
       return;
     } else if (does_pattern_match(command, {"Hash", "value", "*"})) {
       int cacheSizeMb;
@@ -90,8 +87,7 @@ class SetOptionTask : public Task {
         std::cout << "Value must be an integer" << std::endl;
         return;
       }
-      // TODO
-      // state->thinkerInterface()->set_cache_size(cacheSizeMb * 1000);
+      state->thread.tt_->resize(cacheSizeMb);
       return;
     } else if (does_pattern_match(command, {"SyzygyPath", "value", "*"})) {
       // TODO

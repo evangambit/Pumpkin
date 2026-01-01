@@ -26,7 +26,7 @@ int main(int argc, char** argv) {
     }
 
     Position pos(FLAGS_fen);
-    TranspositionTable* transpositionTable = new TranspositionTable(1 << 24); // 16MB table
+    TranspositionTable* transpositionTable = new TranspositionTable(10'000); // 10MB table
     auto evaluator = std::make_shared<PieceSquareEvaluator>();
     auto result = search(pos, evaluator, FLAGS_depth, FLAGS_multi_pv, transpositionTable);
 

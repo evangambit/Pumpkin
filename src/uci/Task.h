@@ -52,6 +52,9 @@ struct UciEngineState {
   SpinLock taskQueueLock;
   std::shared_ptr<Task> currentTask;
   std::atomic<bool> stopThinkingRequested{false};
+
+  unsigned moveOverheadMs;
+  unsigned numThreads;
 };
 
 }  // namespace ChessEngine
