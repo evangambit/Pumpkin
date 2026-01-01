@@ -120,19 +120,20 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
 template<Color TURN, SearchType SEARCH_TYPE>
 NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> alpha, ColoredEvaluation<TURN> beta, int plyFromRoot) {
   // Transposition Table probe
-  if (thread->tt_) {
-    TTEntry entry;
-    uint64_t key = thread->position_.currentState_.hash;
-    if (thread->tt_->probe(key, entry) && entry.depth >= depth) {
-      if (entry.bound == BoundType::EXACT) {
-        return NegamaxResult<TURN>(entry.bestMove, entry.value);
-      } else if (entry.bound == BoundType::LOWER && entry.value >= beta.value) {
-        return NegamaxResult<TURN>(entry.bestMove, entry.value);
-      } else if (entry.bound == BoundType::UPPER && entry.value <= alpha.value) {
-        return NegamaxResult<TURN>(entry.bestMove, entry.value);
-      }
+  TTEntry entry;
+  uint64_t key = thread->position_.currentState_.hash;
+  if (thread->tt_->probe(key, entry) && entry.depth >= depth) {
+    if (entry.bound == BoundType::EXACT) {
+      return NegamaxResult<TURN>(entry.bestMove, entry.value);
+    } else if (entry.bound == BoundType::LOWER && entry.value >= beta.value) {
+      return NegamaxResult<TURN>(entry.bestMove, entry.value);
+    } else if (entry.bound == BoundType::UPPER && entry.value <= alpha.value) {
+      return NegamaxResult<TURN>(entry.bestMove, entry.value);
     }
+  } else {
+    entry.bestMove = kNullMove;
   }
+
   thread->nodeCount_++;
   if (depth == 0) {
     return qsearch(thread, alpha, beta, plyFromRoot, 0);
@@ -177,6 +178,18 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   if (thread->position_.is_fifty_move_rule()) {
     return NegamaxResult<TURN>(kNullMove, 0);
   }
+
+  // Add score to each move.
+  for (ExtMove* move = moves; move < end; ++move) {
+    move->score = move->move == entry.bestMove ? 1 : 0;
+  }
+  std::sort(
+    moves,
+    end,
+    [](const ExtMove& a, const ExtMove& b) {
+      return a.score > b.score;
+    }
+  );
 
   NegamaxResult<TURN> bestResult(kNullMove, kMinEval);
   Move bestMoveTT = kNullMove;
@@ -257,11 +270,20 @@ SearchResult<TURN> _search(Position pos, std::shared_ptr<EvaluatorInterface> eva
   Thread thread(0, pos, evaluator, multiPV, std::unordered_set<Move>());
   thread.tt_ = tt;
   NegamaxResult<TURN> result = negamax<TURN, SearchType::ROOT>(
-    &thread, depth,
+    &thread, 1,
     /*alpha=*/ColoredEvaluation<TURN>(kMinEval),
     /*beta=*/ColoredEvaluation<TURN>(kMaxEval),
     /*plyFromRoot=*/0
   );
+  for (int i = 2; i <= depth; ++i) {
+    thread.primaryVariations_.clear();
+    result = negamax<TURN, SearchType::ROOT>(
+      &thread, i,
+      /*alpha=*/ColoredEvaluation<TURN>(kMinEval),
+      /*beta=*/ColoredEvaluation<TURN>(kMaxEval),
+      /*plyFromRoot=*/0
+    );
+  }
   std::vector<std::pair<Move, ColoredEvaluation<TURN>>> convertedPVs;
   for (const auto& pv : thread.primaryVariations_) {
     convertedPVs.push_back(std::make_pair(pv.first, ColoredEvaluation<TURN>(pv.second)));
