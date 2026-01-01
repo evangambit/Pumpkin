@@ -4,8 +4,7 @@
 sudo apt-get install -y libgflags-dev libgtest-dev
 
 # Run tests.
-g++ -std=c++20 -o test_runner $(find src/ -name "*.cpp" | grep -v main.cpp) \
--I/usr/local/include -L/usr/local/lib -lgtest -lgtest_main -pthread && ./test_runner
+g++ -std=c++20 -o test_runner $(find src/ -name "*.cpp" | grep -Ev '(main|uci).cpp') -I/usr/local/include -L/usr/local/lib -lgtest -lgtest_main -pthread && ./test_runner
 
 
 # Build main
