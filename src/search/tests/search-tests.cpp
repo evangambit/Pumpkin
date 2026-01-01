@@ -100,7 +100,8 @@ TEST_F(SearchTest, ThreadConstructor) {
   auto evaluator = std::make_shared<SimpleEvaluator>();
   std::unordered_set<Move> permittedMoves;
   
-  Thread thread(1, pos, evaluator, 1, permittedMoves);
+  std::shared_ptr<TranspositionTable> tt = std::make_shared<TranspositionTable>(10'000);
+  Thread thread(1, pos, evaluator, 1, permittedMoves, tt.get());
   
   EXPECT_EQ(thread.id_, 1);
   EXPECT_EQ(thread.nodeCount_, 0);
@@ -112,7 +113,8 @@ TEST_F(SearchTest, NegamaxFindsBackRankMateIn1) {
   auto evaluator = std::make_shared<SimpleEvaluator>();
   std::unordered_set<Move> permittedMoves;
   
-  Thread thread(0, pos, evaluator, 1, permittedMoves);
+  std::shared_ptr<TranspositionTable> tt = std::make_shared<TranspositionTable>(10'000);
+  Thread thread(0, pos, evaluator, 1, permittedMoves, tt.get());
   
   NegamaxResult<Color::WHITE> result = negamax<Color::WHITE, SearchType::ROOT>(&thread, 2, ColoredEvaluation<Color::WHITE>(kMinEval), ColoredEvaluation<Color::WHITE>(kMaxEval), 0);
   
@@ -130,7 +132,8 @@ TEST_F(SearchTest, NegamaxIdentifiesStalemate) {
   auto evaluator = std::make_shared<SimpleEvaluator>();
   std::unordered_set<Move> permittedMoves;
   
-  Thread thread(0, pos, evaluator, 1, permittedMoves);
+  std::shared_ptr<TranspositionTable> tt = std::make_shared<TranspositionTable>(10'000);
+  Thread thread(0, pos, evaluator, 1, permittedMoves, tt.get());
   
   NegamaxResult<Color::BLACK> result = negamax<Color::BLACK, SearchType::ROOT>(&thread, 1, ColoredEvaluation<Color::BLACK>(kMinEval), ColoredEvaluation<Color::BLACK>(kMaxEval), 0);
   
@@ -145,7 +148,8 @@ TEST_F(SearchTest, MaterialEvaluationStartingPosition) {
   auto evaluator = std::make_shared<SimpleEvaluator>();
   std::unordered_set<Move> permittedMoves;
   
-  Thread thread(0, pos, evaluator, 1, permittedMoves);
+  std::shared_ptr<TranspositionTable> tt = std::make_shared<TranspositionTable>(10'000);
+  Thread thread(0, pos, evaluator, 1, permittedMoves, tt.get());
   
   // At depth 0, should just evaluate the position
   NegamaxResult<Color::WHITE> result = negamax<Color::WHITE, SearchType::ROOT>(&thread, 0, ColoredEvaluation<Color::WHITE>(kMinEval), ColoredEvaluation<Color::WHITE>(kMaxEval), 0);
@@ -161,7 +165,8 @@ TEST_F(SearchTest, SearchPrefersCapturingMaterial) {
   auto evaluator = std::make_shared<SimpleEvaluator>();
   std::unordered_set<Move> permittedMoves;
   
-  Thread thread(0, pos, evaluator, 1, permittedMoves);
+  std::shared_ptr<TranspositionTable> tt = std::make_shared<TranspositionTable>(10'000);
+  Thread thread(0, pos, evaluator, 1, permittedMoves, tt.get());
   
   NegamaxResult<Color::WHITE> result = negamax<Color::WHITE, SearchType::ROOT>(&thread, 2, ColoredEvaluation<Color::WHITE>(kMinEval), ColoredEvaluation<Color::WHITE>(kMaxEval), 0);
   
@@ -176,7 +181,8 @@ TEST_F(SearchTest, CheckmateDetectionDepth1) {
   auto evaluator = std::make_shared<SimpleEvaluator>();
   std::unordered_set<Move> permittedMoves;
   
-  Thread thread(0, pos, evaluator, 1, permittedMoves);
+  std::shared_ptr<TranspositionTable> tt = std::make_shared<TranspositionTable>(10'000);
+  Thread thread(0, pos, evaluator, 1, permittedMoves, tt.get());
   
   NegamaxResult<Color::WHITE> result = negamax<Color::WHITE, SearchType::ROOT>(&thread, 4, ColoredEvaluation<Color::WHITE>(kMinEval), ColoredEvaluation<Color::WHITE>(kMaxEval), 0);
   
@@ -192,7 +198,8 @@ TEST_F(SearchTest, FiftyMoveRuleDetection) {
   auto evaluator = std::make_shared<SimpleEvaluator>();
   std::unordered_set<Move> permittedMoves;
   
-  Thread thread(0, pos, evaluator, 1, permittedMoves);
+  std::shared_ptr<TranspositionTable> tt = std::make_shared<TranspositionTable>(10'000);
+  Thread thread(0, pos, evaluator, 1, permittedMoves, tt.get());
   
   // With depth > 0, should detect fifty move rule and return draw
   NegamaxResult<Color::WHITE> result = negamax<Color::WHITE, SearchType::ROOT>(&thread, 3, ColoredEvaluation<Color::WHITE>(kMinEval), ColoredEvaluation<Color::WHITE>(kMaxEval), 0);
@@ -209,7 +216,8 @@ TEST_F(SearchTest, NegamaxBlackToMove) {
   auto evaluator = std::make_shared<SimpleEvaluator>();
   std::unordered_set<Move> permittedMoves;
   
-  Thread thread(0, pos, evaluator, 1, permittedMoves);
+  std::shared_ptr<TranspositionTable> tt = std::make_shared<TranspositionTable>(10'000);
+  Thread thread(0, pos, evaluator, 1, permittedMoves, tt.get());
   
   NegamaxResult<Color::BLACK> result = negamax<Color::BLACK, SearchType::ROOT>(&thread, 2, ColoredEvaluation<Color::BLACK>(kMinEval), ColoredEvaluation<Color::BLACK>(kMaxEval), 0);
   
@@ -233,7 +241,8 @@ TEST_F(SearchTest, SearchHandlesCheck) {
   auto evaluator = std::make_shared<SimpleEvaluator>();
   std::unordered_set<Move> permittedMoves;
   
-  Thread thread(0, pos, evaluator, 1, permittedMoves);
+  std::shared_ptr<TranspositionTable> tt = std::make_shared<TranspositionTable>(10'000);
+  Thread thread(0, pos, evaluator, 1, permittedMoves, tt.get());
   
   NegamaxResult<Color::BLACK> result = negamax<Color::BLACK, SearchType::ROOT>(&thread, 1, ColoredEvaluation<Color::BLACK>(kMinEval), ColoredEvaluation<Color::BLACK>(kMaxEval), 0);
   
@@ -255,7 +264,8 @@ TEST_F(SearchTest, PermittedMovesFilterRestrictsSearch) {
   std::unordered_set<Move> permittedMoves;
   permittedMoves.insert(permittedMove);
   
-  Thread thread(0, pos, evaluator, 1, permittedMoves);
+  std::shared_ptr<TranspositionTable> tt = std::make_shared<TranspositionTable>(10'000);
+  Thread thread(0, pos, evaluator, 1, permittedMoves, tt.get());
   
   NegamaxResult<Color::WHITE> result = negamax<Color::WHITE, SearchType::ROOT>(&thread, 2, ColoredEvaluation<Color::WHITE>(kMinEval), ColoredEvaluation<Color::WHITE>(kMaxEval), 0);
   
@@ -270,7 +280,8 @@ TEST_F(SearchTest, EmptyPermittedMovesAllowsAllMoves) {
   auto evaluator = std::make_shared<SimpleEvaluator>();
   std::unordered_set<Move> permittedMoves;  // Empty set
   
-  Thread thread(0, pos, evaluator, 1, permittedMoves);
+  std::shared_ptr<TranspositionTable> tt = std::make_shared<TranspositionTable>(10'000);
+  Thread thread(0, pos, evaluator, 1, permittedMoves, tt.get());
   
   NegamaxResult<Color::WHITE> result = negamax<Color::WHITE, SearchType::ROOT>(&thread, 2, ColoredEvaluation<Color::WHITE>(kMinEval), ColoredEvaluation<Color::WHITE>(kMaxEval), 0);
   
@@ -302,7 +313,8 @@ TEST_F(SearchTest, PermittedMovesWithMultipleMoves) {
   permittedMoves.insert(bishopCapture);
   permittedMoves.insert(kingMove);
   
-  Thread thread(0, pos, evaluator, 1, permittedMoves);
+  std::shared_ptr<TranspositionTable> tt = std::make_shared<TranspositionTable>(10'000);
+  Thread thread(0, pos, evaluator, 1, permittedMoves, tt.get());
   
   NegamaxResult<Color::WHITE> result = negamax<Color::WHITE, SearchType::ROOT>(&thread, 2, ColoredEvaluation<Color::WHITE>(kMinEval), ColoredEvaluation<Color::WHITE>(kMaxEval), 0);
   
@@ -318,7 +330,8 @@ TEST_F(SearchTest, PieceSquareEvaluatorStartingPosition) {
   auto evaluator = std::make_shared<PieceSquareEvaluator>();
   std::unordered_set<Move> permittedMoves;
   
-  Thread thread(0, pos, evaluator, 1, permittedMoves);
+  std::shared_ptr<TranspositionTable> tt = std::make_shared<TranspositionTable>(10'000);
+  Thread thread(0, pos, evaluator, 1, permittedMoves, tt.get());
   
   NegamaxResult<Color::WHITE> result = negamax<Color::WHITE, SearchType::ROOT>(&thread, 4, ColoredEvaluation<Color::WHITE>(kMinEval), ColoredEvaluation<Color::WHITE>(kMaxEval), 0);
   
@@ -363,7 +376,8 @@ TEST_F(MultiPVTest, MultiPVReturnsTopNMoves) {
   Position pos("2k5/8/8/3q4/2P1P3/4N3/8/K7 w - - 0 1");
   auto evaluator = std::make_shared<SimpleEvaluator>();
   int multiPV = 3;
-  Thread thread(0, pos, evaluator, multiPV, {});
+  std::shared_ptr<TranspositionTable> tt = std::make_shared<TranspositionTable>(10'000);
+  Thread thread(0, pos, evaluator, multiPV, {}, tt.get());
   NegamaxResult<Color::WHITE> result = negamax<Color::WHITE, SearchType::ROOT>(
     &thread, multiPV, ColoredEvaluation<Color::WHITE>(kMinEval), ColoredEvaluation<Color::WHITE>(kMaxEval), 0);
   

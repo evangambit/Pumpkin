@@ -42,7 +42,7 @@ class Task {
 
 
 struct UciEngineState {
-  UciEngineState() : thread(0, Position(), nullptr, 1, std::unordered_set<Move>()) {}
+  UciEngineState() : thread(0, Position(), nullptr, 1, std::unordered_set<Move>(), new TranspositionTable(10'000)) {}
   Thread thread;  // This thread is copied into each search thread when a search starts.
 
   std::mutex mutex;
