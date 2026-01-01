@@ -3,6 +3,7 @@
 
 #include <atomic>
 #include <bit>
+#include <functional>
 #include <memory>
 #include <unordered_set>
 
@@ -257,52 +258,72 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
 
 template<Color TURN>
 struct SearchResult {
+  SearchResult() : bestMove(kNullMove), evaluation(0), nodeCount_(0) {}
+  SearchResult(
+    const std::vector<std::pair<Move, ColoredEvaluation<TURN>>>& primaryVariations,
+    Move bestMove,
+    ColoredEvaluation<TURN> evaluation,
+    uint64_t nodeCount
+  )
+    : primaryVariations(primaryVariations), bestMove(bestMove), evaluation(evaluation), nodeCount_(nodeCount) {}
+
   std::vector<std::pair<Move, ColoredEvaluation<TURN>>> primaryVariations;
   Move bestMove;
   ColoredEvaluation<TURN> evaluation;
   uint64_t nodeCount_;
+
+  SearchResult<opposite_color<TURN>()> operator-() const {
+    SearchResult<opposite_color<TURN>()> result;
+    result.bestMove = bestMove;
+    result.evaluation = -evaluation;
+    result.nodeCount_ = nodeCount_;
+    for (const auto& pv : primaryVariations) {
+      result.primaryVariations.push_back(std::make_pair(pv.first, -pv.second));
+    }
+    return result;
+  }
 };
 
 template<Color TURN>
-SearchResult<TURN> _search(Position pos, std::shared_ptr<EvaluatorInterface> evaluator, int depth, int multiPV, TranspositionTable *tt) {
-  pos.set_listener(evaluator);
-  tt->new_search();
-  Thread thread(0, pos, evaluator, multiPV, std::unordered_set<Move>());
-  thread.tt_ = tt;
+SearchResult<TURN> negamax_result_to_search_result(const NegamaxResult<TURN>& result, Thread* thread) {
+  std::vector<std::pair<Move, ColoredEvaluation<TURN>>> convertedPVs;
+  for (const auto& pv : thread->primaryVariations_) {
+    convertedPVs.push_back(std::make_pair(pv.first, ColoredEvaluation<TURN>(pv.second)));
+  }
+  return SearchResult<TURN>(
+    convertedPVs,
+    result.bestMove,
+    result.evaluation,
+    thread->nodeCount_
+  );
+}
+
+// Color-templated search function to be used by the UCI interface.
+template<Color TURN>
+SearchResult<TURN> search(Thread* thread, int depth, std::function<void(int, SearchResult<TURN>)> onDepthCompleted) {
   NegamaxResult<TURN> result = negamax<TURN, SearchType::ROOT>(
-    &thread, 1,
+    thread, 1,
     /*alpha=*/ColoredEvaluation<TURN>(kMinEval),
     /*beta=*/ColoredEvaluation<TURN>(kMaxEval),
     /*plyFromRoot=*/0
   );
   for (int i = 2; i <= depth; ++i) {
-    thread.primaryVariations_.clear();
+    thread->primaryVariations_.clear();
     result = negamax<TURN, SearchType::ROOT>(
-      &thread, i,
+      thread, i,
       /*alpha=*/ColoredEvaluation<TURN>(kMinEval),
       /*beta=*/ColoredEvaluation<TURN>(kMaxEval),
       /*plyFromRoot=*/0
     );
   }
-  std::vector<std::pair<Move, ColoredEvaluation<TURN>>> convertedPVs;
-  for (const auto& pv : thread.primaryVariations_) {
-    convertedPVs.push_back(std::make_pair(pv.first, ColoredEvaluation<TURN>(pv.second)));
-  }
-  return SearchResult{convertedPVs, result.bestMove, result.evaluation, thread.nodeCount_};
+  return negamax_result_to_search_result<TURN>(result, thread);
 }
 
-inline SearchResult<Color::WHITE> search(Position pos, std::shared_ptr<EvaluatorInterface> evaluator, int depth, int multiPV, TranspositionTable* tt) {
-  if (pos.turn_ == Color::WHITE) {
-    return _search<Color::WHITE>(pos, evaluator, depth, multiPV, tt);
-  } else {
-    SearchResult<Color::BLACK> result = _search<Color::BLACK>(pos, evaluator, depth, multiPV, tt);
-    std::vector<std::pair<Move, ColoredEvaluation<Color::WHITE>>> convertedVariations;
-    for (const auto& pv : result.primaryVariations) {
-      convertedVariations.push_back(std::make_pair(pv.first, -pv.second));
-    }
-    return SearchResult<Color::WHITE>{convertedVariations, result.bestMove, -result.evaluation};
-  }
-}
+// Non-color-templated search function to be used by the UCI interface.
+SearchResult<Color::WHITE> colorless_search(Thread* thread, int depth, std::function<void(int, SearchResult<Color::WHITE>)> onDepthCompleted);
+
+// Convenience function to search programmatically without needing to specify color or create a thread.
+SearchResult<Color::WHITE> search(Position pos, std::shared_ptr<EvaluatorInterface> evaluator, int depth, int multiPV, TranspositionTable* tt);
 
 }  // namespace ChessEngine
 
