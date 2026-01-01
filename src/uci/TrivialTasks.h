@@ -24,14 +24,14 @@ class UnrecognizedCommandTask : public Task {
 class HashTask : public Task {
  public:
   void start(UciEngineState *state) {
-    std::cout << state->thread.position_.currentState_.hash << std::endl;
+    std::cout << state->position.currentState_.hash << std::endl;
   }
 };
 
 class PrintFenTask : public Task {
  public:
   void start(UciEngineState *state) {
-    std::cout << state->thread.position_.fen() << std::endl;
+    std::cout << state->position.fen() << std::endl;
   }
 };
 
@@ -69,14 +69,14 @@ class QuitTask : public Task {
 class StopTask : public Task {
  public:
   void start(UciEngineState *state) {
-    state->stopThinkingRequested.store(true);
+    state->stopThinking.store(true);
   }
 };
 
 class NewGameTask : public Task {
  public:
   void start(UciEngineState *state) {
-    state->thread.tt_->new_search();
+    state->tt_->new_search();
   }
 };
 

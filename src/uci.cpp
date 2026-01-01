@@ -25,6 +25,14 @@ class IsReadyTask : public Task {
   }
 };
 
+bool colorless_is_stalemate(Position *pos) {
+  if (pos->turn_ == Color::WHITE) {
+    return is_stalemate<Color::WHITE>(pos);
+  } else {
+    return is_stalemate<Color::BLACK>(pos);
+  }
+}
+
 class GoTask : public Task {
  public:
   GoTask(std::deque<std::string> command) : command(command), isRunning(false), thread(nullptr) {}
@@ -33,8 +41,20 @@ class GoTask : public Task {
     isRunning = true;
     assert(command.at(0) == "go");
     command.pop_front();
-    // GoCommand goCommand = make_go_command(&command, &state->thread.position_);
-    // this->thread = new std::thread(GoTask::_threaded_think, state, goCommand, &this->isRunning);
+
+    this->baseThreadState = std::make_shared<Thread>(
+      /* thread id=*/ 0,
+      state->position,
+      state->evaluator,
+      state->multiPV,
+      std::unordered_set<Move>(),
+      state->tt_.get()
+    );
+    this->thread = new std::thread(GoTask::_threaded_think, this->baseThreadState.get(), state, &isRunning);
+  }
+
+  bool is_running() override {
+    return isRunning;
   }
 
   ~GoTask() {
@@ -44,82 +64,70 @@ class GoTask : public Task {
     delete this->thread;
   }
 
-//   static void _threaded_think(UciEngineState *state, GoCommand goCommand, bool *isRunning) {
-//     state->stopThinkingSwitch = std::make_shared<StopThinkingSwitch>();
+  static void _threaded_think(Thread* baseThread, UciEngineState* state, bool* isRunning) {
 
-//     SearchResult<Color::WHITE> result = Search::search(&state->thinker, goCommand, state->stopThinkingSwitch, [state](Position *position, VariationHead<Color::WHITE> results, size_t depth, double secs) {
-//       GoTask::_print_variations(state, depth, secs);
-//     });
+    // TODO: support more than one thread.
+    Thread thread0 = baseThread->clone();
+    thread0.depth_ = 4;
 
-//     if (state->thinkerInterface()->get_variations().size() > 0) {
-//       VariationHead<Color::WHITE> head = state->thinkerInterface()->get_variations()[0];
-//       std::cout << "bestmove " << head.move;
-//       if (head.response != kNullMove) {
-//         std::cout << " ponder " << head.response;
-//       }
-//       std::cout << std::endl;
-//     }
+    auto startTime = std::chrono::high_resolution_clock::now();
 
-//     if (goCommand.makeBestMove) {
-//       if (state->thread.position_.turn_ == Color::WHITE) {
-//         make_move<Color::WHITE>(&state->thread.position_, result.move);
-//       } else {
-//         make_move<Color::BLACK>(&state->thread.position_, result.move);
-//       }
-//     }
+    // SearchResult<Color::WHITE> colorless_search(Thread* thread, int depth, std::atomic<bool> *stopThinking, std::function<void(int, SearchResult<Color::WHITE>)> onDepthCompleted);
 
-//     *isRunning = false;
+    SearchResult<Color::WHITE> result = colorless_search(&thread0, &(state->stopThinking), [state, &thread0, &startTime](int depth, SearchResult<Color::WHITE> result) {
+      auto now = std::chrono::high_resolution_clock::now();
+      double secs = std::chrono::duration<double>(now - startTime).count();
+      GoTask::_print_variations(depth, secs, result, state, &thread0);
+    });
+    *isRunning = false;
+    // Notify run-loop that it can start running a new command.
+    std::unique_lock<std::mutex> lock(state->mutex);
+    state->condVar.notify_one();
+  }
+ private:
+  static void _print_variations(int depth, double secs, SearchResult<Color::WHITE> result, UciEngineState* state, Thread* thread) {
+    const size_t multiPV = state->multiPV;
+    const uint64_t timeMs = secs * 1000;
+    std::cout << depth << " depth completed in " << timeMs << " ms, " << thread->nodeCount_ << " nodes searched." << std::endl;
+    if (result.primaryVariations.size() == 0) {
+      if (colorless_is_stalemate(&state->position)) {
+        std::cout << "info depth 0 score cp 0" << std::endl;
+        return;
+      } else {
+        throw std::runtime_error("todo");
+      }
+    }
+    for (size_t i = 0; i < std::min(multiPV, result.primaryVariations.size()); ++i) {
+      std::pair<Evaluation, std::vector<Move>> variation = std::make_pair(result.primaryVariations[i].second.value, std::vector<Move>({result.primaryVariations[i].first}));
 
-//     // Notify run-loop that it can start running a new command.
-//     std::unique_lock<std::mutex> lock(state->mutex);
-//     state->condVar.notify_one();
-//   }
-//   bool is_running() override {
-//     return isRunning;
-//   }
-//  private:
-//   static void _print_variations(UciEngineState* state, int depth, double secs) {
-//     const size_t multiPV = state->thinkerInterface()->get_multi_pv();
-//     const uint64_t timeMs = secs * 1000;
-//     std::vector<VariationHead<Color::WHITE>> variations = state->thinkerInterface()->get_variations();
-//     if (variations.size() == 0) {
-//       if (isStalemate(&state->thread.position_)) {
-//         std::cout << "info depth 0 score cp 0" << std::endl;
-//         return;
-//       } else {
-//         throw std::runtime_error("todo");
-//       }
-//     }
-//     for (size_t i = 0; i < std::min(multiPV, variations.size()); ++i) {
-//       std::pair<Evaluation, std::vector<Move>> variation = state->thinkerInterface()->get_variation(&state->thread.position_, variations[i].move);
+      Evaluation eval = variation.first;
+      if (state->position.turn_ == Color::BLACK) {
+        // Score should be from mover's perspective, not white's.
+        eval *= -1;
+      }
 
-//       Evaluation eval = variation.first;
-//       if (state->thread.position_.turn_ == Color::BLACK) {
-//         // Score should be from mover's perspective, not white's.
-//         eval *= -1;
-//       }
-
-//       std::cout << "info depth " << depth;
-//       std::cout << " multipv " << (i + 1);
-//       if (eval <= kLongestForcedMate) {
-//         std::cout << " score mate " << -(eval - kCheckmate + 1) / 2;
-//       } else if (eval >= -kLongestForcedMate) {
-//         std::cout << " score mate " << -(eval + kCheckmate - 1) / 2;
-//       } else {
-//         std::cout << " score cp " << eval;
-//       }
-//       std::cout << " nodes " << state->thinkerInterface()->get_node_count();
-//       std::cout << " nps " << uint64_t(double(state->thinkerInterface()->get_node_count()) / secs);
-//       std::cout << " time " << timeMs;
-//       std::cout << " pv";
-//       for (const auto& move : variation.second) {
-//         std::cout << " " << move.uci();
-//       }
-//       std::cout << std::endl;
-//     }
-//   }
+      std::cout << "info depth " << depth;
+      std::cout << " multipv " << (i + 1);
+      if (eval <= kLongestForcedMate) {
+        std::cout << " score mate " << -(eval - kCheckmate + 1) / 2;
+      } else if (eval >= -kLongestForcedMate) {
+        std::cout << " score mate " << -(eval + kCheckmate - 1) / 2;
+      } else {
+        std::cout << " score cp " << eval;
+      }
+      std::cout << " nodes " << thread->nodeCount_;
+      std::cout << " nps " << uint64_t(double(thread->nodeCount_) / secs);
+      std::cout << " time " << timeMs;
+      std::cout << " pv";
+      for (const auto& move : variation.second) {
+        std::cout << " " << move.uci();
+      }
+      std::cout << std::endl;
+    }
+  }
   std::deque<std::string> command;
   std::thread *thread;
+  std::shared_ptr<Thread> baseThreadState;
   bool isRunning;
 };
 
@@ -146,7 +154,7 @@ struct UciEngine {
   UciEngineState state;
 
   UciEngine() {
-    this->state.thread.position_ = Position("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+    this->state.position = Position("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
   }
   void start(std::istream& cin, const std::vector<std::string>& commands) {
     UciEngineState *state = &this->state;

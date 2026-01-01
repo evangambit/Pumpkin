@@ -42,8 +42,11 @@ class Task {
 
 
 struct UciEngineState {
-  UciEngineState() : thread(0, Position(), nullptr, 1, std::unordered_set<Move>(), new TranspositionTable(10'000)) {}
-  Thread thread;  // This thread is copied into each search thread when a search starts.
+  UciEngineState() : tt_(std::make_shared<TranspositionTable>(1 << 20)),
+                      moveOverheadMs(50),
+                      numThreads(1),
+                      multiPV(1),
+                      evaluator(std::make_shared<SimpleEvaluator>()) {}
 
   std::mutex mutex;
   std::condition_variable condVar;
@@ -51,10 +54,15 @@ struct UciEngineState {
   std::deque<std::shared_ptr<Task>> taskQueue;
   SpinLock taskQueueLock;
   std::shared_ptr<Task> currentTask;
-  std::atomic<bool> stopThinkingRequested{false};
+  std::atomic<bool> stopThinking{false};
+
+  std::shared_ptr<TranspositionTable> tt_;
 
   unsigned moveOverheadMs;
   unsigned numThreads;
+  unsigned multiPV;
+  Position position;
+  std::shared_ptr<EvaluatorInterface> evaluator;
 };
 
 }  // namespace ChessEngine

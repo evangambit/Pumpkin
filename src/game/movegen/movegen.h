@@ -446,6 +446,36 @@ bool is_checkmate(Position *pos) {
   return can_enemy_attack<TURN>(*pos, sq);
 }
 
+
+template<Color TURN>
+bool is_stalemate(Position* pos) {
+  if (is_checkmate<TURN>(pos)) {
+    return false;
+  }
+  if (pos->is_fifty_move_rule()) {
+    return true;
+  }
+  if (pos->is_3fold_repetition(0)) {
+    return true;
+  }
+  if (pos->is_material_draw()) {
+    return true;
+  }
+
+  ExtMove moves[kMaxNumMoves];
+  ExtMove *end;
+  if (pos->turn_ == Color::WHITE) {
+    end = compute_legal_moves<Color::WHITE>(pos, moves);
+  } else {
+    end = compute_legal_moves<Color::BLACK>(pos, moves);
+  }
+  if (moves == end) {
+    return true;
+  }
+  return false;
+}
+
+
 }  // namespace ChessEngine
 
 #endif  // MOVEGEN_H

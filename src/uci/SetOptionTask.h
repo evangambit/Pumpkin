@@ -40,7 +40,7 @@ class SetOptionTask : public Task {
     if(does_pattern_match(command, {"Move", "Overhead", "value", "*"})) {
       state->moveOverheadMs = std::stoi(command[3]);
     } else if (does_pattern_match(command, {"Clear", "Hash"})) {
-      state->thread.tt_->clear();
+      state->tt_->clear();
       return;
     } else if (does_pattern_match(command, {"MultiPV", "value", "*"})) {
       int multiPV;
@@ -57,7 +57,7 @@ class SetOptionTask : public Task {
         std::cout << "Value must be positive" << std::endl;
         return;
       }
-      state->thread.multiPV_ = multiPV;
+      state->multiPV = multiPV;
       return;
     } else if (does_pattern_match(command, {"Threads", "value", "*"})) {
       int numThreads;
@@ -87,7 +87,7 @@ class SetOptionTask : public Task {
         std::cout << "Value must be an integer" << std::endl;
         return;
       }
-      state->thread.tt_->resize(cacheSizeMb);
+      state->tt_->resize(cacheSizeMb);
       return;
     } else if (does_pattern_match(command, {"SyzygyPath", "value", "*"})) {
       // TODO

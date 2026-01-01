@@ -20,11 +20,14 @@ namespace ChessEngine {
 struct Thread {
   uint64_t id_;
   uint64_t multiPV_;
+  unsigned depth_{1};
   Position position_;
   std::shared_ptr<EvaluatorInterface> evaluator_;
   std::unordered_set<Move> permittedMoves_;
   std::vector<std::pair<Move, Evaluation>> primaryVariations_;  // Contains multiPV number of best moves.
   uint64_t nodeCount_{0};
+
+  // This pointer should be considered non-owning. The TranspositionTable should created and managed elsewhere.
   TranspositionTable* tt_;
 
   Thread(
@@ -36,6 +39,18 @@ struct Thread {
     TranspositionTable* tt
   )
     : id_(id), position_(pos), evaluator_(evaluator), permittedMoves_(permittedMoves), multiPV_(multiPV), tt_(tt) {}
+
+  Thread clone() const {
+    return Thread(
+      id_,
+      position_,
+      evaluator_,
+      multiPV_,
+      permittedMoves_,
+      tt_
+    );
+  }
+
   std::atomic<bool> stopSearchFlag{false};
 };
 
@@ -119,7 +134,7 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
 }
 
 template<Color TURN, SearchType SEARCH_TYPE>
-NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> alpha, ColoredEvaluation<TURN> beta, int plyFromRoot) {
+NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> alpha, ColoredEvaluation<TURN> beta, int plyFromRoot, std::atomic<bool> *stopThinking) {
   // Transposition Table probe
   TTEntry entry;
   uint64_t key = thread->position_.currentState_.hash;
@@ -133,6 +148,10 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     }
   } else {
     entry.bestMove = kNullMove;
+  }
+
+  if (stopThinking->load()) {
+    return NegamaxResult<TURN>(kNullMove, 0);
   }
 
   thread->nodeCount_++;
@@ -200,7 +219,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
       continue;
     }
     make_move<TURN>(&thread->position_, move->move);
-    ColoredEvaluation<TURN> eval = -negamax<opposite_color<TURN>(), SearchType::NORMAL_SEARCH>(thread, depth - 1, -beta, -alpha, plyFromRoot + 1).evaluation;
+    ColoredEvaluation<TURN> eval = -negamax<opposite_color<TURN>(), SearchType::NORMAL_SEARCH>(thread, depth - 1, -beta, -alpha, plyFromRoot + 1, stopThinking).evaluation;
     undo<TURN>(&thread->position_);
     if (eval > bestResult.evaluation) {
       bestResult.bestMove = move->move;
@@ -208,7 +227,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
       bestMoveTT = move->move;
     }
     if (eval > alpha) {
-      if (SEARCH_TYPE == SearchType::ROOT && thread->multiPV_ > 1) {
+      if (SEARCH_TYPE == SearchType::ROOT) {
         // In multi-PV search, we want to keep track of multiple best moves and
         // only raise alpha if we have the top N moves.
 
@@ -300,27 +319,37 @@ SearchResult<TURN> negamax_result_to_search_result(const NegamaxResult<TURN>& re
 
 // Color-templated search function to be used by the UCI interface.
 template<Color TURN>
-SearchResult<TURN> search(Thread* thread, int depth, std::function<void(int, SearchResult<TURN>)> onDepthCompleted) {
+SearchResult<TURN> search(Thread* thread, std::atomic<bool> *stopThinking, std::function<void(int, SearchResult<TURN>)> onDepthCompleted) {
   NegamaxResult<TURN> result = negamax<TURN, SearchType::ROOT>(
-    thread, 1,
+    thread,
+    1,
     /*alpha=*/ColoredEvaluation<TURN>(kMinEval),
     /*beta=*/ColoredEvaluation<TURN>(kMaxEval),
-    /*plyFromRoot=*/0
+    /*plyFromRoot=*/0,
+    stopThinking
   );
-  for (int i = 2; i <= depth; ++i) {
+  if (onDepthCompleted != nullptr) {
+    onDepthCompleted(1, negamax_result_to_search_result<TURN>(result, thread));
+  }
+  for (int i = 2; i <= thread->depth_; ++i) {
     thread->primaryVariations_.clear();
     result = negamax<TURN, SearchType::ROOT>(
-      thread, i,
+      thread,
+      i,
       /*alpha=*/ColoredEvaluation<TURN>(kMinEval),
       /*beta=*/ColoredEvaluation<TURN>(kMaxEval),
-      /*plyFromRoot=*/0
+      /*plyFromRoot=*/0,
+      stopThinking
     );
+    if (onDepthCompleted != nullptr) {
+      onDepthCompleted(i, negamax_result_to_search_result<TURN>(result, thread));
+    }
   }
   return negamax_result_to_search_result<TURN>(result, thread);
 }
 
 // Non-color-templated search function to be used by the UCI interface.
-SearchResult<Color::WHITE> colorless_search(Thread* thread, int depth, std::function<void(int, SearchResult<Color::WHITE>)> onDepthCompleted);
+SearchResult<Color::WHITE> colorless_search(Thread* thread, std::atomic<bool> *stopThinking, std::function<void(int, SearchResult<Color::WHITE>)> onDepthCompleted);
 
 // Convenience function to search programmatically without needing to specify color or create a thread.
 SearchResult<Color::WHITE> search(Position pos, std::shared_ptr<EvaluatorInterface> evaluator, int depth, int multiPV, TranspositionTable* tt);

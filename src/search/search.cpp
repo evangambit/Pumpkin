@@ -2,9 +2,9 @@
 
 namespace ChessEngine {
 
-SearchResult<Color::WHITE> colorless_search(Thread* thread, int depth, std::function<void(int, SearchResult<Color::WHITE>)> onDepthCompleted) {
+SearchResult<Color::WHITE> colorless_search(Thread* thread, std::atomic<bool> *stopThinking, std::function<void(int, SearchResult<Color::WHITE>)> onDepthCompleted) {
   if (thread->position_.turn_ == Color::WHITE) {
-    return search<Color::WHITE>(thread, depth, onDepthCompleted);
+    return search<Color::WHITE>(thread, stopThinking, onDepthCompleted);
   } else {
     if (onDepthCompleted != nullptr) {
       std::function<void(int, SearchResult<Color::BLACK>)> wrappedOnDepthCompleted =
@@ -12,10 +12,10 @@ SearchResult<Color::WHITE> colorless_search(Thread* thread, int depth, std::func
           SearchResult<Color::WHITE> resultWhite = -resultBlack;
           onDepthCompleted(depth, resultWhite);
         };
-      return -search<Color::BLACK>(thread, depth, wrappedOnDepthCompleted);
+      return -search<Color::BLACK>(thread, stopThinking, wrappedOnDepthCompleted);
     }
     else {
-      return -search<Color::BLACK>(thread, depth, nullptr);
+      return -search<Color::BLACK>(thread, stopThinking, nullptr);
     }
   }
 }
@@ -25,11 +25,13 @@ SearchResult<Color::WHITE> search(Position pos, std::shared_ptr<EvaluatorInterfa
   pos.set_listener(evaluator);
   tt->new_search();
   Thread thread(0, pos, evaluator, multiPV, std::unordered_set<Move>(), tt);
+  thread.depth_ = depth;
+  std::atomic<bool> stopThinking {false};
 
   if (pos.turn_ == Color::WHITE) {
-    return search<Color::WHITE>(&thread, depth, nullptr);
+    return search<Color::WHITE>(&thread, &stopThinking, nullptr);
   } else {
-    SearchResult<Color::BLACK> result = search<Color::BLACK>(&thread, depth, nullptr);
+    SearchResult<Color::BLACK> result = search<Color::BLACK>(&thread, &stopThinking, nullptr);
     return -result;
   }
 }
