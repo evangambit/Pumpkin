@@ -14,6 +14,7 @@ struct EvaluatorInterface : public BoardListener {
   virtual ColoredEvaluation<Color::BLACK> evaluate_black(const Position& pos) = 0;
   virtual std::shared_ptr<EvaluatorInterface> clone() const = 0;
   virtual size_t num_features() const { return 0; }
+  virtual std::string to_string() const = 0;
   virtual int8_t *write_features(int8_t* features) const {
     return features;
   }
@@ -34,6 +35,10 @@ struct SimpleEvaluator : public EvaluatorInterface {
 
   std::shared_ptr<EvaluatorInterface> clone() const override {
     return std::make_shared<SimpleEvaluator>();
+  }
+
+  std::string to_string() const override {
+    return "SimpleEvaluator";
   }
 
   inline static ColoredEvaluation<Color::WHITE> kPieceValues[ColoredPiece::NUM_COLORED_PIECES] = {

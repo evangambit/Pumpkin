@@ -30,6 +30,15 @@ class GoTask : public Task {
     assert(command.at(0) == "go");
     command.pop_front();
 
+    // TODO: parse the rest of the command to set time controls, etc.
+
+    int depth = 1;
+    if (command.size() >= 2 && command.at(0) == "depth") {
+      // For testing.
+      depth = std::stoi(command.at(1));
+    }
+    std::cout << "Starting search to depth " << depth << std::endl;
+
     this->baseThreadState = std::make_shared<Thread>(
       /* thread id=*/ 0,
       state->position,
@@ -38,6 +47,7 @@ class GoTask : public Task {
       std::unordered_set<Move>(),
       state->tt_.get()
     );
+    this->baseThreadState->depth_ = depth;
     this->thread = new std::thread(GoTask::_threaded_think, this->baseThreadState.get(), state, &isRunning);
   }
 
@@ -55,8 +65,7 @@ class GoTask : public Task {
   static void _threaded_think(Thread* baseThread, UciEngineState* state, bool* isRunning) {
 
     // TODO: support more than one thread.
-    Thread thread0 = baseThread->clone();
-    thread0.depth_ = 4;
+    Thread thread0 = *baseThread;
 
     auto startTime = std::chrono::high_resolution_clock::now();
 
@@ -74,7 +83,6 @@ class GoTask : public Task {
   static void _print_variations(int depth, double secs, SearchResult<Color::WHITE> result, UciEngineState* state, Thread* thread) {
     const size_t multiPV = state->multiPV;
     const uint64_t timeMs = secs * 1000;
-    std::cout << depth << " depth completed in " << timeMs << " ms, " << thread->nodeCount_ << " nodes searched." << std::endl;
     if (result.primaryVariations.size() == 0) {
       if (colorless_is_stalemate(&state->position)) {
         std::cout << "info depth 0 score cp 0" << std::endl;

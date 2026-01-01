@@ -62,6 +62,10 @@ struct PieceSquareEvaluator : public EvaluatorInterface {
     }
   }
 
+  std::string to_string() const override {
+    return "PieceSquareEvaluator";
+  }
+
  private:
   inline int32_t earliness(const Position& pos) const {
     int32_t t = 0;
