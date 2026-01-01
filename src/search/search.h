@@ -1,6 +1,10 @@
 #ifndef SEARCH_H
 #define SEARCH_H
 
+#ifndef DEBUG_PRINT
+#define DEBUG_PRINT 0
+#endif
+
 #include <atomic>
 #include <bit>
 #include <functional>
@@ -83,8 +87,22 @@ enum SearchType {
   NORMAL_SEARCH,
 };
 
+const Evaluation kMoveOrderingPieceValue[Piece::NUM_PIECES] = {
+  0,    // NO_PIECE
+  100,  // PAWN
+  320,  // KNIGHT
+  330,  // BISHOP
+  500,  // ROOK
+  900,  // QUEEN
+  20000 // KING
+};
+
 template<Color TURN>
 NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, ColoredEvaluation<TURN> beta, int plyFromRoot, int quiescenceDepth) {
+  #if DEBUG_PRINT
+  std::cout << repeat("  ", plyFromRoot) << "Quiescence search called: alpha=" << alpha.value << " beta=" << beta.value << " plyFromRoot=" << plyFromRoot << " quiescenceDepth=" << quiescenceDepth << " history" << thread->position_.history_ << std::endl;
+  #endif
+
   ExtMove moves[kMaxNumMoves];
   ExtMove *end;
   if (quiescenceDepth <= 4) {
@@ -100,6 +118,9 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
     lsb_i_promise_board_is_not_empty(thread->position_.pieceBitboards_[moverKing])
   );
   if (moves == end && inCheck) {
+    #if DEBUG_PRINT
+    std::cout << repeat("  ", plyFromRoot) << "Checkmate detected in quiescence search." << std::endl;
+    #endif
     return NegamaxResult<TURN>(kNullMove, kCheckmate + plyFromRoot);
   }
 
@@ -112,6 +133,24 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
       alpha = bestResult.evaluation;
     }
   }
+
+  // Move ordering: captures that capture higher value pieces first.
+  for (ExtMove* move = moves; move < end; ++move) {
+    Piece capturedPiece = cp2p(thread->position_.tiles_[move->move.to]);
+    if (capturedPiece != Piece::NO_PIECE) {
+      move->score = kMoveOrderingPieceValue[capturedPiece];
+    } else {
+      move->score = 0;
+    }
+  }
+  std::sort(
+    moves,
+    end,
+    [](const ExtMove& a, const ExtMove& b) {
+      return a.score > b.score;
+    }
+  );
+
   for (ExtMove* move = moves; move < end; ++move) {
     if (thread->position_.pieceBitboards_[enemyKing] & bb(move->move.to)) {
       // Don't capture the king. TODO: remove this check by fixing move generation.
@@ -132,12 +171,19 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
     }
   }
 
+  #if DEBUG_PRINT
+  std::cout << repeat("  ", plyFromRoot) << "Quiescence search returning: bestMove=" << bestResult.bestMove.uci() << " eval=" << bestResult.evaluation.value << std::endl;
+  #endif
+
   return bestResult;
 }
 
 template<Color TURN, SearchType SEARCH_TYPE>
 NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> alpha, ColoredEvaluation<TURN> beta, int plyFromRoot, std::atomic<bool> *stopThinking) {
   // Transposition Table probe
+  #if DEBUG_PRINT
+  std::cout << repeat("  ", plyFromRoot) << "Negamax called: depth=" << depth << " alpha=" << alpha.value << " beta=" << beta.value << " plyFromRoot=" << plyFromRoot << std::endl;
+  #endif
   const ColoredEvaluation<TURN> originalAlpha = alpha;
   TTEntry entry;
   uint64_t key = thread->position_.currentState_.hash;
@@ -147,10 +193,19 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     // multiple best moves, or we need to filter by permitted moves.
     if (SEARCH_TYPE != SearchType::ROOT || (thread->multiPV_ == 1 && thread->permittedMoves_.empty())) {
       if (entry.bound == BoundType::EXACT) {
+        #if DEBUG_PRINT
+        std::cout << repeat("  ", plyFromRoot) << "TT Hit: EXACT" << std::endl;
+        #endif
         return NegamaxResult<TURN>(entry.bestMove, entry.value);
       } else if (entry.bound == BoundType::LOWER && entry.value >= beta.value) {
+        #if DEBUG_PRINT
+        std::cout << repeat("  ", plyFromRoot) << "TT Hit: LOWER" << std::endl;
+        #endif
         return NegamaxResult<TURN>(entry.bestMove, entry.value);
       } else if (entry.bound == BoundType::UPPER && entry.value <= alpha.value) {
+        #if DEBUG_PRINT
+        std::cout << repeat("  ", plyFromRoot) << "TT Hit: UPPER" << std::endl;
+        #endif
         return NegamaxResult<TURN>(entry.bestMove, entry.value);
       }
     }
@@ -159,11 +214,17 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   }
 
   if (stopThinking->load()) {
+    #if DEBUG_PRINT
+    std::cout << repeat("  ", plyFromRoot) << "Search stopped externally." << std::endl;
+    #endif
     return NegamaxResult<TURN>(kNullMove, 0);
   }
 
   thread->nodeCount_++;
   if (depth == 0) {
+    #if DEBUG_PRINT
+    std::cout << repeat("  ", plyFromRoot) << "Entering quiescence search." << std::endl;
+    #endif
     return qsearch(thread, alpha, beta, plyFromRoot, 0);
   }
 
@@ -196,14 +257,23 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
       lsb_i_promise_board_is_not_empty(thread->position_.pieceBitboards_[moverKing])
     );
     if (inCheck) {
+      #if DEBUG_PRINT
+      std::cout << repeat("  ", plyFromRoot) << "Checkmate detected." << std::endl;
+      #endif
       return NegamaxResult<TURN>(kNullMove, kCheckmate + plyFromRoot);
     } else {
+      #if DEBUG_PRINT
+      std::cout << repeat("  ", plyFromRoot) << "Stalemate detected." << std::endl;
+      #endif
       return NegamaxResult<TURN>(kNullMove, 0);
     }
   }
 
   // We need to check this *after* we do the checkmate test above, since you can win on the 50th move.
   if (thread->position_.is_fifty_move_rule()) {
+    #if DEBUG_PRINT
+    std::cout << repeat("  ", plyFromRoot) << "Fifty-move rule draw detected." << std::endl;
+    #endif
     return NegamaxResult<TURN>(kNullMove, 0);
   }
 
@@ -269,6 +339,10 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   BoundType bound = BoundType::EXACT;
   if (bestResult.evaluation <= originalAlpha) bound = BoundType::UPPER;
   else if (bestResult.evaluation >= beta) bound = BoundType::LOWER;
+
+  #if DEBUG_PRINT
+  std::cout << repeat("  ", plyFromRoot) << "Storing in TT: depth=" << depth << " eval=" << bestResult.evaluation.value << " bound=" << static_cast<int>(bound) << std::endl;
+  #endif
   thread->tt_->store(
     thread->position_.currentState_.hash,
     bestMoveTT,
@@ -277,6 +351,11 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     bound,
     plyFromRoot
   );
+
+  #if DEBUG_PRINT
+  std::cout << repeat("  ", plyFromRoot) << "Negamax returning: bestMove=" << bestResult.bestMove.uci() << " eval=" << bestResult.evaluation.value << std::endl;
+  #endif
+
 
   return bestResult;
 }

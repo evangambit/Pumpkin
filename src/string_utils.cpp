@@ -1,5 +1,13 @@
 #include "string_utils.h"
 
+std::string repeat(const std::string& s, size_t n) {
+  std::string r = "";
+  for (size_t i = 0; i < n; ++i) {
+    r += s;
+  }
+  return r;
+}
+
 std::string repr(const std::string& text) {
   int singleQuoteCount = 0;
   int doubleQuoteCount = 0;
