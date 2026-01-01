@@ -25,7 +25,7 @@ struct Thread {
   std::vector<std::pair<Move, Evaluation>> primaryVariations_;  // Contains multiPV number of best moves.
   uint64_t nodeCount_{0};
 
-  TranspositionTable* tt_ = nullptr; // Pointer to shared transposition table
+  TranspositionTable* tt_ = new TranspositionTable(10'000);  // Default size 10 MB
 
   Thread(
     uint64_t id,
