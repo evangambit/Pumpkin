@@ -74,6 +74,9 @@ class GoTask : public Task {
       double secs = std::chrono::duration<double>(now - startTime).count();
       GoTask::_print_variations(depth, secs, result, state, &thread0);
     });
+
+    std::cout << "bestmove " << result.bestMove.uci() << std::endl;
+
     *isRunning = false;
     // Notify run-loop that it can start running a new command.
     std::unique_lock<std::mutex> lock(state->mutex);
