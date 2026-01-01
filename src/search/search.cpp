@@ -2,7 +2,7 @@
 
 namespace ChessEngine {
 
-SearchResult<Color::WHITE> colorless_search(Thread* thread, int depth, std::function<void(int, SearchResult<Color::WHITE>)> onDepthCompleted = nullptr) {
+SearchResult<Color::WHITE> colorless_search(Thread* thread, int depth, std::function<void(int, SearchResult<Color::WHITE>)> onDepthCompleted) {
   if (thread->position_.turn_ == Color::WHITE) {
     return search<Color::WHITE>(thread, depth, onDepthCompleted);
   } else {
@@ -24,8 +24,7 @@ SearchResult<Color::WHITE> colorless_search(Thread* thread, int depth, std::func
 SearchResult<Color::WHITE> search(Position pos, std::shared_ptr<EvaluatorInterface> evaluator, int depth, int multiPV, TranspositionTable* tt) {
   pos.set_listener(evaluator);
   tt->new_search();
-  Thread thread(0, pos, evaluator, multiPV, std::unordered_set<Move>());
-  thread.tt_ = tt;
+  Thread thread(0, pos, evaluator, multiPV, std::unordered_set<Move>(), tt);
 
   if (pos.turn_ == Color::WHITE) {
     return search<Color::WHITE>(&thread, depth, nullptr);
