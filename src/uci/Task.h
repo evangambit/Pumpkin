@@ -1,6 +1,8 @@
 #ifndef PUMPKIN_UCI_TASK_H
 #define PUMPKIN_UCI_TASK_H
 
+#include "../search/PieceSquareEvaluator.h"
+
 #include <atomic>
 #include <condition_variable>
 #include <deque>
@@ -46,7 +48,7 @@ struct UciEngineState {
                       moveOverheadMs(50),
                       numThreads(1),
                       multiPV(1),
-                      evaluator(std::make_shared<SimpleEvaluator>()) {}
+                      evaluator(std::make_shared<PieceSquareEvaluator>()) {}
 
   std::mutex mutex;
   std::condition_variable condVar;

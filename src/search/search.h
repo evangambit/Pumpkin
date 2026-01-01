@@ -39,17 +39,19 @@ struct Thread {
     TranspositionTable* tt
   )
     : id_(id), position_(pos), evaluator_(evaluator), permittedMoves_(permittedMoves), multiPV_(multiPV), tt_(tt) {}
-
-  Thread clone() const {
-    return Thread(
-      id_,
-      position_,
-      evaluator_,
-      multiPV_,
-      permittedMoves_,
-      tt_
-    );
-  }
+  
+  Thread(const Thread& other)
+  : id_(other.id_),
+    multiPV_(other.multiPV_),
+    depth_(other.depth_),
+    position_(other.position_),
+    evaluator_(other.evaluator_),
+    permittedMoves_(other.permittedMoves_),
+    primaryVariations_(other.primaryVariations_),
+    nodeCount_(other.nodeCount_),
+    tt_(other.tt_) {
+      this->position_.set_listener(this->evaluator_);
+    }
 
   std::atomic<bool> stopSearchFlag{false};
 };
