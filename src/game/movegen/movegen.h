@@ -475,6 +475,8 @@ bool is_stalemate(Position* pos) {
   return false;
 }
 
+bool colorless_is_stalemate(Position *pos);
+
 
 }  // namespace ChessEngine
 

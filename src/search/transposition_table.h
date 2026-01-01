@@ -14,6 +14,8 @@ enum class BoundType : uint8_t {
   UPPER
 };
 
+std::string bound_type_to_string(BoundType bound);
+
 struct TTEntry {
   uint64_t key;
   Move bestMove;

@@ -136,15 +136,21 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
 template<Color TURN, SearchType SEARCH_TYPE>
 NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> alpha, ColoredEvaluation<TURN> beta, int plyFromRoot, std::atomic<bool> *stopThinking) {
   // Transposition Table probe
+  const ColoredEvaluation<TURN> originalAlpha = alpha;
   TTEntry entry;
   uint64_t key = thread->position_.currentState_.hash;
   if (thread->tt_->probe(key, entry) && entry.depth >= depth) {
-    if (entry.bound == BoundType::EXACT) {
-      return NegamaxResult<TURN>(entry.bestMove, entry.value);
-    } else if (entry.bound == BoundType::LOWER && entry.value >= beta.value) {
-      return NegamaxResult<TURN>(entry.bestMove, entry.value);
-    } else if (entry.bound == BoundType::UPPER && entry.value <= alpha.value) {
-      return NegamaxResult<TURN>(entry.bestMove, entry.value);
+    // if ROOT && (multiPV > 0 || permittedMoves not empty)
+    // we don't want to short-circuit, since we either need to compute
+    // multiple best moves, or we need to filter by permitted moves.
+    if (SEARCH_TYPE != SearchType::ROOT || (thread->multiPV_ == 1 && thread->permittedMoves_.empty())) {
+      if (entry.bound == BoundType::EXACT) {
+        return NegamaxResult<TURN>(entry.bestMove, entry.value);
+      } else if (entry.bound == BoundType::LOWER && entry.value >= beta.value) {
+        return NegamaxResult<TURN>(entry.bestMove, entry.value);
+      } else if (entry.bound == BoundType::UPPER && entry.value <= alpha.value) {
+        return NegamaxResult<TURN>(entry.bestMove, entry.value);
+      }
     }
   } else {
     entry.bestMove = kNullMove;
@@ -258,19 +264,17 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   }
 
   // Store in Transposition Table
-  if (thread->tt_) {
-    BoundType bound = BoundType::EXACT;
-    if (bestResult.evaluation <= alpha) bound = BoundType::UPPER;
-    else if (bestResult.evaluation >= beta) bound = BoundType::LOWER;
-    thread->tt_->store(
-      thread->position_.currentState_.hash,
-      bestMoveTT,
-      depth,
-      bestResult.evaluation.value,
-      bound,
-      plyFromRoot
-    );
-  }
+  BoundType bound = BoundType::EXACT;
+  if (bestResult.evaluation <= originalAlpha) bound = BoundType::UPPER;
+  else if (bestResult.evaluation >= beta) bound = BoundType::LOWER;
+  thread->tt_->store(
+    thread->position_.currentState_.hash,
+    bestMoveTT,
+    depth,
+    bestResult.evaluation.value,
+    bound,
+    plyFromRoot
+  );
 
   return bestResult;
 }
