@@ -15,6 +15,7 @@ std::string join(const T& A, const std::string& delimiter) {
   return r;
 }
 
+std::string repeat(const std::string& s, size_t n);
 std::string repr(const std::string&);
 std::string rjust(const std::string& text, size_t width);
 void ltrim(std::string *);
