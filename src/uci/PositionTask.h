@@ -23,12 +23,12 @@ class PositionTask : public Task {
     }
     size_t i;
     if (command[1] == "startpos") {
-      state->thread.position_ = Position("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+      state->position = Position("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
       i = 2;
     } else if (command.size() >= 8 && command[1] == "fen") {
       std::vector<std::string> fen(command.begin() + 2, command.begin() + 8);
       i = 8;
-      state->thread.position_ = Position(join(fen, " "));
+      state->position = Position(join(fen, " "));
     } else {
       invalid(join(command, " "));
       return;
@@ -44,19 +44,19 @@ class PositionTask : public Task {
       std::string uciMove = command[i];
       ExtMove moves[kMaxNumMoves];
       ExtMove *end;
-      if (state->thread.position_.turn_ == Color::WHITE) {
-        end = compute_legal_moves<Color::WHITE>(&state->thread.position_, moves);
+      if (state->position.turn_ == Color::WHITE) {
+        end = compute_legal_moves<Color::WHITE>(&state->position, moves);
       } else {
-        end = compute_legal_moves<Color::BLACK>(&state->thread.position_, moves);
+        end = compute_legal_moves<Color::BLACK>(&state->position, moves);
       }
       bool foundMove = false;
       for (ExtMove *move = moves; move < end; ++move) {
         if (move->move.uci() == uciMove) {
           foundMove = true;
-          if (state->thread.position_.turn_ == Color::WHITE) {
-            make_move<Color::WHITE>(&state->thread.position_, move->move);
+          if (state->position.turn_ == Color::WHITE) {
+            make_move<Color::WHITE>(&state->position, move->move);
           } else {
-            make_move<Color::BLACK>(&state->thread.position_, move->move);
+            make_move<Color::BLACK>(&state->position, move->move);
           }
           break;
         }
