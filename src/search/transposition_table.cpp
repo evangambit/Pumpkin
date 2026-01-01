@@ -3,6 +3,19 @@
 
 namespace ChessEngine {
 
+std::string bound_type_to_string(BoundType bound) {
+    switch (bound) {
+        case BoundType::EXACT:
+            return "EXACT";
+        case BoundType::LOWER:
+            return "LOWER";
+        case BoundType::UPPER:
+            return "UPPER";
+        default:
+            return "UNKNOWN";
+    }
+}
+
 TranspositionTable::TranspositionTable(size_t kilobytes) {
     resize(kilobytes);
 }
@@ -32,6 +45,9 @@ void TranspositionTable::store(uint64_t key, Move bestMove, int depth, int value
         replace = true;
     } else if (bound != BoundType::EXACT && entry.bound != BoundType::EXACT && depth >= entry.depth) {
         replace = true;
+    }
+    if (key == entry.key && ((bound == BoundType::EXACT) == (entry.bound == BoundType::EXACT)) && depth < entry.depth) {
+        replace = false;
     }
     if (replace) {
         entry.key = key;
