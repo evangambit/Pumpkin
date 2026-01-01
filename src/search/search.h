@@ -25,17 +25,17 @@ struct Thread {
   std::unordered_set<Move> permittedMoves_;
   std::vector<std::pair<Move, Evaluation>> primaryVariations_;  // Contains multiPV number of best moves.
   uint64_t nodeCount_{0};
-
-  TranspositionTable* tt_ = new TranspositionTable(10'000);  // Default size 10 MB
+  TranspositionTable* tt_;
 
   Thread(
     uint64_t id,
     const Position& pos,
     std::shared_ptr<EvaluatorInterface> evaluator,
     uint64_t multiPV,
-    const std::unordered_set<Move>& permittedMoves
+    const std::unordered_set<Move>& permittedMoves,
+    TranspositionTable* tt
   )
-    : id_(id), position_(pos), evaluator_(evaluator), permittedMoves_(permittedMoves), multiPV_(multiPV) {}
+    : id_(id), position_(pos), evaluator_(evaluator), permittedMoves_(permittedMoves), multiPV_(multiPV), tt_(tt) {}
   std::atomic<bool> stopSearchFlag{false};
 };
 
