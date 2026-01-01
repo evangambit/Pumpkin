@@ -9,7 +9,11 @@ g++ -std=c++20 -o test_runner $(find src/ -name "*.cpp" | grep -v main.cpp) \
 
 
 # Build main
-g++ -std=c++20 -o main $(find src/ -name "*.cpp" | grep -Ev "[Tt]ests?\\.cpp") -pthread -L/usr/local/lib -lgflags
+g++ -std=c++20 -o uci $(find src/ -name "*.cpp" | grep -Ev "([Tt]ests?|uci)\\.cpp") -pthread -L/usr/local/lib -lgflags
 
 ./main rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2
+
+# Build uci
+
+g++ -std=c++20 -o uci $(find src/ -name "*.cpp" | grep -Ev "([Tt]ests?|main)\\.cpp") -pthread -L/usr/local/lib -lgflags
 ```
