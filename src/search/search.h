@@ -12,6 +12,8 @@
 #include "evaluator.h"
 #include "ColoredEvaluation.h"
 
+#include "transposition_table.h"
+
 namespace ChessEngine {
 
 struct Thread {
@@ -22,6 +24,8 @@ struct Thread {
   std::unordered_set<Move> permittedMoves_;
   std::vector<std::pair<Move, Evaluation>> primaryVariations_;  // Contains multiPV number of best moves.
   uint64_t nodeCount_{0};
+
+  TranspositionTable* tt_ = nullptr; // Pointer to shared transposition table
 
   Thread(
     uint64_t id,
@@ -115,6 +119,21 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
 
 template<Color TURN, SearchType SEARCH_TYPE>
 NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> alpha, ColoredEvaluation<TURN> beta, int plyFromRoot) {
+  // Transposition Table probe
+  if (thread->tt_) {
+    TTEntry entry;
+    uint64_t key = thread->position_.currentState_.hash;
+    if (thread->tt_->probe(key, entry) && entry.depth >= depth) {
+      if (entry.bound == BoundType::EXACT) {
+        return NegamaxResult<TURN>(entry.bestMove, entry.value);
+      } else if (entry.bound == BoundType::LOWER && entry.value >= beta.value) {
+        return NegamaxResult<TURN>(entry.bestMove, entry.value);
+      } else if (entry.bound == BoundType::UPPER && entry.value <= alpha.value) {
+        return NegamaxResult<TURN>(entry.bestMove, entry.value);
+      }
+    }
+  }
+  thread->nodeCount_++;
   if (depth == 0) {
     return qsearch(thread, alpha, beta, plyFromRoot, 0);
   }
@@ -160,6 +179,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   }
 
   NegamaxResult<TURN> bestResult(kNullMove, kMinEval);
+  Move bestMoveTT = kNullMove;
   for (ExtMove* move = moves; move < end; ++move) {
     if (thread->position_.pieceBitboards_[enemyKing] & bb(move->move.to)) {
       // Don't capture the king. TODO: remove this check by fixing move generation.
@@ -171,6 +191,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     if (eval > bestResult.evaluation) {
       bestResult.bestMove = move->move;
       bestResult.evaluation = eval;
+      bestMoveTT = move->move;
     }
     if (eval > alpha) {
       if (SEARCH_TYPE == SearchType::ROOT && thread->multiPV_ > 1) {
@@ -203,6 +224,21 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     }
   }
 
+  // Store in Transposition Table
+  if (thread->tt_) {
+    BoundType bound = BoundType::EXACT;
+    if (bestResult.evaluation <= alpha) bound = BoundType::UPPER;
+    else if (bestResult.evaluation >= beta) bound = BoundType::LOWER;
+    thread->tt_->store(
+      thread->position_.currentState_.hash,
+      bestMoveTT,
+      depth,
+      bestResult.evaluation.value,
+      bound,
+      plyFromRoot
+    );
+  }
+
   return bestResult;
 }
 
@@ -211,12 +247,15 @@ struct SearchResult {
   std::vector<std::pair<Move, ColoredEvaluation<TURN>>> primaryVariations;
   Move bestMove;
   ColoredEvaluation<TURN> evaluation;
+  uint64_t nodeCount_;
 };
 
 template<Color TURN>
-SearchResult<TURN> _search(Position pos, std::shared_ptr<EvaluatorInterface> evaluator, int depth, int multiPV = 1) {
+SearchResult<TURN> _search(Position pos, std::shared_ptr<EvaluatorInterface> evaluator, int depth, int multiPV, TranspositionTable *tt) {
   pos.set_listener(evaluator);
+  tt->new_search();
   Thread thread(0, pos, evaluator, multiPV, std::unordered_set<Move>());
+  thread.tt_ = tt;
   NegamaxResult<TURN> result = negamax<TURN, SearchType::ROOT>(
     &thread, depth,
     /*alpha=*/ColoredEvaluation<TURN>(kMinEval),
@@ -227,14 +266,14 @@ SearchResult<TURN> _search(Position pos, std::shared_ptr<EvaluatorInterface> eva
   for (const auto& pv : thread.primaryVariations_) {
     convertedPVs.push_back(std::make_pair(pv.first, ColoredEvaluation<TURN>(pv.second)));
   }
-  return SearchResult{convertedPVs, result.bestMove, result.evaluation};
+  return SearchResult{convertedPVs, result.bestMove, result.evaluation, thread.nodeCount_};
 }
 
-inline SearchResult<Color::WHITE> search(Position pos, std::shared_ptr<EvaluatorInterface> evaluator, int depth, int multiPV = 1) {
+inline SearchResult<Color::WHITE> search(Position pos, std::shared_ptr<EvaluatorInterface> evaluator, int depth, int multiPV, TranspositionTable* tt) {
   if (pos.turn_ == Color::WHITE) {
-    return _search<Color::WHITE>(pos, evaluator, depth, multiPV);
+    return _search<Color::WHITE>(pos, evaluator, depth, multiPV, tt);
   } else {
-    SearchResult<Color::BLACK> result = _search<Color::BLACK>(pos, evaluator, depth, multiPV);
+    SearchResult<Color::BLACK> result = _search<Color::BLACK>(pos, evaluator, depth, multiPV, tt);
     std::vector<std::pair<Move, ColoredEvaluation<Color::WHITE>>> convertedVariations;
     for (const auto& pv : result.primaryVariations) {
       convertedVariations.push_back(std::make_pair(pv.first, -pv.second));
