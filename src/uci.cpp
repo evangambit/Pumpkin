@@ -177,6 +177,8 @@ struct UciEngine {
     #endif
     } else if (parts[0] == "ponderhit") {
       // Ignore. (TODO: handle pondering better).
+    } else if (parts[0] == "debug") {
+      // Todo
     } else {
       state->taskQueue.push_back(std::make_shared<UnrecognizedCommandTask>(parts));
     }

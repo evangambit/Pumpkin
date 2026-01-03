@@ -25,7 +25,6 @@ cutechess/build/cutechess-cli -engine cmd=uci -engine cmd=uci -each tc=40/60 pro
 
 ```
 
-bug:
+## Known bugs
 
-
- ./main --fen 'r1bq1bnr/pp1k1ppp/4p3/2pP4/6Q1/8/PPPP1PPP/RNB1K1NR b KQ - 0 6'
+- Capturing enpassant into check (e.g. "r4Q2/1pk2pp1/8/3qpP1K/8/8/PP5B/n7 w - - 0 25")

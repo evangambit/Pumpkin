@@ -95,8 +95,11 @@ class SetOptionTask : public Task {
     } else if (does_pattern_match(command, {"UCI_ShowWDL", "value", "*"})) {
       // TODO
       return;
+    } else if (does_pattern_match(command, {"Ponder", "value", "*"})) {
+      // TODO
+      return;
     } else {
-      std::cout << "Unrecognized option" << std::endl;
+      std::cout << "Unrecognized option \"" << join(command, " ") << "\"" << std::endl;
     }
   }
  private:
