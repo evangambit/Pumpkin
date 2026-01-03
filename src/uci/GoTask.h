@@ -21,6 +21,95 @@
 
 namespace ChessEngine {
 
+struct GoCommand {
+  GoCommand()
+  : depthLimit(100), nodeLimit(-1), timeLimitMs(-1),
+  wtimeMs(0), btimeMs(0), wIncrementMs(0), bIncrementMs(0), movesUntilTimeControl(-1), makeBestMove(false) {}
+
+  Position pos;
+
+  size_t depthLimit;
+  uint64_t nodeLimit;
+  uint64_t timeLimitMs;
+  std::unordered_set<Move> moves;
+
+  uint64_t wtimeMs;
+  uint64_t btimeMs;
+  uint64_t wIncrementMs;
+  uint64_t bIncrementMs;
+  uint64_t movesUntilTimeControl;
+
+  // If true, the best (found) move is made after the command finishes.
+  bool makeBestMove;
+};
+
+GoCommand make_go_command(std::deque<std::string> *command, Position *pos) {
+  GoCommand goCommand;
+
+  goCommand.pos = *pos;
+
+  std::unordered_set<std::string> uciMoves;
+  std::string lastCommand = "";
+  while (command->size() > 0) {
+    std::string part = command->front();
+    command->pop_front();
+
+    if (part == "depth"
+      || part == "nodes"
+      || part == "movetime"
+      || part == "wtime"
+      || part == "btime"
+      || part == "winc"
+      || part == "binc"
+      || part == "movestogo"
+      || part == "searchmoves"
+      ) {
+      lastCommand = part;
+    } else if (part == "mm") {
+      goCommand.makeBestMove = true;
+    } else if (lastCommand == "depth") {
+      goCommand.depthLimit = stoi(part);
+    } else if (lastCommand == "nodes") {
+      goCommand.nodeLimit = stoi(part);
+    } else if (lastCommand == "movetime") {
+      goCommand.timeLimitMs = stoi(part);
+    } else if (lastCommand == "wtime") {
+      goCommand.wtimeMs = stoi(part);
+    } else if (lastCommand == "btime") {
+      goCommand.btimeMs = stoi(part);
+    } else if (lastCommand == "winc") {
+      goCommand.wIncrementMs = stoi(part);
+    } else if (lastCommand == "binc") {
+      goCommand.bIncrementMs = stoi(part);
+    } else if (lastCommand == "movestogo") {
+      goCommand.movesUntilTimeControl = stoi(part);
+    } else if (lastCommand == "searchmoves") {
+      uciMoves.insert(part);
+    } else {
+      lastCommand = part;
+    }
+  }
+
+  std::unordered_map<std::string, Move> legalMoves;
+  {
+    ExtMove moves[kMaxNumMoves];
+    ExtMove* end = compute_legal_moves<Color::WHITE>(&goCommand.pos, &(moves[0]));
+    for (ExtMove* move = moves; move != end; ++move) {
+      legalMoves.insert({move->move.uci(), move->move});
+    }
+  }
+
+  // Remove invalid moves.
+  for (const auto& move : uciMoves) {
+    if (legalMoves.contains(move)) {
+      goCommand.moves.insert(legalMoves[move]);
+    }
+  }
+
+  return goCommand;
+}
+
+
 class GoTask : public Task {
  public:
   GoTask(std::deque<std::string> command) : command(command), isRunning(false), thread(nullptr) {}
@@ -30,14 +119,7 @@ class GoTask : public Task {
     assert(command.at(0) == "go");
     command.pop_front();
 
-    // TODO: parse the rest of the command to set time controls, etc.
-
-    int depth = 1;
-    if (command.size() >= 2 && command.at(0) == "depth") {
-      // For testing.
-      depth = std::stoi(command.at(1));
-    }
-    std::cout << "Starting search to depth " << depth << std::endl;
+    GoCommand goCommand = make_go_command(&command, &state->position);
 
     this->baseThreadState = std::make_shared<Thread>(
       /* thread id=*/ 0,
@@ -47,7 +129,7 @@ class GoTask : public Task {
       std::unordered_set<Move>(),
       state->tt_.get()
     );
-    this->baseThreadState->depth_ = depth;
+    this->baseThreadState->depth_ = goCommand.depthLimit;
     this->thread = new std::thread(GoTask::_threaded_think, this->baseThreadState.get(), state, &isRunning);
   }
 
