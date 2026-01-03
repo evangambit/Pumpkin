@@ -177,9 +177,9 @@ class GoTask : public Task {
       }
     }
     for (size_t i = 0; i < std::min(multiPV, result.primaryVariations.size()); ++i) {
-      std::pair<Evaluation, std::vector<Move>> variation = std::make_pair(result.primaryVariations[i].second.value, std::vector<Move>({result.primaryVariations[i].first}));
+      Variation<Color::WHITE> variation = result.primaryVariations[i];
 
-      Evaluation eval = variation.first;
+      Evaluation eval = variation.evaluation.value;
       if (state->position.turn_ == Color::BLACK) {
         // Score should be from mover's perspective, not white's.
         eval *= -1;
@@ -199,7 +199,7 @@ class GoTask : public Task {
       std::cout << " nps " << uint64_t(double(thread->nodeCount_) / secs);
       std::cout << " time " << timeMs;
       std::cout << " pv";
-      for (const auto& move : variation.second) {
+      for (const auto& move : variation.moves) {
         std::cout << " " << move.uci();
       }
       std::cout << std::endl;
