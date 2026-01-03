@@ -367,16 +367,15 @@ ExtMove* compute_moves(const Position& pos, ExtMove *moves) {
 
   const unsigned numCheckers = std::popcount(checkers);
 
+  const Bitboard validKingSquares = ~compute_my_targets<opposite_color<US>(), true>(pos);
   if (numCheckers > 1) {  // Double check; king must move.
-    return compute_king_moves<US, MoveGenType::ALL_MOVES, true>(pos, moves, kUniverse);
+    return compute_king_moves<US, MoveGenType::ALL_MOVES, true>(pos, moves, validKingSquares);
   }
 
   Bitboard target = kUniverse;
   if (numCheckers == 1) {
     target = kSquaresBetween[ourKing][lsb_i_promise_board_is_not_empty(checkers)];
   }
-
-  const Bitboard validKingSquares = ~compute_my_targets<opposite_color<US>(), true>(pos);
 
   const Bitboard friends = pos.colorBitboards_[US];
   const Bitboard enemies = pos.colorBitboards_[opposite_color<US>()];

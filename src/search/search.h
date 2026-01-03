@@ -115,6 +115,13 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
     end = compute_moves<TURN, MoveGenType::CAPTURES>(thread->position_, moves);
   }
 
+  if (IS_PRINT_QNODE) {
+    std::cout << "  " << thread->position_.fen() << std::endl;
+    for (ExtMove* m = moves; m != end; ++m) {
+      std::cout << "  QMove: " << m->move.uci() << std::endl;
+    }
+  }
+
   constexpr ColoredPiece enemyKing = coloredPiece<opposite_color<TURN>(), Piece::KING>();
   constexpr ColoredPiece moverKing = coloredPiece<TURN, Piece::KING>();
   const bool inCheck = can_enemy_attack<TURN>(
@@ -140,7 +147,10 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
 
   // Move ordering: captures that capture higher value pieces first.
   for (ExtMove* move = moves; move < end; ++move) {
+    assert(move->move.from < 64);
+    assert(move->move.to < 64);
     Piece capturedPiece = cp2p(thread->position_.tiles_[move->move.to]);
+    assert(capturedPiece < Piece::NUM_PIECES);
     if (capturedPiece != Piece::NO_PIECE) {
       move->score = kMoveOrderingPieceValue[capturedPiece];
     } else {
@@ -161,6 +171,30 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
       continue;
     }
     make_move<TURN>(&thread->position_, move->move);
+
+    // TODO: either
+    // (1) make this filtering faster
+    // (2) make move generation not generate illegal moves
+    // (3) make search fail gracefully (e.g. return immediately if a king is missing).
+    const bool inCheck = can_enemy_attack<TURN>(
+      thread->position_,
+      lsb_i_promise_board_is_not_empty(thread->position_.pieceBitboards_[moverKing])
+    );
+    if (inCheck) {
+      undo<TURN>(&thread->position_);
+      // We know we fail to filter out moves in positions with
+      // more than 2 knights (e.g. Kg5 in r1bq1bNr/pp4pp/5k2/2p5/4Q3/5N2/PPPP1PPP/RNB1K2R b KQ - 0 11).
+      // If we fail for another reason, we want to know about it, so we print an error message
+      // and exit.
+      if (std::popcount(thread->position_.pieceBitboards_[coloredPiece<opposite_color<TURN>(), Piece::KNIGHT>()]) <= 2) {
+        std::cout << "Illegal move generated in quiescence search: " << move->move.uci() << std::endl;
+        std::cout << thread->position_.fen() << std::endl;
+        std::cout << thread->position_ << std::endl;
+        exit(1);
+      }
+      continue;
+    }
+
     ColoredEvaluation<TURN> eval = -qsearch<opposite_color<TURN>()>(thread, -beta, -alpha, plyFromRoot + 1, quiescenceDepth + 1).evaluation;
     undo<TURN>(&thread->position_);
     if (eval > bestResult.evaluation) {
@@ -186,7 +220,7 @@ template<Color TURN, SearchType SEARCH_TYPE>
 NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> alpha, ColoredEvaluation<TURN> beta, int plyFromRoot, std::atomic<bool> *stopThinking) {
   // Transposition Table probe
   if (IS_PRINT_NODE) {
-  std::cout << repeat("  ", plyFromRoot) << "Negamax called: depth=" << depth << " alpha=" << alpha.value << " beta=" << beta.value << " plyFromRoot=" << plyFromRoot << std::endl;
+  std::cout << repeat("  ", plyFromRoot) << "Negamax called: depth=" << depth << " alpha=" << alpha.value << " beta=" << beta.value << " plyFromRoot=" << plyFromRoot << " history " << thread->position_.history_ << std::endl;
   }
   const ColoredEvaluation<TURN> originalAlpha = alpha;
   TTEntry entry;
@@ -253,6 +287,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     }
   }
 
+
   constexpr ColoredPiece enemyKing = coloredPiece<opposite_color<TURN>(), Piece::KING>();
   if (moves == end) {
     constexpr ColoredPiece moverKing = coloredPiece<TURN, Piece::KING>();
@@ -301,6 +336,28 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
       continue;
     }
     make_move<TURN>(&thread->position_, move->move);
+
+    constexpr ColoredPiece moverKing = coloredPiece<TURN, Piece::KING>();
+    const bool inCheck = can_enemy_attack<TURN>(
+      thread->position_,
+      lsb_i_promise_board_is_not_empty(thread->position_.pieceBitboards_[moverKing])
+    );
+    if (inCheck) {
+      undo<TURN>(&thread->position_);
+      // We know we fail to filter out moves in positions with
+      // more than 2 knights (e.g. Kg5 in r1bq1bNr/pp4pp/5k2/2p5/4Q3/5N2/PPPP1PPP/RNB1K2R b KQ - 0 11).
+      // If we fail for another reason, we want to know about it, so we print an error message
+      // and exit.
+      if (std::popcount(thread->position_.pieceBitboards_[coloredPiece<opposite_color<TURN>(), Piece::KNIGHT>()]) <= 2) {
+        std::cout << "Illegal move generated in quiescence search: " << move->move.uci() << std::endl;
+        std::cout << thread->position_.fen() << std::endl;
+        std::cout << thread->position_ << std::endl;
+        exit(1);
+      }
+      continue;
+    }
+
+
     ColoredEvaluation<TURN> eval = -negamax<opposite_color<TURN>(), SearchType::NORMAL_SEARCH>(thread, depth - 1, -beta, -alpha, plyFromRoot + 1, stopThinking).evaluation;
     undo<TURN>(&thread->position_);
     if (eval > bestResult.evaluation) {

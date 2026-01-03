@@ -44,7 +44,7 @@ class Task {
 
 
 struct UciEngineState {
-  UciEngineState() : tt_(std::make_shared<TranspositionTable>(1 << 20)),
+  UciEngineState() : tt_(std::make_shared<TranspositionTable>(100'000)),
                       moveOverheadMs(50),
                       numThreads(1),
                       multiPV(1),
