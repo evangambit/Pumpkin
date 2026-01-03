@@ -36,4 +36,18 @@ SearchResult<Color::WHITE> search(Position pos, std::shared_ptr<EvaluatorInterfa
   }
 }
 
+void extract_variation_from_tt(const Position& pos, TranspositionTable* tt, std::vector<Move>* movesOut, Move startMove) {
+  Position position = pos;
+  Move move = startMove;
+  while (move != kNullMove) {
+    ez_make_move(&position, move);
+    movesOut->push_back(move);
+    TTEntry entry;
+    if (!tt->probe(position.currentState_.hash, entry)) {
+      break;
+    }
+    move = entry.bestMove;
+  }
+}
+
 }  // namespace ChessEngine
