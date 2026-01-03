@@ -112,7 +112,8 @@ class GoTask : public Task {
       } else {
         std::cout << " score cp " << eval;
       }
-      std::cout << " nodes " << thread->nodeCount_;
+      std::cout << " nodes " << (thread->nodeCount_ - thread->qNodeCount_);
+      std::cout << " qnodes " << thread->qNodeCount_;
       std::cout << " nps " << uint64_t(double(thread->nodeCount_) / secs);
       std::cout << " time " << timeMs;
       std::cout << " pv";

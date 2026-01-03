@@ -34,6 +34,7 @@ struct Thread {
   std::unordered_set<Move> permittedMoves_;
   std::vector<std::pair<Move, Evaluation>> primaryVariations_;  // Contains multiPV number of best moves.
   uint64_t nodeCount_{0};
+  uint64_t qNodeCount_{0};
 
   // This pointer should be considered non-owning. The TranspositionTable should created and managed elsewhere.
   TranspositionTable* tt_;
@@ -57,6 +58,7 @@ struct Thread {
     permittedMoves_(other.permittedMoves_),
     primaryVariations_(other.primaryVariations_),
     nodeCount_(other.nodeCount_),
+    qNodeCount_(other.qNodeCount_),
     tt_(other.tt_) {
       this->position_.set_listener(this->evaluator_);
     }
@@ -106,6 +108,9 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
   if (IS_PRINT_QNODE) {
     std::cout << repeat("  ", plyFromRoot) << "Quiescence search called: alpha=" << alpha.value << " beta=" << beta.value << " plyFromRoot=" << plyFromRoot << " quiescenceDepth=" << quiescenceDepth << " history" << thread->position_.history_ << std::endl;
   }
+
+  thread->nodeCount_++;
+  thread->qNodeCount_++;
 
   ExtMove moves[kMaxNumMoves];
   ExtMove *end;
@@ -423,25 +428,28 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
 
 template<Color TURN>
 struct SearchResult {
-  SearchResult() : bestMove(kNullMove), evaluation(0), nodeCount_(0) {}
+  SearchResult() : bestMove(kNullMove), evaluation(0), nodeCount_(0), qNodeCount_(0) {}
   SearchResult(
     const std::vector<std::pair<Move, ColoredEvaluation<TURN>>>& primaryVariations,
     Move bestMove,
     ColoredEvaluation<TURN> evaluation,
-    uint64_t nodeCount
+    uint64_t nodeCount,
+    uint64_t qNodeCount
   )
-    : primaryVariations(primaryVariations), bestMove(bestMove), evaluation(evaluation), nodeCount_(nodeCount) {}
+    : primaryVariations(primaryVariations), bestMove(bestMove), evaluation(evaluation), nodeCount_(nodeCount), qNodeCount_(qNodeCount) {}
 
   std::vector<std::pair<Move, ColoredEvaluation<TURN>>> primaryVariations;
   Move bestMove;
   ColoredEvaluation<TURN> evaluation;
   uint64_t nodeCount_;
+  uint64_t qNodeCount_{0};
 
   SearchResult<opposite_color<TURN>()> operator-() const {
     SearchResult<opposite_color<TURN>()> result;
     result.bestMove = bestMove;
     result.evaluation = -evaluation;
     result.nodeCount_ = nodeCount_;
+    result.qNodeCount_ = qNodeCount_;
     for (const auto& pv : primaryVariations) {
       result.primaryVariations.push_back(std::make_pair(pv.first, -pv.second));
     }
@@ -459,7 +467,8 @@ SearchResult<TURN> negamax_result_to_search_result(const NegamaxResult<TURN>& re
     convertedPVs,
     result.bestMove,
     result.evaluation,
-    thread->nodeCount_
+    thread->nodeCount_,
+    thread->qNodeCount_
   );
 }
 
