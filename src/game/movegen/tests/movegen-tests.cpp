@@ -118,4 +118,14 @@ TEST_F(MoveGenTest, KingInCheckMustEscape) {
 
 }
 
+// Enpassant into check is illegal
+TEST_F(MoveGenTest, EnpassantIntoCheckIsIllegal) {
+  // White pawn on e5, black pawn on d7, black rook on e8 giving check
+  Position pos("r4Q2/1pk2pp1/8/3qpP1K/8/8/PP5B/n7 w - - 0 25");
+  ExtMove moves[kMaxNumMoves];
+  ExtMove* end = compute_legal_moves<Color::WHITE>(&pos, moves);
+  // White should not be able to play e5xd6 enpassant as it would leave king in check
+  EXPECT_FALSE(containsMove(moves, end, SafeSquare::SE5, SafeSquare::SD6));
+}
+
 }  // namespace ChessEngine

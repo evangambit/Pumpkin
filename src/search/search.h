@@ -177,32 +177,36 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
 
   for (ExtMove* move = moves; move < end; ++move) {
     if (thread->position_.pieceBitboards_[enemyKing] & bb(move->move.to)) {
-      // Don't capture the king. TODO: remove this check by fixing move generation.
-      continue;
+      undo<TURN>(&thread->position_);
+      std::cout << "Illegal move generated in qsearch: " << move->move.uci() << std::endl;
+      std::cout << thread->position_.fen() << std::endl;
+      std::cout << thread->position_ << std::endl;
+      exit(1);
     }
     make_move<TURN>(&thread->position_, move->move);
 
-    // TODO: either
-    // (1) make this filtering faster
-    // (2) make move generation not generate illegal moves
-    // (3) make search fail gracefully (e.g. return immediately if a king is missing).
-    const bool inCheck = can_enemy_attack<TURN>(
-      thread->position_,
-      lsb_i_promise_board_is_not_empty(thread->position_.pieceBitboards_[moverKing])
-    );
-    if (inCheck) {
-      undo<TURN>(&thread->position_);
-      // We know we fail to filter out moves in positions with
-      // more than 2 knights (e.g. Kg5 in r1bq1bNr/pp4pp/5k2/2p5/4Q3/5N2/PPPP1PPP/RNB1K2R b KQ - 0 11).
-      // If we fail for another reason, we want to know about it, so we print an error message
-      // and exit.
-      if (std::popcount(thread->position_.pieceBitboards_[coloredPiece<opposite_color<TURN>(), Piece::KNIGHT>()]) <= 2) {
-        std::cout << "Illegal move generated in quiescence search: " << move->move.uci() << std::endl;
-        std::cout << thread->position_.fen() << std::endl;
-        std::cout << thread->position_ << std::endl;
-        exit(1);
+    // Move generation can sometimes generate illegal en passant moves.
+    if (move->move.moveType == MoveType::EN_PASSANT) {
+      const bool inCheck = can_enemy_attack<TURN>(
+        thread->position_,
+        lsb_i_promise_board_is_not_empty(thread->position_.pieceBitboards_[moverKing])
+      );
+      if (inCheck) {
+        undo<TURN>(&thread->position_);
+        continue;
       }
-      continue;
+    }
+
+    // Move generation can sometimes generate illegal en passant moves.
+    if (move->move.moveType == MoveType::EN_PASSANT) {
+      const bool inCheck = can_enemy_attack<TURN>(
+        thread->position_,
+        lsb_i_promise_board_is_not_empty(thread->position_.pieceBitboards_[moverKing])
+      );
+      if (inCheck) {
+        undo<TURN>(&thread->position_);
+        continue;
+      }
     }
 
     ColoredEvaluation<TURN> eval = -qsearch<opposite_color<TURN>()>(thread, -beta, -alpha, plyFromRoot + 1, quiescenceDepth + 1).evaluation;
@@ -353,16 +357,10 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     );
     if (inCheck) {
       undo<TURN>(&thread->position_);
-      // We know we fail to filter out moves in positions with
-      // more than 2 knights (e.g. Kg5 in r1bq1bNr/pp4pp/5k2/2p5/4Q3/5N2/PPPP1PPP/RNB1K2R b KQ - 0 11).
-      // If we fail for another reason, we want to know about it, so we print an error message
-      // and exit.
-      if (std::popcount(thread->position_.pieceBitboards_[coloredPiece<opposite_color<TURN>(), Piece::KNIGHT>()]) <= 2) {
-        std::cout << "Illegal move generated in quiescence search: " << move->move.uci() << std::endl;
-        std::cout << thread->position_.fen() << std::endl;
-        std::cout << thread->position_ << std::endl;
-        exit(1);
-      }
+      std::cout << "Illegal move generated in quiescence search: " << move->move.uci() << std::endl;
+      std::cout << thread->position_.fen() << std::endl;
+      std::cout << thread->position_ << std::endl;
+      exit(1);
       continue;
     }
 
