@@ -466,11 +466,16 @@ struct SearchResult {
   }
 };
 
+void extract_variation_from_tt(
+  const Position& pos, TranspositionTable* tt, std::vector<Move>* movesOut, Move startMove);
+
 template<Color TURN>
 SearchResult<TURN> negamax_result_to_search_result(const NegamaxResult<TURN>& result, Thread* thread) {
   std::vector<Variation<TURN>> convertedPVs;
   for (const auto& pv : thread->primaryVariations_) {
-    convertedPVs.push_back(Variation<TURN>(pv.first, ColoredEvaluation<TURN>(pv.second)));
+    std::vector<Move> moves;
+    extract_variation_from_tt(thread->position_, thread->tt_, &moves, pv.first);
+    convertedPVs.push_back(Variation<TURN>(moves, ColoredEvaluation<TURN>(pv.second)));
   }
   return SearchResult<TURN>(
     convertedPVs,
