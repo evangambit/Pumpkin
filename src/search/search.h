@@ -427,10 +427,19 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
 }
 
 template<Color TURN>
+struct Variation {
+  Variation() : evaluation(-999) {}
+  Variation(Move move, ColoredEvaluation<TURN> eval) : moves(std::vector<Move>({move})), evaluation(eval) {}
+  Variation(const std::vector<Move>& moves, ColoredEvaluation<TURN> eval) : moves(moves), evaluation(eval) {}
+  std::vector<Move> moves;
+  ColoredEvaluation<TURN> evaluation;
+};
+
+template<Color TURN>
 struct SearchResult {
   SearchResult() : bestMove(kNullMove), evaluation(0), nodeCount_(0), qNodeCount_(0) {}
   SearchResult(
-    const std::vector<std::pair<Move, ColoredEvaluation<TURN>>>& primaryVariations,
+    const std::vector<Variation<TURN>>& primaryVariations,
     Move bestMove,
     ColoredEvaluation<TURN> evaluation,
     uint64_t nodeCount,
@@ -438,7 +447,7 @@ struct SearchResult {
   )
     : primaryVariations(primaryVariations), bestMove(bestMove), evaluation(evaluation), nodeCount_(nodeCount), qNodeCount_(qNodeCount) {}
 
-  std::vector<std::pair<Move, ColoredEvaluation<TURN>>> primaryVariations;
+  std::vector<Variation<TURN>> primaryVariations;
   Move bestMove;
   ColoredEvaluation<TURN> evaluation;
   uint64_t nodeCount_;
@@ -451,7 +460,7 @@ struct SearchResult {
     result.nodeCount_ = nodeCount_;
     result.qNodeCount_ = qNodeCount_;
     for (const auto& pv : primaryVariations) {
-      result.primaryVariations.push_back(std::make_pair(pv.first, -pv.second));
+      result.primaryVariations.push_back(Variation<opposite_color<TURN>()>(pv.moves, -pv.evaluation));
     }
     return result;
   }
@@ -459,9 +468,9 @@ struct SearchResult {
 
 template<Color TURN>
 SearchResult<TURN> negamax_result_to_search_result(const NegamaxResult<TURN>& result, Thread* thread) {
-  std::vector<std::pair<Move, ColoredEvaluation<TURN>>> convertedPVs;
+  std::vector<Variation<TURN>> convertedPVs;
   for (const auto& pv : thread->primaryVariations_) {
-    convertedPVs.push_back(std::make_pair(pv.first, ColoredEvaluation<TURN>(pv.second)));
+    convertedPVs.push_back(Variation<TURN>(pv.first, ColoredEvaluation<TURN>(pv.second)));
   }
   return SearchResult<TURN>(
     convertedPVs,
