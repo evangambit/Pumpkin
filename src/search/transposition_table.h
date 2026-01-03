@@ -33,19 +33,18 @@ public:
   void new_search();
   void store(uint64_t key, Move bestMove, int depth, int value, BoundType bound, int ply);
   bool probe(uint64_t key, TTEntry& entry) const;
-  size_t kb_size() const { return size_ * sizeof(TTEntry) / 1024; }
+  size_t kb_size() const { return table_.size() * sizeof(TTEntry) / 1024; }
   void resize(size_t kilobytes) {
-    size_ = std::max<size_t>(1, (kilobytes * 1024) / sizeof(TTEntry));
-    table_.resize(size_);
+    size_t size = std::max(1000LU, (kilobytes * 1024) / sizeof(TTEntry));  // Minimum size of 1000 entries.
+    table_.resize(size);
     clear();
   }
   friend std::ostream& operator<<(std::ostream& os, const TranspositionTable& tt) {
-    os << "TranspositionTable: " << tt.kb_size() << " KB, Entries: " << tt.size_;
+    os << "TranspositionTable: " << tt.kb_size() << " KB, Entries: " << tt.table_.size();
     return os;
   }
 private:
   std::vector<TTEntry> table_;
-  size_t size_;
   uint32_t generation_ = 1;
 };
 

@@ -8,8 +8,6 @@
 
 namespace ChessEngine {
 
-namespace {
-
 // Code for generating:
 // for (int i = 0; i < 8; ++i) {
 //   const uint8_t piece = 1 << i;
@@ -38,7 +36,7 @@ namespace {
 // }
 
 
-uint8_t kSlideLookup[2048] = {
+inline uint8_t kSlideLookup[2048] = {
 254, 254, 2, 2, 6, 6, 2, 2,
 14, 14, 2, 2, 6, 6, 2, 2,
 30, 30, 2, 2, 6, 6, 2, 2,
@@ -302,9 +300,11 @@ uint8_t kSlideLookup[2048] = {
 // between a pinner (inclusive) and the king (exclusive). These are squares
 // that it is legal for the pinned piece to move to.
 // NOTE: pinners and king *also* count as occupied squares.
-uint8_t kPinLookup[8*256*256];
+inline uint8_t kPinLookup[8*256*256];
 
-}  // namespace
+inline uint8_t pin_lookup(size_t index) {
+  return kPinLookup[index];
+}
 
 // loc *must* be non-zero, which generally means functions calling
 // this function should accept SafeSquares.
@@ -314,6 +314,7 @@ inline uint8_t sliding_moves(uint8_t loc, uint8_t occ) {
 }
 
 inline void initialize_sliding() {
+  std::cout << "Initializing sliding move lookup tables..." << std::endl;
   for (int i = 0; i < 8; ++i) {
     const uint8_t piece = 1 << i;
     for (int j = 0; j < 256; ++j) {
@@ -343,11 +344,11 @@ inline void initialize_sliding() {
   }
 
   for (unsigned i = 0; i < 8; ++i) {
+    const uint8_t king = 1 << i;
     for (unsigned occ = 0; occ < 256; ++occ) {
       for (unsigned pinners = 0; pinners < 256; ++pinners) {
 
-        int idx = 65536*i+256*occ+pinners;
-        uint8_t king = 1 << i;
+        const unsigned idx = 65536 * i + 256 * occ + pinners;
         kPinLookup[idx] = 0;
 
         // Ignore positions with no pinners or no occupied squares (besides the king).
@@ -386,7 +387,8 @@ inline void initialize_sliding() {
 
 inline uint8_t sliding_pinmask(uint8_t loc, uint8_t occ, uint8_t pinners) {
   assert(std::popcount(loc) == 1);
-  return kPinLookup[65536*lsb_i_promise_board_is_not_empty(loc)+256*occ+pinners];
+  const size_t index = 65536*lsb_i_promise_board_is_not_empty(loc)+256*occ+pinners;
+  return kPinLookup[index];
 }
 
 }  // namespace ChessEngine
