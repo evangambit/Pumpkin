@@ -93,7 +93,12 @@ GoCommand make_go_command(std::deque<std::string> *command, Position *pos) {
   std::unordered_map<std::string, Move> legalMoves;
   {
     ExtMove moves[kMaxNumMoves];
-    ExtMove* end = compute_legal_moves<Color::WHITE>(&goCommand.pos, &(moves[0]));
+    ExtMove* end;
+    if (goCommand.pos.turn_ == Color::BLACK) {
+      end = compute_legal_moves<Color::BLACK>(&goCommand.pos, &(moves[0]));
+    } else {
+      end = compute_legal_moves<Color::WHITE>(&goCommand.pos, &(moves[0]));
+    }
     for (ExtMove* move = moves; move != end; ++move) {
       legalMoves.insert({move->move.uci(), move->move});
     }
@@ -129,7 +134,8 @@ class GoTask : public Task {
       std::unordered_set<Move>(),
       state->tt_.get()
     );
-    this->baseThreadState->depth_ = goCommand.depthLimit;
+    this->baseThreadState->depth_ = 4;
+    state->stopThinking.store(false);
     this->thread = new std::thread(GoTask::_threaded_think, this->baseThreadState.get(), state, &isRunning);
   }
 

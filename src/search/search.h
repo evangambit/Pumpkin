@@ -77,6 +77,11 @@ struct NegamaxResult {
   NegamaxResult<opposite_color<TURN>()> operator-() const {
     return NegamaxResult<opposite_color<TURN>()>(bestMove, -evaluation);
   }
+
+  friend std::ostream& operator<<(std::ostream& os, const NegamaxResult<TURN>& result) {
+    os << "NegamaxResult(bestMove=" << result.bestMove.uci() << ", evaluation=" << result.evaluation.value << ")";
+    return os;
+  }
 };
 
 template<Color TURN>
@@ -223,18 +228,17 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
 
 template<Color TURN, SearchType SEARCH_TYPE>
 NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> alpha, ColoredEvaluation<TURN> beta, int plyFromRoot, std::atomic<bool> *stopThinking) {
-  // Transposition Table probe
+  assert(thread->position_.turn_ == TURN);
   if (IS_PRINT_NODE) {
-  std::cout << repeat("  ", plyFromRoot) << "Negamax called: depth=" << depth << " alpha=" << alpha.value << " beta=" << beta.value << " plyFromRoot=" << plyFromRoot << " history " << thread->position_.history_ << std::endl;
+    std::cout << repeat("  ", plyFromRoot) << "Negamax called: depth=" << depth << " alpha=" << alpha.value << " beta=" << beta.value << " plyFromRoot=" << plyFromRoot << " history " << thread->position_.history_ << std::endl;
   }
   const ColoredEvaluation<TURN> originalAlpha = alpha;
+
+  // Transposition Table probe
   TTEntry entry;
   uint64_t key = thread->position_.currentState_.hash;
   if (thread->tt_->probe(key, entry) && entry.depth >= depth) {
-    // if ROOT && (multiPV > 0 || permittedMoves not empty)
-    // we don't want to short-circuit, since we either need to compute
-    // multiple best moves, or we need to filter by permitted moves.
-    if (SEARCH_TYPE != SearchType::ROOT || (thread->multiPV_ == 1 && thread->permittedMoves_.empty())) {
+    if (SEARCH_TYPE != SearchType::ROOT) {
       if (entry.bound == BoundType::EXACT) {
         if (IS_PRINT_NODE) {
         std::cout << repeat("  ", plyFromRoot) << "TT Hit: EXACT" << std::endl;
@@ -256,7 +260,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     entry.bestMove = kNullMove;
   }
 
-  if (stopThinking->load()) {
+  if (SEARCH_TYPE != SearchType::ROOT && stopThinking->load()) {
     if (IS_PRINT_NODE) {
     std::cout << repeat("  ", plyFromRoot) << "Search stopped externally." << std::endl;
     }
@@ -464,6 +468,19 @@ struct SearchResult {
     }
     return result;
   }
+
+  friend std::ostream& operator<<(std::ostream& os, const SearchResult<TURN>& result) {
+    os << "SearchResult(bestMove=" << result.bestMove.uci() << ", evaluation=" << result.evaluation.value << ", nodeCount=" << result.nodeCount_ << ", qNodeCount=" << result.qNodeCount_ << ", primaryVariations=[";
+    for (const auto& pv : result.primaryVariations) {
+      os << "(moves=[";
+      for (const auto& move : pv.moves) {
+        os << move.uci() << ",";
+      }
+      os << "], evaluation=" << pv.evaluation.value << "), ";
+    }
+    os << "])";
+    return os;
+  }
 };
 
 void extract_variation_from_tt(
@@ -489,6 +506,7 @@ SearchResult<TURN> negamax_result_to_search_result(const NegamaxResult<TURN>& re
 // Color-templated search function to be used by the UCI interface.
 template<Color TURN>
 SearchResult<TURN> search(Thread* thread, std::atomic<bool> *stopThinking, std::function<void(int, SearchResult<TURN>)> onDepthCompleted) {
+  assert(thread->position_.turn_ == TURN);
   NegamaxResult<TURN> result = negamax<TURN, SearchType::ROOT>(
     thread,
     1,
@@ -498,7 +516,8 @@ SearchResult<TURN> search(Thread* thread, std::atomic<bool> *stopThinking, std::
     stopThinking
   );
   if (onDepthCompleted != nullptr) {
-    onDepthCompleted(1, negamax_result_to_search_result<TURN>(result, thread));
+    SearchResult<TURN> searchResult = negamax_result_to_search_result<TURN>(result, thread);
+    onDepthCompleted(1, searchResult);
   }
   for (int i = 2; i <= thread->depth_; ++i) {
     thread->primaryVariations_.clear();
