@@ -314,7 +314,6 @@ inline uint8_t sliding_moves(uint8_t loc, uint8_t occ) {
 }
 
 inline void initialize_sliding() {
-  std::cout << "Initializing sliding move lookup tables..." << std::endl;
   for (int i = 0; i < 8; ++i) {
     const uint8_t piece = 1 << i;
     for (int j = 0; j < 256; ++j) {

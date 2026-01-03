@@ -18,8 +18,14 @@ g++ -std=c++20 -o main src/main.cpp $(find src/ -name "*.cpp" | grep -Ev "([Tt]e
 # Build uci
 
 g++ -std=c++20 -o uci src/uci.cpp $(find src/ -name "*.cpp" | grep -Ev "([Tt]ests?|uci|main)\\.cpp") -pthread -L/usr/local/lib -lgflags -DNDEBUG -O3
+
+# cutechess
+
+cutechess/build/cutechess-cli -engine cmd=uci -engine cmd=uci -each tc=40/60 proto=uci -rounds 1 -debug^C
+
 ```
 
 bug:
+
 
  ./main --fen 'r1bq1bnr/pp1k1ppp/4p3/2pP4/6Q1/8/PPPP1PPP/RNB1K1NR b KQ - 0 6'
