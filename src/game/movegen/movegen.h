@@ -350,7 +350,14 @@ PinMasks compute_absolute_pin_masks(const Position& pos) {
 // According to perft tests, the only illegal moves this will generate are enpassants that put you
 // in check (example: "8/8/2k5/8/r2pP1K1/8/8/8 b - e3 0 9").
 
-// Note: we take the liberty of ignoring MGT if you're in check.
+/**
+  * Generate all pseudo-legal moves for the side to move in the given position.
+  *
+  * The only (known) illegal moves that may be generated are enpassants that put
+  * you in check. (e.g. fxe6 in "r4Q2/1pk2pp1/8/3qpP1K/8/8/PP5B/n7 w - e6 0 26").
+  *
+  * We take the liberty of ignoring MGT if you're in check.
+  */
 template<Color US, MoveGenType MGT>
 ExtMove* compute_moves(const Position& pos, ExtMove *moves) {
   constexpr Color enemyColor = opposite_color<US>();

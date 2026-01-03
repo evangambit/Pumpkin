@@ -77,9 +77,14 @@ constexpr Bitboard kKnightMoves[UnsafeSquare::UNO_SQUARE + 1] = {
 template<Color US>
 Bitboard compute_knight_targets(const Position& pos) {
   constexpr ColoredPiece cp = coloredPiece<US, Piece::KNIGHT>();
-  const Bitboard knights = pos.pieceBitboards_[cp];
-  // Assumes there are at most two knights.
-  return kKnightMoves[lsb_or_none(knights)] | kKnightMoves[msb_or(knights, UnsafeSquare::UNO_SQUARE)];
+  Bitboard knights = pos.pieceBitboards_[cp];
+
+  Bitboard r = kEmptyBitboard;
+  while (knights) {
+    const SafeSquare sq = pop_lsb_i_promise_board_is_not_empty(knights);
+    r |= kKnightMoves[sq];
+  }
+  return r;
 }
 
 template<Color US, MoveGenType MGT>
