@@ -10,8 +10,8 @@
 #include <unordered_set>
 
 #include "Task.h"
-#include "../search/PieceSquareEvaluator.h"
-#include "../search/evaluator.h"
+#include "../eval/PieceSquareEvaluator.h"
+#include "../eval/evaluator.h"
 
 namespace ChessEngine {
 

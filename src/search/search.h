@@ -21,8 +21,8 @@
 #include "../game/utils.h"
 #include "../game/movegen/movegen.h"
 #include "../game/Threats.h"
-#include "evaluator.h"
-#include "ColoredEvaluation.h"
+#include "../eval/evaluator.h"
+#include "../eval/ColoredEvaluation.h"
 
 #include "transposition_table.h"
 
