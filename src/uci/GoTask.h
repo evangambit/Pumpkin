@@ -228,6 +228,6 @@ class GoTask : public Task {
   bool isRunning;
 };
 
-}  // namespace ChessEngine
+}  // namespace Nnue
 
 #endif  // SRC_UCI_GOTASK_H
