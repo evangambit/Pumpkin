@@ -17,6 +17,7 @@
 #include <iostream>
 #include <mutex>
 #include <sstream>
+#include <thread>
 #include <unordered_set>
 
 namespace ChessEngine {
@@ -136,6 +137,15 @@ class GoTask : public Task {
     );
     this->baseThreadState->depth_ = goCommand.depthLimit;
     state->stopThinking.store(false);
+    if (goCommand.timeLimitMs != (uint64_t)-1) {
+      this->baseThreadState->stopTime_ = std::chrono::high_resolution_clock::now() + std::chrono::milliseconds(goCommand.timeLimitMs);
+      std::thread([state, timeLimitMs = goCommand.timeLimitMs]() {
+        std::this_thread::sleep_for(std::chrono::milliseconds(timeLimitMs));
+        state->stopThinking.store(true);
+      }).detach();
+    } else {
+      this->baseThreadState->stopTime_ = std::chrono::high_resolution_clock::time_point::max();
+    }
     this->thread = new std::thread(GoTask::_threaded_think, this->baseThreadState.get(), state, &isRunning);
   }
 
