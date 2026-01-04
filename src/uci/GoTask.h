@@ -69,21 +69,21 @@ GoCommand make_go_command(std::deque<std::string> *command, Position *pos) {
     } else if (part == "mm") {
       goCommand.makeBestMove = true;
     } else if (lastCommand == "depth") {
-      goCommand.depthLimit = stoi(part);
+      goCommand.depthLimit = stoull(part);
     } else if (lastCommand == "nodes") {
-      goCommand.nodeLimit = stoi(part);
+      goCommand.nodeLimit = stoull(part);
     } else if (lastCommand == "movetime") {
-      goCommand.timeLimitMs = stoi(part);
+      goCommand.timeLimitMs = stoull(part);
     } else if (lastCommand == "wtime") {
-      goCommand.wtimeMs = stoi(part);
+      goCommand.wtimeMs = stoull(part);
     } else if (lastCommand == "btime") {
-      goCommand.btimeMs = stoi(part);
+      goCommand.btimeMs = stoull(part);
     } else if (lastCommand == "winc") {
-      goCommand.wIncrementMs = stoi(part);
+      goCommand.wIncrementMs = stoull(part);
     } else if (lastCommand == "binc") {
-      goCommand.bIncrementMs = stoi(part);
+      goCommand.bIncrementMs = stoull(part);
     } else if (lastCommand == "movestogo") {
-      goCommand.movesUntilTimeControl = stoi(part);
+      goCommand.movesUntilTimeControl = stoull(part);
     } else if (lastCommand == "searchmoves") {
       uciMoves.insert(part);
     } else {
@@ -136,6 +136,7 @@ class GoTask : public Task {
       state->tt_.get()
     );
     this->baseThreadState->depth_ = goCommand.depthLimit;
+    this->baseThreadState->nodeLimit_ = goCommand.nodeLimit;
     state->stopThinking.store(false);
     if (goCommand.timeLimitMs != (uint64_t)-1) {
       this->baseThreadState->stopTime_ = std::chrono::high_resolution_clock::now() + std::chrono::milliseconds(goCommand.timeLimitMs);
