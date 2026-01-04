@@ -179,6 +179,8 @@ struct UciEngine {
       // Ignore. (TODO: handle pondering better).
     } else if (parts[0] == "debug") {
       // Todo
+    } else if (parts[0] == "evaluator") {
+      state->taskQueue.push_back(std::make_shared<SetEvaluatorTask>(parts));
     } else {
       state->taskQueue.push_back(std::make_shared<UnrecognizedCommandTask>(parts));
     }

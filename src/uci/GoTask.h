@@ -134,7 +134,7 @@ class GoTask : public Task {
       std::unordered_set<Move>(),
       state->tt_.get()
     );
-    this->baseThreadState->depth_ = 4;
+    this->baseThreadState->depth_ = goCommand.depthLimit;
     state->stopThinking.store(false);
     this->thread = new std::thread(GoTask::_threaded_think, this->baseThreadState.get(), state, &isRunning);
   }
