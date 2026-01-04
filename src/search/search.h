@@ -9,8 +9,10 @@
 #define IS_PRINT_QNODE 0
 #endif
 
+#include <algorithm>
 #include <atomic>
 #include <bit>
+#include <chrono>
 #include <functional>
 #include <memory>
 #include <unordered_set>
@@ -30,6 +32,7 @@ struct Thread {
   uint64_t id_;
   uint64_t multiPV_;
   unsigned depth_{1};
+  std::chrono::high_resolution_clock::time_point stopTime_;
   Position position_;
   std::shared_ptr<EvaluatorInterface> evaluator_;
   std::unordered_set<Move> permittedMoves_;
@@ -115,6 +118,23 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
     std::cout << repeat("  ", plyFromRoot) << "Quiescence search called: alpha=" << alpha.value << " beta=" << beta.value << " plyFromRoot=" << plyFromRoot << " quiescenceDepth=" << quiescenceDepth << " history" << thread->position_.history_ << std::endl;
   }
 
+  // Transposition Table probe
+  TTEntry entry;
+  uint64_t key = thread->position_.currentState_.hash;
+  if (thread->tt_->probe(key, entry)) {
+    if (entry.bound == BoundType::EXACT) {
+      return NegamaxResult<TURN>(entry.bestMove, entry.value);
+    } else if (entry.bound == BoundType::LOWER && entry.value >= beta.value) {
+      return NegamaxResult<TURN>(entry.bestMove, entry.value);
+    } else if (entry.bound == BoundType::UPPER && entry.value <= alpha.value) {
+      return NegamaxResult<TURN>(entry.bestMove, entry.value);
+    }
+  } else {
+    entry.bestMove = kNullMove;
+  }
+
+  const ColoredEvaluation<TURN> originalAlpha = alpha;
+
   thread->nodeCount_++;
   thread->qNodeCount_++;
 
@@ -159,6 +179,10 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
   // Move ordering: captures that capture higher value pieces first.
   Threats<TURN> threats(thread->position_);
   for (ExtMove* move = moves; move < end; ++move) {
+    if (move->move == entry.bestMove) {
+      move->score = kMaxEval;
+      continue;
+    }
     assert(move->move.from < 64);
     assert(move->move.to < 64);
     Piece capturedPiece = cp2p(thread->position_.tiles_[move->move.to]);
@@ -229,6 +253,20 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
       }
     }
   }
+
+  // Store in Transposition Table
+  BoundType bound = BoundType::EXACT;
+  if (bestResult.evaluation <= originalAlpha) bound = BoundType::UPPER;
+  else if (bestResult.evaluation >= beta) bound = BoundType::LOWER;
+
+  thread->tt_->store(
+    thread->position_.currentState_.hash,
+    bestResult.bestMove,
+    -1,
+    bestResult.evaluation.value,
+    bound,
+    plyFromRoot
+  );
 
   if (IS_PRINT_QNODE) {
     std::cout << repeat("  ", plyFromRoot) << "Quiescence search returning: bestMove=" << bestResult.bestMove.uci() << " eval=" << bestResult.evaluation.value << std::endl;
@@ -410,6 +448,22 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     }
   }
 
+  if (stopThinking->load()) {
+    // Search was stopped externally. We cannot trust the result
+    // of our for loop above, so look up the best move from the TT.
+    if (thread->tt_->probe(key, entry)) {
+      if (IS_PRINT_NODE) {
+      std::cout << repeat("  ", plyFromRoot) << "Search stopped externally. Returning TT best move." << std::endl;
+      }
+      return NegamaxResult<TURN>(entry.bestMove, entry.value);
+    } else {
+      if (IS_PRINT_NODE) {
+      std::cout << repeat("  ", plyFromRoot) << "Search stopped externally. No TT entry found, returning null move." << std::endl;
+      }
+      return NegamaxResult<TURN>(kNullMove, 0);
+    }
+  }
+
   // Store in Transposition Table
   BoundType bound = BoundType::EXACT;
   if (bestResult.evaluation <= originalAlpha) bound = BoundType::UPPER;
@@ -525,6 +579,7 @@ SearchResult<TURN> search(Thread* thread, std::atomic<bool> *stopThinking, std::
     onDepthCompleted(1, searchResult);
   }
   for (int i = 2; i <= thread->depth_; ++i) {
+    if (stopThinking->load()) break;
     thread->primaryVariations_.clear();
     result = negamax<TURN, SearchType::ROOT>(
       thread,
