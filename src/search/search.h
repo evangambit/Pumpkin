@@ -39,6 +39,7 @@ struct Thread {
   std::vector<std::pair<Move, Evaluation>> primaryVariations_;  // Contains multiPV number of best moves.
   uint64_t nodeCount_{0};
   uint64_t qNodeCount_{0};
+  uint64_t nodeLimit_{(uint64_t)-1};
 
   // This pointer should be considered non-owning. The TranspositionTable should created and managed elsewhere.
   TranspositionTable* tt_;
@@ -63,6 +64,7 @@ struct Thread {
     primaryVariations_(other.primaryVariations_),
     nodeCount_(other.nodeCount_),
     qNodeCount_(other.qNodeCount_),
+    nodeLimit_(other.nodeLimit_),
     tt_(other.tt_) {
       this->position_.set_listener(this->evaluator_);
     }
@@ -113,7 +115,7 @@ const Evaluation kMoveOrderingPieceValue[Piece::NUM_PIECES] = {
 };
 
 template<Color TURN>
-NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, ColoredEvaluation<TURN> beta, int plyFromRoot, int quiescenceDepth) {
+NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, ColoredEvaluation<TURN> beta, int plyFromRoot, int quiescenceDepth, std::atomic<bool> *stopThinking) {
   if (IS_PRINT_QNODE) {
     std::cout << repeat("  ", plyFromRoot) << "Quiescence search called: alpha=" << alpha.value << " beta=" << beta.value << " plyFromRoot=" << plyFromRoot << " quiescenceDepth=" << quiescenceDepth << " history" << thread->position_.history_ << std::endl;
   }
@@ -240,7 +242,7 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
       }
     }
 
-    ColoredEvaluation<TURN> eval = -qsearch<opposite_color<TURN>()>(thread, -beta, -alpha, plyFromRoot + 1, quiescenceDepth + 1).evaluation;
+    ColoredEvaluation<TURN> eval = -qsearch<opposite_color<TURN>()>(thread, -beta, -alpha, plyFromRoot + 1, quiescenceDepth + 1, stopThinking).evaluation;
     undo<TURN>(&thread->position_);
     if (eval > bestResult.evaluation) {
       bestResult.bestMove = move->move;
@@ -317,11 +319,15 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   }
 
   thread->nodeCount_++;
+  if (thread->nodeCount_ >= thread->nodeLimit_) {
+    stopThinking->store(true);
+  }
+
   if (depth == 0) {
     if (IS_PRINT_NODE) {
     std::cout << repeat("  ", plyFromRoot) << "Entering quiescence search." << std::endl;
     }
-    return qsearch(thread, alpha, beta, plyFromRoot, 0);
+    return qsearch(thread, alpha, beta, plyFromRoot, 0, stopThinking);
   }
 
   ExtMove moves[kMaxNumMoves];
