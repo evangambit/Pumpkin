@@ -18,6 +18,7 @@
 #include "../game/Position.h"
 #include "../game/utils.h"
 #include "../game/movegen/movegen.h"
+#include "../game/Threats.h"
 #include "evaluator.h"
 #include "ColoredEvaluation.h"
 
@@ -99,7 +100,7 @@ enum SearchType {
 };
 
 const Evaluation kMoveOrderingPieceValue[Piece::NUM_PIECES] = {
-  0,    // NO_PIECE
+  1000,    // NO_PIECE (means it's a check)
   100,  // PAWN
   320,  // KNIGHT
   330,  // BISHOP
@@ -156,16 +157,18 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
   }
 
   // Move ordering: captures that capture higher value pieces first.
+  Threats<TURN> threats(thread->position_);
   for (ExtMove* move = moves; move < end; ++move) {
     assert(move->move.from < 64);
     assert(move->move.to < 64);
     Piece capturedPiece = cp2p(thread->position_.tiles_[move->move.to]);
     assert(capturedPiece < Piece::NUM_PIECES);
-    if (capturedPiece != Piece::NO_PIECE) {
-      move->score = kMoveOrderingPieceValue[capturedPiece];
-    } else {
-      move->score = 0;
-    }
+
+    move->score = kMoveOrderingPieceValue[cp2p(move->capture)];
+    move->score -= value_or_zero(
+      ((threats.badForOur[move->piece] & bb(move->move.to)) > 0) && !((threats.badForOur[move->piece] & bb(move->move.from)) > 0),
+      kMoveOrderingPieceValue[move->piece]
+    );
   }
   std::sort(
     moves,
@@ -176,6 +179,10 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
   );
 
   for (ExtMove* move = moves; move < end; ++move) {
+    if (move->score < 0) {
+      // Don't consider moves that lose material according to move ordering heuristic.
+      continue;
+    }
     if (thread->position_.pieceBitboards_[enemyKing] & bb(move->move.to)) {
       undo<TURN>(&thread->position_);
       std::cout << "Illegal move generated in qsearch: " << move->move.uci() << std::endl;

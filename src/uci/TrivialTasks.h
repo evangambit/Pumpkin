@@ -9,6 +9,10 @@
 #include <sstream>
 #include <unordered_set>
 
+#include "Task.h"
+#include "../search/PieceSquareEvaluator.h"
+#include "../search/evaluator.h"
+
 namespace ChessEngine {
 
 class UnrecognizedCommandTask : public Task {
@@ -78,6 +82,29 @@ class NewGameTask : public Task {
   void start(UciEngineState *state) {
     state->tt_->new_search();
   }
+};
+
+class SetEvaluatorTask : public Task {
+ public:
+  SetEvaluatorTask(std::deque<std::string> command) : command(command) {}
+  void start(UciEngineState *state) {
+    if (command.size() < 2) {
+      std::cout << "Error: evaluator command requires an argument." << std::endl;
+      return;
+    }
+    std::string evaluatorName = command.at(1);
+    if (evaluatorName == "simple") {
+      state->evaluator = std::make_shared<SimpleEvaluator>();
+      std::cout << "Evaluator set to simple." << std::endl;
+    } else if (evaluatorName == "psq") {
+      state->evaluator = std::make_shared<PieceSquareEvaluator>();
+      std::cout << "Evaluator set to simple." << std::endl;
+    } else {
+      std::cout << "Error: unrecognized evaluator name \"" << evaluatorName << "\"" << std::endl;
+    }
+  }
+ private:
+  std::deque<std::string> command;
 };
 
 }  // namespace ChessEngine
