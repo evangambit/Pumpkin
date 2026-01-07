@@ -140,7 +140,7 @@ earliness_weights = torch.tensor([
 
 metrics = defaultdict(list)
 print("Starting training...")
-NUM_EPOCHS = 1
+NUM_EPOCHS = 5
 for epoch in range(NUM_EPOCHS):
   for batch_idx, batch in tqdm(enumerate(dataloader), total=len(dataloader)):
     opt.zero_grad()
@@ -167,6 +167,9 @@ for epoch in range(NUM_EPOCHS):
 
     output = model(x, (turn + 1) // 2)
     output = output[:,:6].reshape((output.shape[0], 2, 3))
+
+    penalty = (output ** 2).mean()
+
     output = (nn.functional.softmax(output, dim=2) * columns.unsqueeze(2)).sum(1)  # Shape: (batch_size, 3) (win, draw, loss)
     yhat = output[:,0:1] + output[:,1:2] * 0.5
 
@@ -176,11 +179,12 @@ for epoch in range(NUM_EPOCHS):
     # TODO: try predicting wdl instead of score.
 
     loss = nn.functional.mse_loss(yhat, label, reduction='mean')
-    loss.backward()
+    (loss + penalty).backward()
     opt.step()
     metrics["loss"].append(loss.item())
+    metrics["penalty"].append(penalty.item())
     if batch_idx % 500 == 0:
-      print(f"loss: {np.mean(metrics['loss'][-100:]):.4f}")
+      print(f"loss: {np.mean(metrics['loss'][-100:]):.4f}, penalty: {np.mean(metrics['penalty'][-100:]):.4f}")
 
 def save_tensor(tensor: torch.Tensor, name: str, out: io.BufferedWriter):
   tensor = tensor.cpu().detach().numpy()
@@ -193,7 +197,7 @@ def save_tensor(tensor: torch.Tensor, name: str, out: io.BufferedWriter):
 
 # Save the model
 with open('model.bin', 'wb') as f:
-  save_tensor(model.emb.weight(False), 'embedding', f)
+  save_tensor(model.emb.weight(False)[:-1], 'embedding', f)
   save_tensor(model.mlp[0].weight, 'linear0.weight', f)
   save_tensor(model.mlp[0].bias, 'linear0.bias', f)
   save_tensor(model.mlp[2].weight, 'linear1.weight', f)

@@ -222,6 +222,21 @@ struct Nnue {
     Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> mat(rows, cols);
     in.read(reinterpret_cast<char*>(mat.data()), sizeof(float) * rows * cols);
 
+    size_t low = 0;
+    size_t high = 0;
+    for (size_t i = 0; i < rows; ++i) {
+      for (size_t j = 0; j < cols; ++j) {
+        if (std::isnan(mat(i, j)) || std::isinf(mat(i, j))) {
+          throw std::runtime_error("Matrix contains NaN or Inf values");
+        }
+        if (std::abs(mat(i, j)) > 1.0) {
+          high++;
+        } else {
+          low++;
+        }
+      }
+    }
+
     Eigen::Matrix<int16_t, Eigen::Dynamic, Eigen::Dynamic> mat_int = mat.unaryExpr([](float v) {
       return static_cast<int16_t>(std::clamp(std::round(v * (1 << SCALE_SHIFT)), -32768.0f, 32767.0f));
     });
@@ -250,7 +265,7 @@ struct Nnue {
       hidden1.noalias() = (blackAcc * layer1.topRows<EMBEDDING_DIM>() +
                            whiteAcc * layer1.bottomRows<EMBEDDING_DIM>() + bias1);
     }
-    hidden1.array() = hidden1.array().cwiseMax(0).cwiseMin(127); 
+    hidden1.array() = hidden1.array().cwiseMax(0).cwiseMin(127);
     hidden2.noalias() = (hidden1 * layer2 + bias2);
     return hidden2.data();
   }
