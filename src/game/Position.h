@@ -68,7 +68,8 @@ class Position {
 
   std::string san(Move move) const;
 
-  ColoredPiece tiles_[kNumSquares];
+  // ColoredPiece tiles_[kNumSquares];
+  TypeSafeArray<ColoredPiece, kNumSquares, SafeSquare> tiles_;
   TypeSafeArray<Bitboard, kNumColoredPieces, ColoredPiece> pieceBitboards_;
   TypeSafeArray<Bitboard, Color::NUM_COLORS, Color> colorBitboards_;
 
@@ -81,7 +82,7 @@ class Position {
     boardListener_ = listener;
     boardListener_->empty();
     for (size_t i = 0; i < kNumSquares; ++i) {
-        ColoredPiece cp = this->tiles_[i];
+        ColoredPiece cp = this->tiles_[SafeSquare(i)];
         if (cp != ColoredPiece::NO_COLORED_PIECE) {
             boardListener_->place_piece(cp, SafeSquare(i));
         }
