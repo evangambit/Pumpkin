@@ -55,7 +55,7 @@ void assert_valid_color(Color color) {
 }
 
 void assert_valid_colored_piece(ColoredPiece cp) {
-  assert(cp > 0 && cp < ColoredPiece::NUM_COLORED_PIECES);
+  assert(cp > 0 && cp < kNumColoredPieces);
 }
 
 ColoredPiece char_to_colored_piece(char c) {

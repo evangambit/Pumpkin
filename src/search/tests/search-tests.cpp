@@ -4,7 +4,7 @@
 #include <unordered_set>
 
 #include "../search.h"
-#include "../PieceSquareEvaluator.h"
+#include "../../eval/PieceSquareEvaluator.h"
 #include "../../game/Position.h"
 #include "../../game/movegen/movegen.h"
 

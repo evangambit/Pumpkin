@@ -23,8 +23,8 @@ struct EvaluatorInterface : public BoardListener {
 struct SimpleEvaluator : public EvaluatorInterface {
    ColoredEvaluation<Color::WHITE> evaluate_white(const Position& pos) override {
     ColoredEvaluation<Color::WHITE> totalEval(0);
-    for (int i = 0; i < ColoredPiece::NUM_COLORED_PIECES; ++i) {
-      totalEval = ColoredEvaluation<Color::WHITE>(totalEval.value + kPieceValues[i].value * std::popcount(pos.pieceBitboards_[i]));
+    for (int i = 0; i < kNumColoredPieces; ++i) {
+      totalEval = ColoredEvaluation<Color::WHITE>(totalEval.value + kPieceValues[i].value * std::popcount(pos.pieceBitboards_[ColoredPiece(i)]));
     }
     return totalEval;
   }
@@ -41,7 +41,7 @@ struct SimpleEvaluator : public EvaluatorInterface {
     return "SimpleEvaluator";
   }
 
-  inline static ColoredEvaluation<Color::WHITE> kPieceValues[ColoredPiece::NUM_COLORED_PIECES] = {
+  inline static ColoredEvaluation<Color::WHITE> kPieceValues[kNumColoredPieces] = {
     ColoredEvaluation<Color::WHITE>(0),    // NO_COLORED_PIECE
     ColoredEvaluation<Color::WHITE>(100),  // WHITE_PAWN
     ColoredEvaluation<Color::WHITE>(320),  // WHITE_KNIGHT

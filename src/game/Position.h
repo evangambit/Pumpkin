@@ -27,7 +27,7 @@ struct PositionState {
 
 std::ostream& operator<<(std::ostream& stream, const PositionState& state);
 
-extern uint64_t kZorbristNumbers[ColoredPiece::NUM_COLORED_PIECES][kNumSquares];
+extern uint64_t kZorbristNumbers[kNumColoredPieces][kNumSquares];
 extern uint64_t kZorbristCastling[16];
 extern uint64_t kZorbristEnpassant[8];
 extern uint64_t kZorbristTurn;
@@ -35,6 +35,24 @@ extern uint64_t kZorbristTurn;
 void print_zorbrist_debug(uint64_t actual, uint64_t expected);
 
 void initialize_zorbrist();
+
+template<typename T, size_t NUM_BOARDS, typename INDEX_TYPE>
+struct TypeSafeArray {
+  void fill(const T& value) {
+    std::fill_n(values_, NUM_BOARDS, value);
+  }
+
+  inline T& operator[](INDEX_TYPE index) {
+    return values_[index];
+  }
+
+  inline const T& operator[](INDEX_TYPE index) const {
+    return values_[index];
+  }
+
+ private:
+  T values_[NUM_BOARDS];
+};
 
 class Position {
  public:
@@ -51,8 +69,8 @@ class Position {
   std::string san(Move move) const;
 
   ColoredPiece tiles_[kNumSquares];
-  Bitboard pieceBitboards_[ColoredPiece::NUM_COLORED_PIECES];
-  Bitboard colorBitboards_[Color::NUM_COLORS];
+  TypeSafeArray<Bitboard, kNumColoredPieces, ColoredPiece> pieceBitboards_;
+  TypeSafeArray<Bitboard, Color::NUM_COLORS, Color> colorBitboards_;
 
   std::vector<PositionState> states_;
   std::vector<ExtMove> history_;

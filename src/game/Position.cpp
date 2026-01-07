@@ -27,7 +27,7 @@ std::ostream& operator<<(std::ostream& stream, const Position& pos) {
   return stream;
 }
 
-uint64_t kZorbristNumbers[ColoredPiece::NUM_COLORED_PIECES][kNumSquares];
+uint64_t kZorbristNumbers[kNumColoredPieces][kNumSquares];
 uint64_t kZorbristCastling[16];
 uint64_t kZorbristEnpassant[8];
 uint64_t kZorbristTurn;
@@ -45,7 +45,7 @@ static std::vector<std::string> _zorbrist_debug(uint64_t actual, uint64_t expect
   if ((actual ^ expected) == kZorbristTurn) {
     return {"XOR turn"};
   }
-  for (ColoredPiece cp = ColoredPiece::NO_COLORED_PIECE; cp < ColoredPiece::NUM_COLORED_PIECES; cp = ColoredPiece(cp + 1)) {
+  for (ColoredPiece cp = ColoredPiece::NO_COLORED_PIECE; cp < kNumColoredPieces; cp = ColoredPiece(cp + 1)) {
     for (size_t sq = 0; sq < kNumSquares; ++sq) {
       uint64_t next = actual ^ kZorbristNumbers[cp][sq];
       if (next == expected) {
@@ -110,7 +110,7 @@ void initialize_zorbrist() {
   #endif
 
   std::uniform_int_distribution<long long int> dist(uint64_t(0), uint64_t(-1));
-  for (ColoredPiece cp = ColoredPiece::NO_COLORED_PIECE; cp < ColoredPiece::NUM_COLORED_PIECES; cp = ColoredPiece(cp + 1)) {
+  for (ColoredPiece cp = ColoredPiece::NO_COLORED_PIECE; cp < kNumColoredPieces; cp = ColoredPiece(cp + 1)) {
     for (size_t i = 0; i < kNumSquares; ++i) {
       kZorbristNumbers[cp][i] = dist(e2);
     }
@@ -132,10 +132,9 @@ Position Position::init() {
 }
 
 void Position::_empty_() {
-  std::fill_n(pieceBitboards_, ColoredPiece::NUM_COLORED_PIECES, kEmptyBitboard);
+  pieceBitboards_.fill(kEmptyBitboard);
   std::fill_n(tiles_, kNumSquares, ColoredPiece::NO_COLORED_PIECE);
-  colorBitboards_[Color::WHITE] = kEmptyBitboard;
-  colorBitboards_[Color::BLACK] = kEmptyBitboard;
+  colorBitboards_.fill(kEmptyBitboard);
   currentState_.epSquare = UnsafeSquare::UNO_SQUARE;
   boardListener_->empty();
   wholeMoveCounter_ = 1;
