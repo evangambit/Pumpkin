@@ -63,6 +63,7 @@ struct NnueEvaluator : public EvaluatorInterface {
     return ColoredEvaluation<Color::BLACK>(int32_t(std::min<int16_t>(std::max<int16_t>(-1000, score * 1000), 1000)));
   }
 
+  // TODO: get rid of WDL, stop using doubles.
   WDL _evaluate(const Position& pos) {
     int16_t *eval = nnue_model->forward(pos.turn_);
     int earliness = 0;
