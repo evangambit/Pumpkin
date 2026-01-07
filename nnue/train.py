@@ -5,6 +5,7 @@ import numpy as np
 import chess
 from collections import defaultdict
 from tqdm import tqdm
+import io
 
 import torch.utils.data as tdata
 from sharded_matrix import ShardedLoader
@@ -126,7 +127,7 @@ dataloader = tdata.DataLoader(dataset, batch_size=BATCH_SIZE//CHUNK_SIZE, shuffl
 
 print("Creating model...")
  # [512, 128]
-model = NNUE(input_size=kMaxNumOnesInInput, hidden_sizes=[1024, 128], output_size=6).to(device)
+model = NNUE(input_size=kMaxNumOnesInInput, hidden_sizes=[1024, 128], output_size=16).to(device)
 
 print("Creating optimizer...")
 opt = torch.optim.AdamW([model.emb.piece], lr=0.0, weight_decay=0.1)
@@ -139,7 +140,7 @@ earliness_weights = torch.tensor([
 
 metrics = defaultdict(list)
 print("Starting training...")
-NUM_EPOCHS = 10
+NUM_EPOCHS = 1
 for epoch in range(NUM_EPOCHS):
   for batch_idx, batch in tqdm(enumerate(dataloader), total=len(dataloader)):
     opt.zero_grad()
@@ -165,7 +166,7 @@ for epoch in range(NUM_EPOCHS):
     ], 1)
 
     output = model(x, (turn + 1) // 2)
-    output = output.reshape((output.shape[0], 2, 3))
+    output = output[:,:6].reshape((output.shape[0], 2, 3))
     output = (nn.functional.softmax(output, dim=2) * columns.unsqueeze(2)).sum(1)  # Shape: (batch_size, 3) (win, draw, loss)
     yhat = output[:,0:1] + output[:,1:2] * 0.5
 
@@ -180,6 +181,24 @@ for epoch in range(NUM_EPOCHS):
     metrics["loss"].append(loss.item())
     if batch_idx % 500 == 0:
       print(f"loss: {np.mean(metrics['loss'][-100:]):.4f}")
+
+def save_tensor(tensor: torch.Tensor, name: str, out: io.BufferedWriter):
+  tensor = tensor.cpu().detach().numpy()
+  name = name.ljust(16)
+  assert len(name) == 16
+  out.write(np.array([ord(c) for c in name], dtype=np.uint8).tobytes())
+  out.write(np.array(len(tensor.shape), dtype=np.int32).tobytes())
+  out.write(np.array(tensor.shape, dtype=np.int32).tobytes())
+  out.write(tensor.tobytes())
+
+# Save the model
+with open('model.bin', 'wb') as f:
+  save_tensor(model.emb.weight(False), 'embedding', f)
+  save_tensor(model.mlp[0].weight, 'linear0.weight', f)
+  save_tensor(model.mlp[0].bias, 'linear0.bias', f)
+  save_tensor(model.mlp[2].weight, 'linear1.weight', f)
+  save_tensor(model.mlp[2].bias, 'linear1.bias', f)
+
 plt.figure(figsize=(10,10))
 yhat = yhat.squeeze().cpu().detach().numpy()
 label = label.squeeze().cpu().detach().numpy()
