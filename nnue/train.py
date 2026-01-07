@@ -42,11 +42,6 @@ class NNUE(nn.Module):
     mover = turn * white_z + (1 - turn) * black_z
     non_mover = (1 - turn) * white_z + turn * black_z
     z = torch.cat([mover, non_mover], dim=1)
-    """
-    white pawn on f2 when white moves
-    ==
-    black pawn on f7 when black moves
-    """
     return z
 
   def forward(self, x, turn):
@@ -172,14 +167,13 @@ for epoch in range(NUM_EPOCHS):
     output = model(x, (turn + 1) // 2)
     output = output.reshape((output.shape[0], 2, 3))
     output = (nn.functional.softmax(output, dim=2) * columns.unsqueeze(2)).sum(1)  # Shape: (batch_size, 3) (win, draw, loss)
-    # yhat = (output * columns).sum(1, keepdim=True)
     yhat = output[:,0:1] + output[:,1:2] * 0.5
 
     label = win_mover_perspective + draw_mover_perspective * 0.5
 
     # TODO: for some reason my network is learning negative scores.
+    # TODO: try predicting wdl instead of score.
 
-    # loss = nn.functional.mse_loss(torch.sigmoid(yhat), label, reduction='mean')
     loss = nn.functional.mse_loss(yhat, label, reduction='mean')
     loss.backward()
     opt.step()
@@ -202,7 +196,6 @@ plt.savefig('nnue-loss.png')
 
 
 board = chess.Board()
-board.push_san('e4')
 X = []
 T = []
 moves = np.array(list(board.legal_moves))
