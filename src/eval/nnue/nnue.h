@@ -154,7 +154,7 @@ struct Nnue {
   void zero_() {
     whiteAcc.setZero();
     blackAcc.setZero();
-    layer1.setZero(EMBEDDING_DIM, HIDDEN1_DIM);
+    layer1.setZero(2 * EMBEDDING_DIM, HIDDEN1_DIM);
     bias1.setZero();
     hidden1.setZero();
     layer2.setZero();
@@ -169,7 +169,7 @@ struct Nnue {
     for (size_t i = 0; i < INPUT_DIM; ++i) {
       embWeights[i].array() = Eigen::Array<int16_t, 1, EMBEDDING_DIM>::Zero().unaryExpr([](int16_t) { return int16_t(randn(std::sqrt(1.0 / MAX_NUM_ONES_IN_INPUT)) * (1 << SCALE_SHIFT)); });
     }
-    layer1.array() = Eigen::Array<int16_t, EMBEDDING_DIM, HIDDEN1_DIM>::Zero().unaryExpr([](int16_t) { return int16_t(randn(std::sqrt(1.0 / EMBEDDING_DIM)) * (1 << SCALE_SHIFT)); });
+    layer1.array() = Eigen::Array<int16_t, 2 * EMBEDDING_DIM, HIDDEN1_DIM>::Zero().unaryExpr([](int16_t) { return int16_t(randn(std::sqrt(1.0 / (2 * EMBEDDING_DIM))) * (1 << SCALE_SHIFT)); });
     bias1.array() = Eigen::Array<int16_t, 1, HIDDEN1_DIM>::Zero().unaryExpr([](int16_t) { return int16_t(0); });
     layer2.array() = Eigen::Array<int16_t, HIDDEN1_DIM, OUTPUT_DIM>::Zero().unaryExpr([](int16_t) { return int16_t(randn(std::sqrt(1.0 / HIDDEN1_DIM)) * (1 << SCALE_SHIFT)); });
     bias2.array() = Eigen::Array<int16_t, 1, OUTPUT_DIM>::Zero().unaryExpr([](int16_t) { return int16_t(0); });
@@ -187,10 +187,16 @@ struct Nnue {
     }
   }
 
-  int16_t *forward() {
-    // TODO: use blackAcc too.
-    hidden1.array() = (whiteAcc * layer1 + bias1).array().cwiseMax(0).cwiseMin(127); 
-    hidden2.array() = (hidden1 * layer2 + bias2).array();
+  int16_t *forward(ChessEngine::Color sideToMove) {
+    if (sideToMove == ChessEngine::Color::WHITE) {
+      hidden1.noalias() = (whiteAcc * layer1.topRows<EMBEDDING_DIM>() +
+                           blackAcc * layer1.bottomRows<EMBEDDING_DIM>() + bias1);
+    } else {
+      hidden1.noalias() = (blackAcc * layer1.topRows<EMBEDDING_DIM>() +
+                           whiteAcc * layer1.bottomRows<EMBEDDING_DIM>() + bias1);
+    }
+    hidden1.array() = hidden1.array().cwiseMax(0).cwiseMin(127); 
+    hidden2.noalias() = (hidden1 * layer2 + bias2);
     return hidden2.data();
   }
 };
