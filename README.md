@@ -11,13 +11,17 @@ g++ -std=c++20 -o test_runner src/game/movegen/tests/movegen-tests.cpp $(find sr
 
 
 # Build main
-g++ -std=c++20 -o main src/main.cpp $(find src/ -name "*.cpp" | grep -Ev "([Tt]ests?|uci|main)\\.cpp") -pthread -L/usr/local/lib -lgflags
+g++ -std=c++20 -o main src/main.cpp $(find src/ -name "*.cpp" | grep -Ev "([Tt]ests?|uci|main|make_tables)\\.cpp") -pthread -L/usr/local/lib -lgflags
 
 ./main rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2
 
 # Build uci
 
-g++ -std=c++20 -o uci src/uci.cpp $(find src/ -name "*.cpp" | grep -Ev "([Tt]ests?|uci|main)\\.cpp") -pthread -L/usr/local/lib -lgflags -DNDEBUG -O3
+g++ -std=c++20 -o uci src/uci.cpp $(find src/ -name "*.cpp" | grep -Ev "([Tt]ests?|uci|main|make_tables)\\.cpp") -pthread -L/usr/local/lib -lgflags -DNDEBUG -O3
+
+# Make tables
+
+g++ -std=c++20 -o make_tables src/eval/nnue/make_tables.cpp $(find src/ -name "*.cpp" | grep -Ev "([Tt]ests?|uci|main|make_tables)\\.cpp") -pthread -L/usr/local/lib -lgflags -DNDEBUG -O3
 
 # cutechess
 
