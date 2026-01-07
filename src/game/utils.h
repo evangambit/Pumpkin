@@ -101,6 +101,8 @@ enum Piece {
   NUM_PIECES = 7,
 };
 
+const unsigned kNumColoredPieces = 13;
+
 enum ColoredPiece : unsigned {
   NO_COLORED_PIECE = 0,
   WHITE_PAWN = 1,
@@ -115,7 +117,21 @@ enum ColoredPiece : unsigned {
   BLACK_ROOK = 10,
   BLACK_QUEEN = 11,
   BLACK_KING = 12,
-  NUM_COLORED_PIECES = 13,
+};
+
+enum GuaranteedColoredPiece : unsigned {
+  G_WHITE_PAWN = 0,
+  G_WHITE_KNIGHT = 1,
+  G_WHITE_BISHOP = 2,
+  G_WHITE_ROOK = 3,
+  G_WHITE_QUEEN = 4,
+  G_WHITE_KING = 5,
+  G_BLACK_PAWN = 6,
+  G_BLACK_KNIGHT = 7,
+  G_BLACK_BISHOP = 8,
+  G_BLACK_ROOK = 9,
+  G_BLACK_QUEEN = 10,
+  G_BLACK_KING = 11,
 };
 
 void assert_valid_colored_piece(ColoredPiece cp);
