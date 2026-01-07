@@ -4,6 +4,8 @@
 #include <eigen3/Eigen/Dense>
 #include <cstdint>
 #include <algorithm>
+#include <cmath>
+#include <cstdlib>
 
 #include "../../game/Position.h"
 
@@ -185,6 +187,59 @@ struct Nnue {
         blackAcc += embWeights[flip_feature_index(i)];
       }
     }
+  }
+
+// Saving tensor embedding (768, 1024)
+// Saving tensor linear0.weight (128, 2048)
+// Saving tensor linear0.bias (128,)
+// Saving tensor linear1.weight (16, 128)
+// Saving tensor linear1.bias (16,)
+
+  static Eigen::Matrix<int16_t, Eigen::Dynamic, Eigen::Dynamic> load_matrix(std::istream& in) {
+    char name[16];
+    in.read(name, 16);
+    std::string nameStr(name, 16);
+    nameStr.erase(std::find_if(nameStr.rbegin(), nameStr.rend(), [](unsigned char ch) {
+        return !std::isspace(ch);
+    }).base(), nameStr.end());
+    std::cout << "Loading matrix named: " << nameStr << std::endl;
+
+    // Read matrix dimensions
+    uint32_t degree;
+    in.read(reinterpret_cast<char*>(&degree), sizeof(uint32_t));
+    uint32_t rows, cols;
+    if (degree == 1) {
+      rows = 1;
+      in.read(reinterpret_cast<char*>(&cols), sizeof(uint32_t));
+    } else if (degree == 2) {
+      in.read(reinterpret_cast<char*>(&rows), sizeof(uint32_t));
+      in.read(reinterpret_cast<char*>(&cols), sizeof(uint32_t));
+    } else {
+      throw std::runtime_error("Only 1D and 2D matrices are supported");
+    }
+    std::cout << "Matrix dimensions: " << std::dec << rows << " x " << cols << std::endl;
+
+    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> mat(rows, cols);
+    in.read(reinterpret_cast<char*>(mat.data()), sizeof(float) * rows * cols);
+
+    Eigen::Matrix<int16_t, Eigen::Dynamic, Eigen::Dynamic> mat_int = mat.unaryExpr([](float v) {
+      return static_cast<int16_t>(std::clamp(std::round(v * (1 << SCALE_SHIFT)), -32768.0f, 32767.0f));
+    });
+
+    return mat_int;
+  }
+
+  void load(std::istream& in) {
+    Eigen::Matrix<int16_t, Eigen::Dynamic, Eigen::Dynamic> emb = load_matrix(in);;
+    assert(emb.rows() == INPUT_DIM && emb.cols() == EMBEDDING_DIM);
+    for (size_t i = 0; i < INPUT_DIM; ++i) {
+      embWeights[i] = emb.row(i);
+    }
+
+    layer1 = load_matrix(in).transpose();
+    bias1 = load_matrix(in);
+    layer2 = load_matrix(in).transpose();
+    bias2 = load_matrix(in);
   }
 
   int16_t *forward(ChessEngine::Color sideToMove) {
