@@ -16,10 +16,11 @@ std::ostream& operator<<(std::ostream& stream, const Position& pos) {
   pos.assert_valid_state();
   for (int y = 0; y < 8; ++y) {
     for (int x = 0; x < 8; ++x) {
-      if (pos.tiles_[y*8+x] == ColoredPiece::NO_COLORED_PIECE) {
+      SafeSquare square = SafeSquare(y * 8 + x);
+      if (pos.tiles_[square] == ColoredPiece::NO_COLORED_PIECE) {
         stream << ".";
       } else {
-        stream << colored_piece_to_char(pos.tiles_[y*8+x]);
+        stream << colored_piece_to_char(pos.tiles_[square]);
       }
     }
     stream << std::endl;
@@ -133,7 +134,7 @@ Position Position::init() {
 
 void Position::_empty_() {
   pieceBitboards_.fill(kEmptyBitboard);
-  std::fill_n(tiles_, kNumSquares, ColoredPiece::NO_COLORED_PIECE);
+  tiles_.fill(ColoredPiece::NO_COLORED_PIECE);
   colorBitboards_.fill(kEmptyBitboard);
   currentState_.epSquare = UnsafeSquare::UNO_SQUARE;
   boardListener_->empty();
@@ -251,8 +252,9 @@ void Position::assert_valid_state(const std::string& msg) const {
   // assert(std::popcount(pieceBitboards_[ColoredPiece::WHITE_KING]) == 1);
   // assert(std::popcount(pieceBitboards_[ColoredPiece::BLACK_KING]) == 1);
 
-  for (size_t i = 0; i < 64; ++i) {
-    Color color = cp2color(tiles_[i]);
+  for (size_t i = 0; i < kNumSquares; ++i) {
+    SafeSquare square = SafeSquare(i);
+    Color color = cp2color(tiles_[square]);
     if (color != Color::WHITE) {
       if ((colorBitboards_[Color::WHITE] & bb(i)) != 0) {
         gDebugPos = new Position(*this);
@@ -276,7 +278,7 @@ void Position::assert_valid_state(const std::string& msg) const {
       }
     }
     for (ColoredPiece cp = ColoredPiece::WHITE_PAWN; cp <= ColoredPiece::BLACK_KING; cp = ColoredPiece(cp + 1)) {
-      if (tiles_[i] != cp) {
+      if (tiles_[square] != cp) {
         if ((pieceBitboards_[cp] & bb(i)) != 0) {
           gDebugPos = new Position(*this);
           throw std::runtime_error("assert_valid_state e " + std::to_string(i) + "; " + msg);
@@ -332,7 +334,8 @@ std::string Position::fen() const {
   for (size_t y = 0; y < 8; ++y) {
     size_t i = 0;
     for (size_t x = 0; x < 8; ++x) {
-      ColoredPiece cp = tiles_[y * 8 + x];
+      SafeSquare square = SafeSquare(y * 8 + x);
+      ColoredPiece cp = tiles_[square];
       if (cp == ColoredPiece::NO_COLORED_PIECE) {
         ++i;
       } else {

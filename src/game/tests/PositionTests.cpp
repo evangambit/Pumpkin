@@ -42,7 +42,7 @@ TEST_F(PositionTest, DefaultConstructor) {
   EXPECT_EQ(pos.turn_, Color::WHITE);
   EXPECT_EQ(pos.currentState_.hash, 0);
   for (size_t i = 0; i < kNumSquares; ++i) {
-    EXPECT_EQ(pos.tiles_[i], ColoredPiece::NO_COLORED_PIECE);
+    EXPECT_EQ(pos.tiles_[SafeSquare(i)], ColoredPiece::NO_COLORED_PIECE);
   }
   EXPECT_EQ(pos.wholeMoveCounter_, 1);
   EXPECT_EQ(pos.currentState_.halfMoveCounter, 0);
