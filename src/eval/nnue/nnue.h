@@ -5,6 +5,8 @@
 #include <cstdint>
 #include <algorithm>
 
+#include "../../game/Position.h"
+
 namespace NNUE {
 
 double randn(double stddev = 1.0) {
@@ -31,10 +33,79 @@ double randn(double stddev = 1.0) {
 
 
 constexpr int SCALE_SHIFT = 6;
-constexpr int INPUT_DIM = 768;
 constexpr int EMBEDDING_DIM = 1024;
 constexpr int HIDDEN1_DIM = 64;
 constexpr int OUTPUT_DIM = 8;
+
+constexpr int MAX_NUM_ONES_IN_INPUT = 32 + 4;
+
+enum SpecialFeatures : int16_t {
+  // It is impossible for a pawn to be on the first or last rank, so we can
+  // use these indices to encode other things.
+
+  // We use some unused pawn positions to encode castling rights.
+  // We choose squares so that the same flipping logic that applies to pieces
+  // also applies to castling rights.
+  WHITE_KINGSIDE_CASTLING_RIGHT = 0,  // "white pawn on a8"
+  WHITE_QUEENSIDE_CASTLING_RIGHT = 1,  // "white pawn on b8"
+  BLACK_KINGSIDE_CASTLING_RIGHT = 440,  // "black pawn on a1" (vertically flipped vs white's castling right)
+  BLACK_QUEENSIDE_CASTLING_RIGHT = 441,  // "black pawn on b1" (vertically flipped vs white's castling right)
+
+  WHITE_PAWN_ON_A8 = 0,
+  WHITE_KNIGHT_ON_A8 = 64,
+  WHITE_BISHOP_ON_A8 = 128,
+  WHITE_ROOK_ON_A8 = 192,
+  WHITE_QUEEN_ON_A8 = 256,
+  WHITE_KING_ON_A8 = 320,
+  BLACK_PAWN_ON_A8 = 384,
+  BLACK_KNIGHT_ON_A8 = 448,
+  BLACK_BISHOP_ON_A8 = 512,
+  BLACK_ROOK_ON_A8 = 576,
+  BLACK_QUEEN_ON_A8 = 640,
+  BLACK_KING_ON_A8 = 704,
+  INPUT_DIM = 768,
+};
+
+struct Features {
+  uint16_t length;
+  int16_t onIndices[MAX_NUM_ONES_IN_INPUT];
+  Features() : length(0) {
+    std::fill_n(onIndices, MAX_NUM_ONES_IN_INPUT, SpecialFeatures::INPUT_DIM);
+  }
+  void addFeature(uint16_t index) {
+    onIndices[length++] = static_cast<uint16_t>(index);
+  }
+  uint16_t operator[](size_t i) const {
+    return onIndices[i];
+  }
+};
+
+int16_t feature_index(ChessEngine::ColoredPiece piece, unsigned square) {
+  return (static_cast<unsigned>(piece) - 1) * 64 + square;
+}
+
+Features pos2features(const struct ChessEngine::Position& pos) {
+  Features features;
+  for (unsigned sq = 0; sq < 64; ++sq) {
+    ChessEngine::ColoredPiece piece = pos.tiles_[sq];
+    if (piece != ChessEngine::ColoredPiece::NO_COLORED_PIECE) {
+      features.addFeature(feature_index(piece, sq));
+    }
+  }
+  if (pos.currentState_.castlingRights | ChessEngine::kCastlingRights_WhiteKing) {
+    features.addFeature(SpecialFeatures::WHITE_KINGSIDE_CASTLING_RIGHT);
+  }
+  if (pos.currentState_.castlingRights | ChessEngine::kCastlingRights_WhiteQueen) {
+    features.addFeature(SpecialFeatures::WHITE_QUEENSIDE_CASTLING_RIGHT);
+  }
+  if (pos.currentState_.castlingRights | ChessEngine::kCastlingRights_BlackKing) {
+    features.addFeature(SpecialFeatures::BLACK_KINGSIDE_CASTLING_RIGHT);
+  }
+  if (pos.currentState_.castlingRights | ChessEngine::kCastlingRights_BlackQueen) {
+    features.addFeature(SpecialFeatures::BLACK_QUEENSIDE_CASTLING_RIGHT);
+  }
+  return features;
+}
 
 struct Nnue {
   bool x[INPUT_DIM];
@@ -81,11 +152,11 @@ struct Nnue {
       Initialize weights and biases with gaussian random values.
      */
     for (size_t i = 0; i < INPUT_DIM; ++i) {
-      embWeights[i].array() = Eigen::Array<int16_t, 1, EMBEDDING_DIM>::Zero().unaryExpr([](int16_t) { return int16_t(randn(1.0 / EMBEDDING_DIM) * (1 << SCALE_SHIFT)); });
+      embWeights[i].array() = Eigen::Array<int16_t, 1, EMBEDDING_DIM>::Zero().unaryExpr([](int16_t) { return int16_t(randn(1.0 / std::sqrt(EMBEDDING_DIM)) * (1 << SCALE_SHIFT)); });
     }
-    layer1.array() = Eigen::Array<int16_t, EMBEDDING_DIM, HIDDEN1_DIM>::Zero().unaryExpr([](int16_t) { return int16_t(randn(1.0 / HIDDEN1_DIM) * (1 << SCALE_SHIFT)); });
+    layer1.array() = Eigen::Array<int16_t, EMBEDDING_DIM, HIDDEN1_DIM>::Zero().unaryExpr([](int16_t) { return int16_t(randn(1.0 / std::sqrt(HIDDEN1_DIM)) * (1 << SCALE_SHIFT)); });
     bias1.array() = Eigen::Array<int16_t, 1, HIDDEN1_DIM>::Zero().unaryExpr([](int16_t) { return int16_t(0); });
-    layer2.array() = Eigen::Array<int16_t, HIDDEN1_DIM, OUTPUT_DIM>::Zero().unaryExpr([](int16_t) { return int16_t(randn(1.0 / OUTPUT_DIM) * (1 << SCALE_SHIFT)); });
+    layer2.array() = Eigen::Array<int16_t, HIDDEN1_DIM, OUTPUT_DIM>::Zero().unaryExpr([](int16_t) { return int16_t(randn(1.0 / std::sqrt(OUTPUT_DIM)) * (1 << SCALE_SHIFT)); });
     bias2.array() = Eigen::Array<int16_t, 1, OUTPUT_DIM>::Zero().unaryExpr([](int16_t) { return int16_t(0); });
     this->compute_acc_from_scratch();
   }

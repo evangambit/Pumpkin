@@ -12,7 +12,7 @@ using namespace NNUE;
 template<class T>
 void print8(const T* data) {
     for (int i = 0; i < 8; ++i) {
-        std::cout << int(data[i]) << " ";
+        std::cout << float(data[i]) / float(1 << SCALE_SHIFT) << " ";
     }
     std::cout << std::endl;
 }
