@@ -81,8 +81,8 @@ struct Features {
   }
 };
 
-int16_t feature_index(ChessEngine::ColoredPiece piece, unsigned square) {
-  return (static_cast<unsigned>(piece) - 1) * 64 + square;
+int16_t feature_index(ChessEngine::SafeColoredPiece piece, unsigned square) {
+  return piece * 64 + square;
 }
 
 int16_t flip_feature_index(int16_t index) {
@@ -91,10 +91,11 @@ int16_t flip_feature_index(int16_t index) {
 
 Features pos2features(const struct ChessEngine::Position& pos) {
   Features features;
-  for (unsigned sq = 0; sq < 64; ++sq) {
+  for (unsigned i = 0; i < 64; ++i) {
+    ChessEngine::SafeSquare sq = ChessEngine::SafeSquare(i);
     ChessEngine::ColoredPiece piece = pos.tiles_[sq];
     if (piece != ChessEngine::ColoredPiece::NO_COLORED_PIECE) {
-      features.addFeature(feature_index(piece, sq));
+      features.addFeature(feature_index(to_safe_colored_piece(piece), sq));
     }
   }
   if (pos.currentState_.castlingRights & ChessEngine::kCastlingRights_WhiteKing) {
