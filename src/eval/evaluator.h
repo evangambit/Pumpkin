@@ -41,6 +41,12 @@ struct SimpleEvaluator : public EvaluatorInterface {
     return "SimpleEvaluator";
   }
 
+  void empty() override {}
+  void place_piece(ColoredPiece cp, SafeSquare square) override {}
+  void remove_piece(ColoredPiece cp, SafeSquare square) override {}
+  void place_piece(SafeColoredPiece cp, SafeSquare square) override {}
+  void remove_piece(SafeColoredPiece cp, SafeSquare square) override {}
+
   inline static ColoredEvaluation<Color::WHITE> kPieceValues[kNumColoredPieces] = {
     ColoredEvaluation<Color::WHITE>(0),    // NO_COLORED_PIECE
     ColoredEvaluation<Color::WHITE>(100),  // WHITE_PAWN
@@ -56,10 +62,6 @@ struct SimpleEvaluator : public EvaluatorInterface {
     ColoredEvaluation<Color::WHITE>(-900),  // BLACK_QUEEN
     ColoredEvaluation<Color::WHITE>(0)     // BLACK_KING
   };
-
-  void empty() override {}
-  void place_piece(ColoredPiece cp, SafeSquare square) override {}
-  void remove_piece(ColoredPiece cp, SafeSquare square) override {}
 };
 
 } // namespace ChessEngine

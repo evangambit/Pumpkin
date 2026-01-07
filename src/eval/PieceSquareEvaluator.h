@@ -36,10 +36,20 @@ struct PieceSquareEvaluator : public EvaluatorInterface {
     late = 0;
   }
   void place_piece(ColoredPiece cp, SafeSquare square) override {
-    const int index = index_for(cp, square);
     if (cp == ColoredPiece::NO_COLORED_PIECE) {
       return;
     }
+    this->place_piece(to_safe_colored_piece(cp), square);
+  }
+  void remove_piece(ColoredPiece cp, SafeSquare square) override {
+    if (cp == ColoredPiece::NO_COLORED_PIECE) {
+      return;
+    }
+    this->remove_piece(to_safe_colored_piece(cp), square);
+  }
+
+  void place_piece(SafeColoredPiece cp, SafeSquare square) override {
+    const size_t index = index_for(cp, square);
     if (cp2color(cp) == Color::WHITE) {
         early += kDefaultPieceSquareTables[index];
         late += kDefaultPieceSquareTables[index + 7 * 64];
@@ -48,11 +58,8 @@ struct PieceSquareEvaluator : public EvaluatorInterface {
         late -= kDefaultPieceSquareTables[index + 7 * 64];
     }
   }
-  void remove_piece(ColoredPiece cp, SafeSquare square) override {
-    const int index = index_for(cp, square);
-    if (cp == ColoredPiece::NO_COLORED_PIECE) {
-      return;
-    }
+  void remove_piece(SafeColoredPiece cp, SafeSquare square) override {
+    const size_t index = index_for(cp, square);
     if (cp2color(cp) == Color::WHITE) {
         early -= kDefaultPieceSquareTables[index];
         late -= kDefaultPieceSquareTables[index + 7 * 64];
@@ -78,7 +85,7 @@ struct PieceSquareEvaluator : public EvaluatorInterface {
     return t;
   }
 
-  inline int index_for(ColoredPiece cp, SafeSquare square) const {
+  inline size_t index_for(SafeColoredPiece cp, SafeSquare square) const {
     Piece piece = cp2p(cp);
     Color color = cp2color(cp);
     const int y = color == Color::WHITE ? square / 8 : 7 - (square / 8);

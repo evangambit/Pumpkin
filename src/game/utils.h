@@ -119,20 +119,29 @@ enum ColoredPiece : unsigned {
   BLACK_KING = 12,
 };
 
-enum GuaranteedColoredPiece : unsigned {
-  G_WHITE_PAWN = 0,
-  G_WHITE_KNIGHT = 1,
-  G_WHITE_BISHOP = 2,
-  G_WHITE_ROOK = 3,
-  G_WHITE_QUEEN = 4,
-  G_WHITE_KING = 5,
-  G_BLACK_PAWN = 6,
-  G_BLACK_KNIGHT = 7,
-  G_BLACK_BISHOP = 8,
-  G_BLACK_ROOK = 9,
-  G_BLACK_QUEEN = 10,
-  G_BLACK_KING = 11,
+enum SafeColoredPiece : unsigned {
+  S_WHITE_PAWN = 0,
+  S_WHITE_KNIGHT = 1,
+  S_WHITE_BISHOP = 2,
+  S_WHITE_ROOK = 3,
+  S_WHITE_QUEEN = 4,
+  S_WHITE_KING = 5,
+  S_BLACK_PAWN = 6,
+  S_BLACK_KNIGHT = 7,
+  S_BLACK_BISHOP = 8,
+  S_BLACK_ROOK = 9,
+  S_BLACK_QUEEN = 10,
+  S_BLACK_KING = 11,
 };
+
+inline SafeColoredPiece to_safe_colored_piece(ColoredPiece cp) {
+  assert(cp != ColoredPiece::NO_COLORED_PIECE);
+  return SafeColoredPiece(uint8_t(cp) - 1);
+}
+
+inline ColoredPiece to_colored_piece(SafeColoredPiece scp) {
+  return ColoredPiece(uint8_t(scp) + 1);
+}
 
 void assert_valid_colored_piece(ColoredPiece cp);
 
@@ -158,8 +167,16 @@ constexpr Color cp2color(ColoredPiece cp) {
   return Color((cp + 5) / 6);
 }
 
+constexpr Color cp2color(SafeColoredPiece cp) {
+  return Color((cp / 6) + 1);
+}
+
 constexpr Piece cp2p(ColoredPiece cp) {
   return Piece((cp - 1) % 6 + 1);
+}
+
+constexpr Piece cp2p(SafeColoredPiece cp) {
+  return Piece((cp % 6) + 1);
 }
 
 ColoredPiece char_to_colored_piece(char c);
