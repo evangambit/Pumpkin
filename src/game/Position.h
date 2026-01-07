@@ -122,6 +122,13 @@ class Position {
     this->boardListener_->remove_piece(cp, sq);
   }
 
+  inline void increment_piece_map(SafeColoredPiece cp, SafeSquare sq) {
+    this->boardListener_->place_piece(cp, sq);
+  }
+  inline void decrement_piece_map(SafeColoredPiece cp, SafeSquare sq) {
+    this->boardListener_->remove_piece(cp, sq);
+  }
+
   void assert_valid_state() const;
   void assert_valid_state(const std::string& msg) const;
 

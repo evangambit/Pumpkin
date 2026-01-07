@@ -20,6 +20,12 @@ struct FakeBoardListener : public BoardListener {
   void remove_piece(ColoredPiece cp, SafeSquare square) override {
     removedSquares.push_back(square);
   }
+  void place_piece(SafeColoredPiece cp, SafeSquare square) override {
+    placedPieces.push_back({to_colored_piece(cp), square});
+  }
+  void remove_piece(SafeColoredPiece cp, SafeSquare square) override {
+    removedSquares.push_back(square);
+  }
 };
 
 class PositionTest : public ::testing::Test {
