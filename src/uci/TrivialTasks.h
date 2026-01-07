@@ -8,10 +8,12 @@
 #include <mutex>
 #include <sstream>
 #include <unordered_set>
+#include <fstream>
 
 #include "Task.h"
 #include "../eval/PieceSquareEvaluator.h"
 #include "../eval/evaluator.h"
+#include "../eval/nnue/NnueEvaluator.h"
 
 namespace ChessEngine {
 
@@ -99,6 +101,12 @@ class SetEvaluatorTask : public Task {
     } else if (evaluatorName == "psq") {
       state->evaluator = std::make_shared<PieceSquareEvaluator>();
       std::cout << "Evaluator set to simple." << std::endl;
+    } else if (evaluatorName == "nnue") {
+      NNUE::Nnue *nnue_model = new NNUE::Nnue();
+      std::ifstream f("model.bin", std::ios::binary);
+      nnue_model->load(f);
+      state->evaluator = std::make_shared<NNUE::NnueEvaluator>(nnue_model);
+      std::cout << "Evaluator set to nnue." << std::endl;
     } else {
       std::cout << "Error: unrecognized evaluator name \"" << evaluatorName << "\"" << std::endl;
     }
