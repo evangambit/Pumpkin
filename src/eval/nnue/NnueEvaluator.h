@@ -106,8 +106,6 @@ struct NnueEvaluator : public EvaluatorInterface {
     double draw = (early_draw * (18 - earliness) + late_draw * earliness) / 18.0;
     double loss = (early_loss * (18 - earliness) + late_loss * earliness) / 18.0;
 
-    std::cout << "Win: " << win << " Draw: " << draw << " Loss: " << loss << std::endl;
-
     return WDL{win, draw, loss};
   }
 
