@@ -8,198 +8,13 @@ from tqdm import tqdm
 
 import torch.utils.data as tdata
 from sharded_matrix import ShardedLoader
-
-kMaxNumOnesInInput = 32 + 4
-
-def x2board(vec, turn):
-  assert len(vec.shape) == 1
-  assert vec.shape[0] == kMaxNumOnesInInput
-  board = chess.Board.empty()
-  board.turn = turn
-  castling = ''
-  for val in vec:
-    if val >= 768:
-      continue
-    if (val >= 7 and val < 56) or val > 63:
-      piece = val // 64
-      val = val % 64
-      y = 7 - val // 8
-      x = val % 8
-      if not ((piece == 0 or piece == 6) and (y == 0 or y == 7)):
-        # Ignore pawns on first or last rank, since these are used
-        # for special features (see castling rights below).
-        sq = chess.square(x, y)
-        board.set_piece_at(sq, chess.Piece(piece % 6 + 1, chess.WHITE if piece < 6 else chess.BLACK))
-        continue
-    if val == 0:
-      castling += 'K'
-    if val == 1:
-      castling += 'Q'
-    if val == 440:
-      castling += 'k'
-    if val == 441:
-      castling += 'q'
-  # board.set_castling_fen(castling) doesn't work?
-  parts = board.fen().split(' ')
-  parts[2] = castling if castling else '-'
-  return chess.Board(' '.join(parts))
-
-def board2x(board):
-  vec = np.ones(kMaxNumOnesInInput, dtype=np.int16) * 768
-  i = 0
-  for sq, piece in board.piece_map().items():
-    val = 0
-    val += 'PNBRQKpnbrqk'.index(piece.symbol()) * 64
-    val += 8 * (7 - sq // 8)
-    val += sq % 8
-    assert val not in [0, 1, 440, 441], f"Piece on square {chess.square_name(sq)} conflicts with castling rights encoding."
-    assert val < 768
-    vec[i] = val
-    i += 1
-  if board.has_kingside_castling_rights(chess.WHITE):
-    vec[i] = 0
-    i += 1
-  if board.has_queenside_castling_rights(chess.WHITE):
-    vec[i] = 1
-    i += 1
-  if board.has_kingside_castling_rights(chess.BLACK):
-    vec[i] = 440
-    i += 1
-  if board.has_queenside_castling_rights(chess.BLACK):
-    vec[i] = 441
-    i += 1
-  assert i <= kMaxNumOnesInInput
-  vec.sort()
-  return vec
-
-class SingleShardedMatrixIterator:
-  def __init__(self, xpath, chunk_size=1):
-    self.X = ShardedLoader(xpath)
-    self.chunk_size = chunk_size
-
-  def __iter__(self):
-    shard_index = 0
-    offset = 0
-    x = self.X.load_shard(shard_index)
-    while True:
-      if offset + self.chunk_size >= x.shape[0]:
-        first_half = x[offset:]
-        shard_index += 1
-        if shard_index >= self.X.num_shards:
-          break
-        x = self.X.load_shard(shard_index)
-        second_half = x[0:self.chunk_size - first_half.shape[0]]
-        yield np.concatenate([first_half, second_half], axis=0).copy()
-        offset = self.chunk_size - first_half.shape[0]
-      else:
-        yield x[offset:offset + self.chunk_size].copy()
-        offset += self.chunk_size
-  
-  def __len__(self):
-    return self.X.num_rows // self.chunk_size
-
-class SimpleIterablesDataset(tdata.IterableDataset):
-  def __init__(self, *paths, chunk_size=1):
-    super().__init__()
-    self.iterators = [SingleShardedMatrixIterator(p, chunk_size=chunk_size) for p in paths]
-  
-  def __iter__(self):
-    its = [iter(it) for it in self.iterators]
-    yield from zip(*its)
-  
-  def __len__(self):
-    return len(self.iterators[0])
+from ShardedMatricesIterableDataset import ShardedMatricesIterableDataset
+from features import board2x, x2board, kMaxNumOnesInInput
+from accumulator import Emb
 
 class CReLU(nn.Module):
   def forward(self, x):
     return x.clip(0, 1)
-
-class Emb(nn.Module):
-  def __init__(self, dout):
-    super().__init__()
-    din = 768
-
-    # Roughly speaking
-    # variance(z[i]) = (var(t1) + var(t2) + var(t3) + var(t4) + var(t5) + var(t6)) * kMaxNumOnesInInput
-    # So if we want variance(z[i]) = 1.0, we want each var(ti) = 1.0 / (kMaxNumOnesInInput * 6)
-    num_components = 6
-    targeted_variance_per_component = 1.0
-    s = (targeted_variance_per_component / (kMaxNumOnesInInput * num_components)) ** 0.5
-    
-    self.tiles = nn.Parameter(torch.randn(12, 8, 8, dout) * s)
-    self.coord = nn.Parameter(torch.randn(1, 8, 8, dout) * s)
-    self.piece = nn.Parameter(torch.randn(12, 1, 1, dout) * s)
-    self.row = nn.Parameter(torch.randn(1, 8, 1, dout) * s)
-    self.col = nn.Parameter(torch.randn(1, 1, 8, dout) * s)
-    self.tilecolor = nn.Parameter(torch.randn(1, 1, 1, dout) * s)
-
-    # We juse pawns on the first/last rank to indicate things like castling rights,
-    # so we don't want coord, piece, row, col, tilecolor to apply to them. We do,
-    # however, still want to flip them in the vertically_flipped case.
-    self.special_mask = nn.Parameter(torch.zeros(12, 8, 8, dout), requires_grad=False)
-    with torch.no_grad():
-      for piece in range(12):
-        for y in range(8):
-          for x in range(8):
-            if (piece % 6 == 0) and (y == 0 or y == 7):
-              self.special_mask[piece, y, x, :] = 1.0
-
-    self.white_tile_mask = nn.Parameter(torch.zeros(1, 8, 8, 1), requires_grad=False)
-    with torch.no_grad():
-      for y in range(8):
-        for x in range(8):
-          self.white_tile_mask[0, y, x, 0] = (y + x) % 2 == 0
-    
-    self.zeros = nn.Parameter(torch.zeros(1, dout), requires_grad=False)
-  
-  def zero_(self):
-    with torch.no_grad():
-      self.tiles.zero_()
-      self.coord.zero_()
-      self.piece.zero_()
-      self.row.zero_()
-      self.col.zero_()
-      self.tilecolor.zero_()
-
-  def weight(self, vertically_flipped=False):
-    """
-    Return the embedding weight matrix.
-
-    We could implement this whole class as as an nn.Embedding,
-    but this way we can
-    # 1) support vertical flipping
-    # 2) apply higher regularization (theoretically at least) 
-
-    Shape: (768 + 1, dout)
-    """
-    tilecolor = self.tilecolor * self.white_tile_mask
-    
-    factorized_terms = (
-      self.coord
-      +
-      self.piece
-      +
-      self.row
-      +
-      self.col
-      +
-      tilecolor
-    ) * (1.0 - self.special_mask)
-
-    T = factorized_terms + self.tiles
-
-    if vertically_flipped:
-      # Flip the pieces (White <-> Black) and the ranks.
-      T = T.flip(1).roll(6, dims=0)
-
-    batch_size = T.shape[0]
-    return torch.cat([T.reshape(768, -1), self.zeros], dim=0)
-  
-  def forward(self, x, vertically_flipped=False):
-    assert len(x.shape) == 2
-    assert x.shape[1] == kMaxNumOnesInInput, f"x.shape={x.shape}"
-    return self.weight(vertically_flipped=vertically_flipped)[x.to(torch.int32)].sum(1)
-
 
 class NNUE(nn.Module):
   def __init__(self, input_size, hidden_sizes: list[int], output_size: int):
@@ -305,7 +120,7 @@ assert BATCH_SIZE % CHUNK_SIZE == 0
 device = torch.cuda.current_device()
 
 print("Loading dataset...")
-dataset = SimpleIterablesDataset(
+dataset = ShardedMatricesIterableDataset(
   f'data/de6-md2/tables-nnue',
   f'data/de6-md2/tables-eval',
   f'data/de6-md2/tables-turn',
