@@ -23,6 +23,8 @@ g++ -std=c++20 -o uci src/uci.cpp $(find src/ -name "*.cpp" | grep -Ev "([Tt]est
 
 g++ -std=c++20 -o make_tables src/eval/nnue/make_tables.cpp $(find src/ -name "*.cpp" | grep -Ev "([Tt]ests?|uci|main|make_tables)\\.cpp") -pthread -L/usr/local/lib -lgflags -DNDEBUG -O3
 
+g++ -std=c++20 -o nnue_main src/eval/nnue/main.cpp $(find src/ -name "*.cpp" | grep -Ev "([Tt]ests?|uci|main|make_tables)\\.cpp") -pthread -L/usr/local/lib -lgflags && ./nnue_main
+
 # cutechess
 
 cutechess/build/cutechess-cli -engine cmd=uci -engine cmd=uci -each tc=40/60 proto=uci -rounds 1 -debug^C

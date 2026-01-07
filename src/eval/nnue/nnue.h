@@ -28,14 +28,15 @@ double randn(double stddev = 1.0) {
     } while (s >= 1.0 || s == 0.0);
 
     s = sqrt(-2.0 * log(s) / s);
+    spare = v * s * stddev;
     return u * s * stddev;
 }
 
 
 constexpr int SCALE_SHIFT = 6;
 constexpr int EMBEDDING_DIM = 1024;
-constexpr int HIDDEN1_DIM = 64;
-constexpr int OUTPUT_DIM = 8;
+constexpr int HIDDEN1_DIM = 128;
+constexpr int OUTPUT_DIM = 16;
 
 constexpr int MAX_NUM_ONES_IN_INPUT = 32 + 4;
 
@@ -84,6 +85,10 @@ int16_t feature_index(ChessEngine::ColoredPiece piece, unsigned square) {
   return (static_cast<unsigned>(piece) - 1) * 64 + square;
 }
 
+int16_t flip_feature_index(int16_t index) {
+  return index;  // TODO
+}
+
 Features pos2features(const struct ChessEngine::Position& pos) {
   Features features;
   for (unsigned sq = 0; sq < 64; ++sq) {
@@ -92,16 +97,16 @@ Features pos2features(const struct ChessEngine::Position& pos) {
       features.addFeature(feature_index(piece, sq));
     }
   }
-  if (pos.currentState_.castlingRights | ChessEngine::kCastlingRights_WhiteKing) {
+  if (pos.currentState_.castlingRights & ChessEngine::kCastlingRights_WhiteKing) {
     features.addFeature(SpecialFeatures::WHITE_KINGSIDE_CASTLING_RIGHT);
   }
-  if (pos.currentState_.castlingRights | ChessEngine::kCastlingRights_WhiteQueen) {
+  if (pos.currentState_.castlingRights & ChessEngine::kCastlingRights_WhiteQueen) {
     features.addFeature(SpecialFeatures::WHITE_QUEENSIDE_CASTLING_RIGHT);
   }
-  if (pos.currentState_.castlingRights | ChessEngine::kCastlingRights_BlackKing) {
+  if (pos.currentState_.castlingRights & ChessEngine::kCastlingRights_BlackKing) {
     features.addFeature(SpecialFeatures::BLACK_KINGSIDE_CASTLING_RIGHT);
   }
-  if (pos.currentState_.castlingRights | ChessEngine::kCastlingRights_BlackQueen) {
+  if (pos.currentState_.castlingRights & ChessEngine::kCastlingRights_BlackQueen) {
     features.addFeature(SpecialFeatures::BLACK_QUEENSIDE_CASTLING_RIGHT);
   }
   return features;
@@ -110,9 +115,10 @@ Features pos2features(const struct ChessEngine::Position& pos) {
 struct Nnue {
   bool x[INPUT_DIM];
   Eigen::Matrix<int16_t, 1, EMBEDDING_DIM> embWeights[INPUT_DIM];
-  Eigen::Matrix<int16_t, 1, EMBEDDING_DIM> acc;
+  Eigen::Matrix<int16_t, 1, EMBEDDING_DIM> whiteAcc;
+  Eigen::Matrix<int16_t, 1, EMBEDDING_DIM> blackAcc;
 
-  Eigen::Matrix<int16_t, EMBEDDING_DIM, HIDDEN1_DIM> layer1;
+  Eigen::Matrix<int16_t, Eigen::Dynamic, HIDDEN1_DIM> layer1;
   Eigen::Matrix<int16_t, 1, HIDDEN1_DIM> bias1;
   Eigen::Matrix<int16_t, 1, HIDDEN1_DIM> hidden1;
 
@@ -128,18 +134,26 @@ struct Nnue {
   void increment(size_t index) {
     assert(!x[index]);
     x[index] = true;
-    acc += embWeights[index];
+    whiteAcc += embWeights[index];
+    blackAcc += embWeights[flip_feature_index(index)];
   }
 
   void decrement(size_t index) {
     assert(x[index]);
     x[index] = false;
-    acc -= embWeights[index];
+    whiteAcc -= embWeights[index];
+    blackAcc -= embWeights[flip_feature_index(index)];
+  }
+
+  void clear_accumulator() {
+    whiteAcc.setZero();
+    blackAcc.setZero();
   }
 
   void zero_() {
-    acc.setZero();
-    layer1.setZero();
+    whiteAcc.setZero();
+    blackAcc.setZero();
+    layer1.setZero(EMBEDDING_DIM, HIDDEN1_DIM);
     bias1.setZero();
     hidden1.setZero();
     layer2.setZero();
@@ -152,30 +166,30 @@ struct Nnue {
       Initialize weights and biases with gaussian random values.
      */
     for (size_t i = 0; i < INPUT_DIM; ++i) {
-      embWeights[i].array() = Eigen::Array<int16_t, 1, EMBEDDING_DIM>::Zero().unaryExpr([](int16_t) { return int16_t(randn(1.0 / std::sqrt(EMBEDDING_DIM)) * (1 << SCALE_SHIFT)); });
+      embWeights[i].array() = Eigen::Array<int16_t, 1, EMBEDDING_DIM>::Zero().unaryExpr([](int16_t) { return int16_t(randn(std::sqrt(1.0 / MAX_NUM_ONES_IN_INPUT)) * (1 << SCALE_SHIFT)); });
     }
-    layer1.array() = Eigen::Array<int16_t, EMBEDDING_DIM, HIDDEN1_DIM>::Zero().unaryExpr([](int16_t) { return int16_t(randn(1.0 / std::sqrt(HIDDEN1_DIM)) * (1 << SCALE_SHIFT)); });
+    layer1.array() = Eigen::Array<int16_t, EMBEDDING_DIM, HIDDEN1_DIM>::Zero().unaryExpr([](int16_t) { return int16_t(randn(std::sqrt(1.0 / EMBEDDING_DIM)) * (1 << SCALE_SHIFT)); });
     bias1.array() = Eigen::Array<int16_t, 1, HIDDEN1_DIM>::Zero().unaryExpr([](int16_t) { return int16_t(0); });
-    layer2.array() = Eigen::Array<int16_t, HIDDEN1_DIM, OUTPUT_DIM>::Zero().unaryExpr([](int16_t) { return int16_t(randn(1.0 / std::sqrt(OUTPUT_DIM)) * (1 << SCALE_SHIFT)); });
+    layer2.array() = Eigen::Array<int16_t, HIDDEN1_DIM, OUTPUT_DIM>::Zero().unaryExpr([](int16_t) { return int16_t(randn(std::sqrt(1.0 / HIDDEN1_DIM)) * (1 << SCALE_SHIFT)); });
     bias2.array() = Eigen::Array<int16_t, 1, OUTPUT_DIM>::Zero().unaryExpr([](int16_t) { return int16_t(0); });
     this->compute_acc_from_scratch();
   }
 
   void compute_acc_from_scratch() {
-    acc.setZero();
+    whiteAcc.setZero();
+    blackAcc.setZero();
     for (size_t i = 0; i < INPUT_DIM; ++i) {
       if (x[i]) {
-        acc += embWeights[i];
+        whiteAcc += embWeights[i];
+        blackAcc += embWeights[flip_feature_index(i)];
       }
     }
   }
 
   int16_t *forward() {
-    // Layer 1
-    hidden1.array() = (acc * layer1 + bias1).array().cwiseMax(0).cwiseMin(127); 
-    // Layer 2
+    // TODO: use blackAcc too.
+    hidden1.array() = (whiteAcc * layer1 + bias1).array().cwiseMax(0).cwiseMin(127); 
     hidden2.array() = (hidden1 * layer2 + bias2).array();
-  
     return hidden2.data();
   }
 };
