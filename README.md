@@ -27,7 +27,7 @@ g++ -std=c++20 -o nnue_main src/eval/nnue/main.cpp $(find src/ -name "*.cpp" | g
 
 # cutechess
 
-cutechess/build/cutechess-cli -engine cmd=uci -engine cmd=uci -each tc=40/60 proto=uci -rounds 1 -debug^C
+cutechess/build/cutechess-cli -engine cmd=uci arg="evaluator pst" -engine cmd=uci arg="evaluator simple" -each tc=40/60 proto=uci -rounds 1 -debug
 
 ```
 

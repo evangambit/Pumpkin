@@ -46,6 +46,7 @@ class Emb(nn.Module):
           self.white_tile_mask[0, y, x, 0] = (y + x) % 2 == 0
     
     self.zeros = nn.Parameter(torch.zeros(1, dout), requires_grad=False)
+    self.zero = nn.Parameter(torch.zeros(1,), requires_grad=False)
   
   def zero_(self):
     with torch.no_grad():
@@ -70,18 +71,18 @@ class Emb(nn.Module):
     tilecolor = self.tilecolor * self.white_tile_mask
     
     factorized_terms = (
-      self.coord
+      self.coord * self.zero
       +
       self.piece
       +
-      self.row
+      self.row * self.zero
       +
-      self.col
+      self.col * self.zero
       +
-      tilecolor
+      tilecolor * self.zero
     ) * (1.0 - self.special_mask)
 
-    T = factorized_terms + self.tiles
+    T = factorized_terms + self.tiles * self.zero
 
     if vertically_flipped:
       # Flip the pieces (White <-> Black) and the ranks.

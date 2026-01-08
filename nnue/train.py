@@ -13,130 +13,102 @@ from ShardedMatricesIterableDataset import ShardedMatricesIterableDataset
 from features import board2x, x2board, kMaxNumOnesInInput
 from accumulator import Emb
 
-class CReLU(nn.Module):
-  def forward(self, x):
-    return x.clip(0, 1)
-
-class NNUE(nn.Module):
-  def __init__(self, input_size, hidden_sizes: list[int], output_size: int):
-    super(NNUE, self).__init__()
-    self.emb = Emb(dout=hidden_sizes[0])
-    layers = []
-    hidden_sizes[0] *= 2
-    for i in range(len(hidden_sizes) - 1):
-      layers.append(nn.Linear(hidden_sizes[i], hidden_sizes[i + 1]))
-      layers.append(CReLU())
-    layers.append(nn.Linear(hidden_sizes[-1], output_size))
-    for layer in layers:
-      if isinstance(layer, nn.Linear):
-        nn.init.kaiming_normal_(layer.weight, nonlinearity='relu')
-        nn.init.zeros_(layer.bias)
-    self.mlp = nn.Sequential(*layers)
-
-  def embed(self, x, turn):
-    assert len(x.shape) == 2
-    assert len(turn.shape) == 2
-    assert x.shape[0] == turn.shape[0]
-    assert turn.shape[1] == 1
-    white_z = self.emb(x, vertically_flipped=False)
-    black_z = self.emb(x, vertically_flipped=True)
-    mover = turn * white_z + (1 - turn) * black_z
-    non_mover = (1 - turn) * white_z + turn * black_z
-    z = torch.cat([mover, non_mover], dim=1)
-    return z
-
-  def forward(self, x, turn):
-    z = self.embed(x, turn)
-    out = self.mlp(z)
-    return out
-
-def test():
-  model = NNUE(input_size=kMaxNumOnesInInput, hidden_sizes=[768], output_size=2)
-  model.emb.zero_()
-  for i in range(768):
-    with torch.no_grad():
-      model.emb.tiles[i // 64, (i % 64) // 8, (i % 64) % 8, i] = 1.0
-
-  def remove_all(lst, val):
-    return [x for x in lst if x != val]
-
-  def foo(fen: str):
-    x = torch.tensor(board2x(chess.Board(fen)), dtype=torch.int16).unsqueeze(0)
-    z_white = model.emb(x, vertically_flipped=False)
-    z_black = model.emb(x, vertically_flipped=True)
-    if ' w ' in fen:
-      return x, torch.cat([z_white, z_black], dim=1)
-    else:
-      return x, torch.cat([z_black, z_white], dim=1)
-  start_pos = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR'
-  e4_c5 = 'rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR'
-  c4_e5 = 'rnbqkbnr/pppp1ppp/8/4p3/2P5/8/PP1PPPPP/RNBQKBNR'
-  white_missing_pieces = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNB1K3'
-
-  x0, z0 = foo(f'{start_pos} w KQkq - 0 1')  # starting position
-  x1, z1 = foo(f'{e4_c5} w KQkq - 0 2')  # 1. e4 c5 (sicilian)
-  x2, z2 = foo(f'{c4_e5} w KQkq - 0 2')  # 1. c4 e5 (reverse sicilian)
-
-  x3, z3 = foo(f'{c4_e5} b KQkq - 0 2')  # 1. c4 e5 but black to move (should match z1)
-  x4, z4 = foo(f'{e4_c5} b KQkq - 0 2')  # 1. e4 c5 but black to move (should match z2)
-  x5, z5 = foo(f'{white_missing_pieces} w Qkq - 0 1')  # white missing pieces
-
-  x0 = remove_all(x0.squeeze().tolist(), 768)
-  x1 = remove_all(x1.squeeze().tolist(), 768)
-  x2 = remove_all(x2.squeeze().tolist(), 768)
-  x3 = remove_all(x3.squeeze().tolist(), 768)
-  x4 = remove_all(x4.squeeze().tolist(), 768)
-  x5 = remove_all(x5.squeeze().tolist(), 768)
-
-  # On white's turn, the first half of z is white's pieces.
-  assert np.nonzero(z0.squeeze()).squeeze().tolist()[:len(x0)] == x0
-  assert np.nonzero(z1.squeeze()).squeeze().tolist()[:len(x1)] == x1
-  assert np.nonzero(z2.squeeze()).squeeze().tolist()[:len(x2)] == x2
-  assert np.nonzero(z5.squeeze()).squeeze().tolist()[:len(x5)] == x5
-  
-  # On black's turn, the second half of z is black
-  assert (np.nonzero(z3.squeeze()).squeeze() - 768).tolist()[len(x3):] == x3
-  assert (np.nonzero(z4.squeeze()).squeeze() - 768).tolist()[len(x4):] == x4
-
-  i5 = np.nonzero(z5[0].detach().numpy())[0]
-
-  assert torch.allclose(z1, z3)
-  assert torch.allclose(z2, z4)
-  assert not torch.allclose(z1, z2)
-  assert not torch.allclose(z3, z4)
-
-test()
-
 # We load data in chunks, rather than 1 row at a time, as it is much faster. It doesn't matter
 # much for non-trivial networks though.
 BATCH_SIZE = 2048
-CHUNK_SIZE = 64
+CHUNK_SIZE = 128
 assert BATCH_SIZE % CHUNK_SIZE == 0
 
 device = torch.cuda.current_device()
 
 print("Loading dataset...")
+# dataset_name = 'de6-md2'  # Accuracy: 78%, MSE: 0.077179
+dataset_name = 'de7-md4'  # Data quality: Accuracy: 92%, MSE: 0.037526
 dataset = ShardedMatricesIterableDataset(
-  f'data/de6-md2/tables-nnue',
-  f'data/de6-md2/tables-eval',
-  f'data/de6-md2/tables-turn',
-  f'data/de6-md2/tables-piece-counts',
+  f'data/{dataset_name}/tables-nnue',
+  f'data/{dataset_name}/tables-eval',
+  f'data/{dataset_name}/tables-turn',
+  f'data/{dataset_name}/tables-piece-counts',
   chunk_size=CHUNK_SIZE,
 )
+
+print(f'Dataset loaded with {len(dataset) * CHUNK_SIZE} rows.')
+
 dataloader = tdata.DataLoader(dataset, batch_size=BATCH_SIZE//CHUNK_SIZE, shuffle=False, num_workers=0, pin_memory=True, drop_last=True)
+
+def evaluate_data_quality(dataset):
+  import chess
+  from chess import engine as chess_engine
+  engine = chess_engine.SimpleEngine.popen_uci('/usr/games/stockfish')
+  chunk = next(iter(dataset))
+  correct, mse = 0, 0
+  for i in range(100):
+    x, y, turn, piece_counts = chunk
+    x, y, turn, piece_counts = x[i], y[i], turn[i], piece_counts[i]
+    assert x.shape == (kMaxNumOnesInInput,)
+    assert y.shape == (3,)
+    assert turn.shape == (1,)
+    assert piece_counts.shape == (10,)
+    board = x2board(x, turn)
+    lines = engine.analyse(board, chess_engine.Limit(depth=7), multipv=1)
+    wdl = lines[0]['score'].white().wdl()
+    wdl = np.array([wdl.wins, wdl.draws, wdl.losses], dtype=np.int32)
+    if y.argmax() == wdl.argmax():
+      correct += 1
+    mse += (((y.astype(np.float32) / 1000.0) - (wdl.astype(np.float32) / wdl.sum())) ** 2).mean()
+  incorrect = 100 - correct
+  print(f"Data quality: Accuracy: {correct}%, MSE: {mse / 100:.6f}")
+
+evaluate_data_quality(dataset)
 
 print("Creating model...")
  # [512, 128]
-model = NNUE(input_size=kMaxNumOnesInInput, hidden_sizes=[1024, 128], output_size=16).to(device)
+# model = NNUE(input_size=kMaxNumOnesInInput, hidden_sizes=[16], output_size=16).to(device)
+model = PST().to(device)
 
 print("Creating optimizer...")
-opt = torch.optim.AdamW([model.emb.piece], lr=0.0, weight_decay=0.1)
+opt = torch.optim.AdamW(model.parameters(), lr=0.0, weight_decay=0.1)
 
 earliness_weights = torch.tensor([
   # p    n    b    r    q
   0.0, 1.0, 1.0, 1.0, 3.0,
   0.0, 1.0, 1.0, 1.0, 3.0,
 ]).to(device) / 18.0
+
+def wdl2score(win_mover_perspective, draw_mover_perspective, lose_mover_perspective):
+  return win_mover_perspective + draw_mover_perspective * 0.5
+
+def loss1(x, piece_counts, output, win_mover_perspective, draw_mover_perspective, lose_mover_perspective):
+  """
+  Very simple loss that just interpolates between early and late game based centipawns.
+  """
+  earliness = piece_counts.float().matmul(earliness_weights).unsqueeze(1)  # Shape: (batch_size, 1)
+  output = torch.sigmoid(output[:,0] * earliness + output[:,1] * (1.0 - earliness))
+  label = wdl2score(win_mover_perspective, draw_mover_perspective, lose_mover_perspective)
+  loss = nn.functional.mse_loss(output, label, reduction='mean')
+  return loss, output
+
+def loss2(x, piece_counts, output, win_mover_perspective, draw_mover_perspective, lose_mover_perspective):
+  """
+  Expects model to output 6 values: early win, early draw, early loss, late win, late draw, late loss.
+  Applies softmax to each of early and late, then combines them based on earliness.
+  Computes negative log likelihood loss.
+  """
+  earliness = piece_counts.float().matmul(earliness_weights).unsqueeze(1)  # Shape: (batch_size, 1)
+  columns = torch.cat([
+    earliness,
+    (1.0 - earliness),
+  ], 1)
+
+  output = output[:,:6].reshape((output.shape[0], 2, 3))
+  output = (nn.functional.softmax(output, dim=2) * columns.unsqueeze(2)).sum(1)  # Shape: (batch_size, 3) (win, draw, loss)
+  
+  log_likelihood = win_mover_perspective * torch.log(output[:,0])
+  log_likelihood += draw_mover_perspective * torch.log(output[:,1])
+  log_likelihood += lose_mover_perspective * torch.log(output[:,2])
+
+  return -log_likelihood.mean(), output[:,0] + output[:,1] * 0.5
+
 
 metrics = defaultdict(list)
 print("Starting training...")
@@ -158,33 +130,40 @@ for epoch in range(NUM_EPOCHS):
     draw_mover_perspective = y_white_perspective[:,1:2]
     lose_mover_perspective = y_white_perspective[:,2:3] * (turn == 1).float() + y_white_perspective[:,0:1] * (turn == -1).float()
 
-    earliness = piece_counts.float().matmul(earliness_weights).unsqueeze(1)  # Shape: (batch_size, 1)
+    if epoch == 0:
+      if batch_idx == 0:
+        for i in range(10):
+          board = x2board(x[i].cpu().numpy(), turn[i].item())
+          print(f"Sample {i}:\n{board.fen()} | Win: {win_mover_perspective[i].item():.3f}, Draw: {draw_mover_perspective[i].item():.3f}, Loss: {lose_mover_perspective[i].item():.3f}\n")
+      if batch_idx in [10, 11, 12]:
+        print((model.pst**2).mean().item())
 
-    columns = torch.cat([
-      earliness,
-      (1.0 - earliness),
-    ], 1)
+    # output = model(x, turn)
+    # penalty = (output ** 2).mean() * 0.0
+    # loss, yhat = loss2(x, piece_counts, output, win_mover_perspective, draw_mover_perspective, lose_mover_perspective)
+    # pwin = win_mover_perspective + draw_mover_perspective * 0.5
+    # mse = ((yhat - pwin) ** 2).mean().item()
+    # baseline = ((pwin - 0.5) ** 2).mean().item()
 
-    output = model(x, (turn + 1) // 2)
-    output = output[:,:6].reshape((output.shape[0], 2, 3))
+    output = model(x, turn)
+    penalty = (output[:,0:6] ** 2).mean() * 0.01
+    label = wdl2score(win_mover_perspective, draw_mover_perspective, lose_mover_perspective)
+    assert output.shape == label.shape
+    loss = nn.functional.mse_loss(
+      torch.sigmoid(output),
+      label,
+      reduction='mean',
+    )
+    mse = loss.item()
+    baseline = ((label - 0.5) ** 2).mean().item()
 
-    penalty = (output ** 2).mean()
-
-    output = (nn.functional.softmax(output, dim=2) * columns.unsqueeze(2)).sum(1)  # Shape: (batch_size, 3) (win, draw, loss)
-    yhat = output[:,0:1] + output[:,1:2] * 0.5
-
-    label = win_mover_perspective + draw_mover_perspective * 0.5
-
-    # TODO: for some reason my network is learning negative scores.
-    # TODO: try predicting wdl instead of score.
-
-    loss = nn.functional.mse_loss(yhat, label, reduction='mean')
     (loss + penalty).backward()
     opt.step()
     metrics["loss"].append(loss.item())
     metrics["penalty"].append(penalty.item())
+    metrics["mse"].append(mse / baseline)
     if batch_idx % 500 == 0:
-      print(f"loss: {np.mean(metrics['loss'][-100:]):.4f}, penalty: {np.mean(metrics['penalty'][-100:]):.4f}")
+      print(f"loss: {np.mean(metrics['loss'][-100:]):.4f}, penalty: {np.mean(metrics['penalty'][-100:]):.4f}, mse: {np.mean(metrics['mse'][-100:]):.4f}")
 
 def save_tensor(tensor: torch.Tensor, name: str, out: io.BufferedWriter):
   tensor = tensor.cpu().detach().numpy()
@@ -203,19 +182,19 @@ with open('model.bin', 'wb') as f:
   save_tensor(model.mlp[2].weight, 'linear1.weight', f)
   save_tensor(model.mlp[2].bias, 'linear1.bias', f)
 
-plt.figure(figsize=(10,10))
-yhat = yhat.squeeze().cpu().detach().numpy()
-label = label.squeeze().cpu().detach().numpy()
-I = np.argsort(yhat)
-yhat, label = yhat[I], label[I]
-plt.scatter(yhat, label, alpha=0.1)
-plt.scatter(np.convolve(yhat, np.ones(100)/100, mode='valid'), np.convolve(label, np.ones(100)/100, mode='valid'), color='red', label='moving average')
-plt.savefig('nnue-scatter.png')
+# plt.figure(figsize=(10,10))
+# yhat = yhat.squeeze().cpu().detach().numpy()
+# label = label.squeeze().cpu().detach().numpy()
+# I = np.argsort(yhat)
+# yhat, label = yhat[I], label[I]
+# plt.scatter(yhat, label, alpha=0.1)
+# plt.scatter(np.convolve(yhat, np.ones(100)/100, mode='valid'), np.convolve(label, np.ones(100)/100, mode='valid'), color='red', label='moving average')
+# plt.savefig('nnue-scatter.png')
 
-plt.figure(figsize=(10,10))
-plt.plot(np.convolve(metrics['loss'][500:], np.ones(100)/100, mode='valid'), label='loss')
-plt.legend()
-plt.savefig('nnue-loss.png')
+# plt.figure(figsize=(10,10))
+# plt.plot(np.convolve(metrics['loss'][500:], np.ones(100)/100, mode='valid'), label='loss')
+# plt.legend()
+# plt.savefig('nnue-loss.png')
 
 
 board = chess.Board()
@@ -229,10 +208,24 @@ for move in moves:
   board.pop()
 
 output = model(torch.cat(X, dim=0), torch.tensor(T, device=device).unsqueeze(1))
+output = output[:,:6].reshape((output.shape[0], 2, 3))
+output = (nn.functional.softmax(output, dim=2) * torch.tensor([1.0, 0.0], device=device).reshape(1, 2, 1)).sum(1)
+output = output[:,0] + output[:,1] * 0.5
 
-I = output[:,0].cpu().detach().numpy().argsort()[::-1]
+I = output.cpu().detach().numpy().argsort()[::-1]
 for i in I:
   move = moves[i]
-  score = output[i,0].item()
+  score = output[i].item()
   print(f"{board.san(move):6s} {score: .4f}")
+
+white_winning = 'rnbqkbnr/pppppppp/8/8/2BPPB2/2N2N2/PPP2PPP/R2Q1RK1 w Qkq - 0 1'
+board = chess.Board(white_winning)
+output = model(
+  torch.tensor(board2x(board)).unsqueeze(0).to(device),
+  torch.tensor([1], device=device).unsqueeze(0),
+)
+output = output[:,:6].reshape((output.shape[0], 2, 3))
+output = (nn.functional.softmax(output, dim=2) * torch.tensor([1.0, 0.0], device=device).reshape(1, 2, 1)).sum(1)
+output = output[:,0] + output[:,1] * 0.5
+print(f"White winning position score: {output[0].item():.4f}")
 
