@@ -64,7 +64,7 @@ evaluate_data_quality(dataset)
 
 print("Creating model...")
  # [512, 128]
-model = NNUE(input_size=kMaxNumOnesInInput, hidden_sizes=[128, 32], output_size=16).to(device)
+model = NNUE(input_size=kMaxNumOnesInInput, hidden_sizes=[512, 64], output_size=16).to(device)
 
 print("Creating optimizer...")
 opt = torch.optim.AdamW(model.parameters(), lr=0.0, weight_decay=0.1)
@@ -80,7 +80,7 @@ def wdl2score(win_mover_perspective, draw_mover_perspective, lose_mover_perspect
 
 metrics = defaultdict(list)
 print("Starting training...")
-NUM_EPOCHS = 5
+NUM_EPOCHS = 3
 for epoch in range(NUM_EPOCHS):
   for batch_idx, batch in tqdm(enumerate(dataloader), total=len(dataloader)):
     opt.zero_grad()
