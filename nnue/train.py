@@ -12,6 +12,7 @@ from sharded_matrix import ShardedLoader
 from ShardedMatricesIterableDataset import ShardedMatricesIterableDataset
 from features import board2x, x2board, kMaxNumOnesInInput
 from accumulator import Emb
+from nnue_model import NNUE
 
 # We load data in chunks, rather than 1 row at a time, as it is much faster. It doesn't matter
 # much for non-trivial networks though.
@@ -63,8 +64,7 @@ evaluate_data_quality(dataset)
 
 print("Creating model...")
  # [512, 128]
-# model = NNUE(input_size=kMaxNumOnesInInput, hidden_sizes=[16], output_size=16).to(device)
-model = PST().to(device)
+model = NNUE(input_size=kMaxNumOnesInInput, hidden_sizes=[128, 32], output_size=16).to(device)
 
 print("Creating optimizer...")
 opt = torch.optim.AdamW(model.parameters(), lr=0.0, weight_decay=0.1)
@@ -78,38 +78,6 @@ earliness_weights = torch.tensor([
 def wdl2score(win_mover_perspective, draw_mover_perspective, lose_mover_perspective):
   return win_mover_perspective + draw_mover_perspective * 0.5
 
-def loss1(x, piece_counts, output, win_mover_perspective, draw_mover_perspective, lose_mover_perspective):
-  """
-  Very simple loss that just interpolates between early and late game based centipawns.
-  """
-  earliness = piece_counts.float().matmul(earliness_weights).unsqueeze(1)  # Shape: (batch_size, 1)
-  output = torch.sigmoid(output[:,0] * earliness + output[:,1] * (1.0 - earliness))
-  label = wdl2score(win_mover_perspective, draw_mover_perspective, lose_mover_perspective)
-  loss = nn.functional.mse_loss(output, label, reduction='mean')
-  return loss, output
-
-def loss2(x, piece_counts, output, win_mover_perspective, draw_mover_perspective, lose_mover_perspective):
-  """
-  Expects model to output 6 values: early win, early draw, early loss, late win, late draw, late loss.
-  Applies softmax to each of early and late, then combines them based on earliness.
-  Computes negative log likelihood loss.
-  """
-  earliness = piece_counts.float().matmul(earliness_weights).unsqueeze(1)  # Shape: (batch_size, 1)
-  columns = torch.cat([
-    earliness,
-    (1.0 - earliness),
-  ], 1)
-
-  output = output[:,:6].reshape((output.shape[0], 2, 3))
-  output = (nn.functional.softmax(output, dim=2) * columns.unsqueeze(2)).sum(1)  # Shape: (batch_size, 3) (win, draw, loss)
-  
-  log_likelihood = win_mover_perspective * torch.log(output[:,0])
-  log_likelihood += draw_mover_perspective * torch.log(output[:,1])
-  log_likelihood += lose_mover_perspective * torch.log(output[:,2])
-
-  return -log_likelihood.mean(), output[:,0] + output[:,1] * 0.5
-
-
 metrics = defaultdict(list)
 print("Starting training...")
 NUM_EPOCHS = 5
@@ -117,7 +85,7 @@ for epoch in range(NUM_EPOCHS):
   for batch_idx, batch in tqdm(enumerate(dataloader), total=len(dataloader)):
     opt.zero_grad()
 
-    if batch_idx == 10:
+    if batch_idx == 0:
       for pg in opt.param_groups:
         pg['lr'] = np.linspace(3e-3, 3e-5, NUM_EPOCHS)[epoch]
     
@@ -130,40 +98,21 @@ for epoch in range(NUM_EPOCHS):
     draw_mover_perspective = y_white_perspective[:,1:2]
     lose_mover_perspective = y_white_perspective[:,2:3] * (turn == 1).float() + y_white_perspective[:,0:1] * (turn == -1).float()
 
-    if epoch == 0:
-      if batch_idx == 0:
-        for i in range(10):
-          board = x2board(x[i].cpu().numpy(), turn[i].item())
-          print(f"Sample {i}:\n{board.fen()} | Win: {win_mover_perspective[i].item():.3f}, Draw: {draw_mover_perspective[i].item():.3f}, Loss: {lose_mover_perspective[i].item():.3f}\n")
-      if batch_idx in [10, 11, 12]:
-        print((model.pst**2).mean().item())
-
-    # output = model(x, turn)
-    # penalty = (output ** 2).mean() * 0.0
-    # loss, yhat = loss2(x, piece_counts, output, win_mover_perspective, draw_mover_perspective, lose_mover_perspective)
-    # pwin = win_mover_perspective + draw_mover_perspective * 0.5
-    # mse = ((yhat - pwin) ** 2).mean().item()
-    # baseline = ((pwin - 0.5) ** 2).mean().item()
-
-    output = model(x, turn)
-    penalty = (output[:,0:6] ** 2).mean() * 0.01
+    output = torch.sigmoid(model(x, turn))[:,0:1]
     label = wdl2score(win_mover_perspective, draw_mover_perspective, lose_mover_perspective)
     assert output.shape == label.shape
     loss = nn.functional.mse_loss(
-      torch.sigmoid(output),
-      label,
-      reduction='mean',
+      output, label, reduction='mean',
     )
     mse = loss.item()
     baseline = ((label - 0.5) ** 2).mean().item()
 
-    (loss + penalty).backward()
+    loss.backward()
     opt.step()
     metrics["loss"].append(loss.item())
-    metrics["penalty"].append(penalty.item())
     metrics["mse"].append(mse / baseline)
     if batch_idx % 500 == 0:
-      print(f"loss: {np.mean(metrics['loss'][-100:]):.4f}, penalty: {np.mean(metrics['penalty'][-100:]):.4f}, mse: {np.mean(metrics['mse'][-100:]):.4f}")
+      print(f"loss: {np.mean(metrics['loss'][-100:]):.4f}, mse: {np.mean(metrics['mse'][-100:]):.4f}")
 
 def save_tensor(tensor: torch.Tensor, name: str, out: io.BufferedWriter):
   tensor = tensor.cpu().detach().numpy()
@@ -182,19 +131,19 @@ with open('model.bin', 'wb') as f:
   save_tensor(model.mlp[2].weight, 'linear1.weight', f)
   save_tensor(model.mlp[2].bias, 'linear1.bias', f)
 
-# plt.figure(figsize=(10,10))
-# yhat = yhat.squeeze().cpu().detach().numpy()
-# label = label.squeeze().cpu().detach().numpy()
-# I = np.argsort(yhat)
-# yhat, label = yhat[I], label[I]
-# plt.scatter(yhat, label, alpha=0.1)
-# plt.scatter(np.convolve(yhat, np.ones(100)/100, mode='valid'), np.convolve(label, np.ones(100)/100, mode='valid'), color='red', label='moving average')
-# plt.savefig('nnue-scatter.png')
+plt.figure(figsize=(10,10))
+yhat = yhat.squeeze().cpu().detach().numpy()
+label = label.squeeze().cpu().detach().numpy()
+I = np.argsort(yhat)
+yhat, label = yhat[I], label[I]
+plt.scatter(yhat, label, alpha=0.1)
+plt.scatter(np.convolve(yhat, np.ones(100)/100, mode='valid'), np.convolve(label, np.ones(100)/100, mode='valid'), color='red', label='moving average')
+plt.savefig('nnue-scatter.png')
 
-# plt.figure(figsize=(10,10))
-# plt.plot(np.convolve(metrics['loss'][500:], np.ones(100)/100, mode='valid'), label='loss')
-# plt.legend()
-# plt.savefig('nnue-loss.png')
+plt.figure(figsize=(10,10))
+plt.plot(np.convolve(metrics['loss'][500:], np.ones(100)/100, mode='valid'), label='loss')
+plt.legend()
+plt.savefig('nnue-loss.png')
 
 
 board = chess.Board()
@@ -207,10 +156,8 @@ for move in moves:
   T.append(-1)
   board.pop()
 
-output = model(torch.cat(X, dim=0), torch.tensor(T, device=device).unsqueeze(1))
-output = output[:,:6].reshape((output.shape[0], 2, 3))
-output = (nn.functional.softmax(output, dim=2) * torch.tensor([1.0, 0.0], device=device).reshape(1, 2, 1)).sum(1)
-output = output[:,0] + output[:,1] * 0.5
+# Flip bc these are all from black's perspective
+output = -model(torch.cat(X, dim=0), torch.tensor(T, device=device).unsqueeze(1))[:,0]
 
 I = output.cpu().detach().numpy().argsort()[::-1]
 for i in I:
@@ -223,9 +170,6 @@ board = chess.Board(white_winning)
 output = model(
   torch.tensor(board2x(board)).unsqueeze(0).to(device),
   torch.tensor([1], device=device).unsqueeze(0),
-)
-output = output[:,:6].reshape((output.shape[0], 2, 3))
-output = (nn.functional.softmax(output, dim=2) * torch.tensor([1.0, 0.0], device=device).reshape(1, 2, 1)).sum(1)
-output = output[:,0] + output[:,1] * 0.5
+)[:,0]
 print(f"White winning position score: {output[0].item():.4f}")
 

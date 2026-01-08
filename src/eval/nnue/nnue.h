@@ -36,8 +36,8 @@ double randn(double stddev = 1.0) {
 
 
 constexpr int SCALE_SHIFT = 6;
-constexpr int EMBEDDING_DIM = 1024;
-constexpr int HIDDEN1_DIM = 128;
+constexpr int EMBEDDING_DIM = 128;
+constexpr int HIDDEN1_DIM = 32;
 constexpr int OUTPUT_DIM = 16;
 
 constexpr int MAX_NUM_ONES_IN_INPUT = 32 + 4;
