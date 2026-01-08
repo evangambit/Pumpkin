@@ -126,6 +126,7 @@ class GoTask : public Task {
     command.pop_front();
 
     GoCommand goCommand = make_go_command(&command, &state->position);
+    goCommand.timeLimitMs = 500;
 
     this->baseThreadState = std::make_shared<Thread>(
       /* thread id=*/ 0,

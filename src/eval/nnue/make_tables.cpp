@@ -8,9 +8,9 @@
 
 #include <thread>
 
-// sqlite3 data/de6-md2/db.sqlite3 'select * from positions' > /tmp/out.txt
-// shuf /tmp/out.txt > /tmp/out.shuf.txt
-// ./make_tables /tmp/out.shuf.txt data/de6-md2/tables
+// sqlite3 data/de7-md4/db.sqlite3 'select * from positions' > data/de7-md4/pos.txt
+// shuf data/de7-md4/pos.txt > data/de7-md4/pos.shuf.txt
+// ./make_tables data/de7-md4/pos.shuf.txt data/de7-md4/tables
 
 using namespace ChessEngine;
 using WriterF32 = ShardedMatrix::Writer<float>;

@@ -98,9 +98,9 @@ class SetEvaluatorTask : public Task {
     if (evaluatorName == "simple") {
       state->evaluator = std::make_shared<SimpleEvaluator>();
       std::cout << "Evaluator set to simple." << std::endl;
-    } else if (evaluatorName == "psq") {
+    } else if (evaluatorName == "pst") {
       state->evaluator = std::make_shared<PieceSquareEvaluator>();
-      std::cout << "Evaluator set to simple." << std::endl;
+      std::cout << "Evaluator set to pst." << std::endl;
     } else if (evaluatorName == "nnue") {
       NNUE::Nnue *nnue_model = new NNUE::Nnue();
       std::ifstream f("model.bin", std::ios::binary);
