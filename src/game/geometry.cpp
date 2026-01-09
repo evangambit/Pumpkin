@@ -214,6 +214,14 @@ UnsafeSquare string_to_square(const std::string& string) {
   return sq;
 }
 
+SafeSquare string_to_safe_square(const std::string& string) {
+  UnsafeSquare sq = string_to_square(string);
+  if (sq == UnsafeSquare::UNO_SQUARE) {
+    throw std::runtime_error("Not a safe square");
+  }
+  return SafeSquare(sq);
+}
+
 std::string square_to_string(UnsafeSquare sq) {
   if (sq == UnsafeSquare::UNO_SQUARE) {
     return "-";

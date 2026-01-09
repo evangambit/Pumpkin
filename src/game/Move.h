@@ -25,6 +25,8 @@ struct Move {
   bool operator==(const Move& a) const {
     return from == a.from && to == a.to && promotion == a.promotion && moveType == a.moveType;
   }
+
+  static Move fromUci(const std::string& uci);
 };
 
 struct ExtMove {

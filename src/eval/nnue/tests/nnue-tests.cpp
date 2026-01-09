@@ -5,6 +5,7 @@
 #include <sstream>
 
 #include "../nnue.h"
+#include "../NnueEvaluator.h"
 #include "../../../game/Position.h"
 #include "../../../game/movegen/movegen.h"
 
@@ -487,4 +488,38 @@ TEST_F(NNUETest, AccumulatorStateAfterCompute) {
   
   EXPECT_TRUE((nnue.whiteAcc - white_acc_copy).isZero());
   EXPECT_TRUE((nnue.blackAcc - black_acc_copy).isZero());
+}
+
+TEST_F(NNUETest, AccumulatorIncrementallyUpdated) {
+    std::shared_ptr<Nnue> nnue = std::make_shared<Nnue>();
+    nnue->randn_();
+    std::shared_ptr<NnueEvaluator> evaluator = std::make_shared<NnueEvaluator>(nnue);
+    
+    Position pos("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+    pos.set_listener(evaluator);
+
+    std::vector<int16_t> initial_input(nnue->x, nnue->x + INPUT_DIM);
+    
+    make_move<Color::WHITE>(&pos, Move::fromUci("e2e4"));
+
+    std::vector<int16_t> after_e4_input(nnue->x, nnue->x + INPUT_DIM);
+
+    make_move<Color::BLACK>(&pos, Move::fromUci("e7e5"));
+
+    std::vector<int16_t> after_e5_input(nnue->x, nnue->x + INPUT_DIM);
+
+    undo<Color::BLACK>(&pos);
+
+    std::vector<int16_t> after_undo_e5_input(nnue->x, nnue->x + INPUT_DIM);
+
+    undo<Color::WHITE>(&pos);
+
+    std::vector<int16_t> after_undo_e4_input(nnue->x, nnue->x + INPUT_DIM);
+
+    EXPECT_EQ(initial_input, after_undo_e4_input);
+    EXPECT_NE(initial_input, after_e4_input);
+    EXPECT_NE(initial_input, after_e5_input);
+
+    EXPECT_EQ(after_e4_input, after_undo_e5_input);
+    EXPECT_NE(after_e4_input, after_e5_input);
 }
