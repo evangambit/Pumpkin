@@ -226,6 +226,8 @@ void assert_valid_location(Location loc);
 
 UnsafeSquare string_to_square(const std::string& string);
 
+SafeSquare string_to_safe_square(const std::string& string);
+
 std::string square_to_string(UnsafeSquare sq);
 
 std::string square_to_string(SafeSquare sq);
