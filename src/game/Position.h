@@ -62,6 +62,22 @@ class Position {
   };
   Position(const std::string& fen);
 
+  // Copy constructor.
+  // We do not copy the board listener; instead we create a dummy listener
+  // and set it after copying the position.
+  Position(const Position& other)
+  : tiles_(other.tiles_),
+    pieceBitboards_(other.pieceBitboards_),
+    colorBitboards_(other.colorBitboards_),
+    states_(other.states_),
+    history_(other.history_),
+    currentState_(other.currentState_),
+    boardListener_(std::make_shared<DummyBoardListener>()),
+    wholeMoveCounter_(other.wholeMoveCounter_),
+    turn_(other.turn_) {
+      this->set_listener(this->boardListener_);
+    }
+
   static Position init();
 
   std::string fen() const;

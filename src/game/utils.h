@@ -247,6 +247,8 @@ std::string piece_to_string(Piece piece);
 
 std::string colored_piece_to_string(ColoredPiece cp);
 
+std::string colored_piece_to_string(SafeColoredPiece cp);
+
 }  // namespace ChessEngine
 
 #endif  // UTILS_H

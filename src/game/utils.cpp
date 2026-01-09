@@ -204,4 +204,8 @@ std::string colored_piece_to_string(ColoredPiece cp) {
   }
 }
 
+std::string colored_piece_to_string(SafeColoredPiece cp) {
+  return colored_piece_to_string(to_colored_piece(cp));
+}
+
 }  // namespace ChessEngine

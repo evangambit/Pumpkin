@@ -14,29 +14,6 @@ from features import board2x, x2board, kMaxNumOnesInInput
 from accumulator import Emb
 from nnue_model import NNUE
 
-# We load data in chunks, rather than 1 row at a time, as it is much faster. It doesn't matter
-# much for non-trivial networks though.
-BATCH_SIZE = 2048
-CHUNK_SIZE = 128
-assert BATCH_SIZE % CHUNK_SIZE == 0
-
-device = torch.cuda.current_device()
-
-print("Loading dataset...")
-# dataset_name = 'de6-md2'  # Accuracy: 78%, MSE: 0.077179
-dataset_name = 'de7-md4'  # Data quality: Accuracy: 92%, MSE: 0.037526
-dataset = ShardedMatricesIterableDataset(
-  f'data/{dataset_name}/tables-nnue',
-  f'data/{dataset_name}/tables-eval',
-  f'data/{dataset_name}/tables-turn',
-  f'data/{dataset_name}/tables-piece-counts',
-  chunk_size=CHUNK_SIZE,
-)
-
-print(f'Dataset loaded with {len(dataset) * CHUNK_SIZE} rows.')
-
-dataloader = tdata.DataLoader(dataset, batch_size=BATCH_SIZE//CHUNK_SIZE, shuffle=False, num_workers=0, pin_memory=True, drop_last=True)
-
 def evaluate_data_quality(dataset):
   import chess
   from chess import engine as chess_engine
@@ -60,14 +37,76 @@ def evaluate_data_quality(dataset):
   incorrect = 100 - correct
   print(f"Data quality: Accuracy: {correct}%, MSE: {mse / 100:.6f}")
 
+# Cosine learning rate scheduler with warmup
+class CosineAnnealingWithWarmup:
+  def __init__(self, optimizer, max_lr=3e-3, min_lr=1e-5, warmup_steps=100, total_steps=None):
+    self.optimizer = optimizer
+    self.max_lr = max_lr
+    self.min_lr = min_lr
+    self.warmup_steps = warmup_steps
+    self.total_steps = total_steps
+    self.current_step = 0
+
+  def step(self):
+    if self.current_step < self.warmup_steps:
+      # Linear warmup phase
+      lr = self.min_lr + (self.max_lr - self.min_lr) * (self.current_step / self.warmup_steps)
+    else:
+      # Cosine annealing phase
+      progress = (self.current_step - self.warmup_steps) / (self.total_steps - self.warmup_steps)
+      lr = self.min_lr + (self.max_lr - self.min_lr) * 0.5 * (1 + np.cos(np.pi * progress))
+    
+    for pg in self.optimizer.param_groups:
+      pg['lr'] = lr
+    
+    self.current_step += 1
+
+
+# We load data in chunks, rather than 1 row at a time, as it is much faster. It doesn't matter
+# much for non-trivial networks though.
+BATCH_SIZE = 2048
+CHUNK_SIZE = 128
+assert BATCH_SIZE % CHUNK_SIZE == 0
+
+device = torch.cuda.current_device()
+
+print("Loading dataset...")
+# dataset_name = 'de6-md2'  # Accuracy: 78%, MSE: 0.077179
+dataset_name = 'de7-md4'  # Data quality: Accuracy: 92%, MSE: 0.037526
+dataset = ShardedMatricesIterableDataset(
+  f'data/{dataset_name}/tables-nnue',
+  f'data/{dataset_name}/tables-eval',
+  f'data/{dataset_name}/tables-turn',
+  f'data/{dataset_name}/tables-piece-counts',
+  chunk_size=CHUNK_SIZE,
+)
 evaluate_data_quality(dataset)
+
+
+print(f'Dataset loaded with {len(dataset) * CHUNK_SIZE} rows.')
+
+dataloader = tdata.DataLoader(dataset, batch_size=BATCH_SIZE//CHUNK_SIZE, shuffle=False, num_workers=0, pin_memory=True, drop_last=True)
 
 print("Creating model...")
  # [512, 128]
-model = NNUE(input_size=kMaxNumOnesInInput, hidden_sizes=[512, 64], output_size=16).to(device)
+model = NNUE(input_size=kMaxNumOnesInInput, hidden_sizes=[1024, 256, 64], output_size=16).to(device)
 
 print("Creating optimizer...")
 opt = torch.optim.AdamW(model.parameters(), lr=0.0, weight_decay=0.1)
+
+# Calculate total steps
+NUM_EPOCHS = 1
+steps_per_epoch = len(dataloader)
+total_steps = NUM_EPOCHS * steps_per_epoch
+warmup_steps = 250  # 10% of first epoch for warmup
+
+scheduler = CosineAnnealingWithWarmup(
+  opt,
+  max_lr=3e-3,
+  min_lr=1e-5,
+  warmup_steps=warmup_steps,
+  total_steps=total_steps
+)
 
 earliness_weights = torch.tensor([
   # p    n    b    r    q
@@ -80,14 +119,12 @@ def wdl2score(win_mover_perspective, draw_mover_perspective, lose_mover_perspect
 
 metrics = defaultdict(list)
 print("Starting training...")
-NUM_EPOCHS = 3
 for epoch in range(NUM_EPOCHS):
   for batch_idx, batch in tqdm(enumerate(dataloader), total=len(dataloader)):
     opt.zero_grad()
-
-    if batch_idx == 0:
-      for pg in opt.param_groups:
-        pg['lr'] = np.linspace(3e-3, 3e-5, NUM_EPOCHS)[epoch]
+    
+    # Update learning rate
+    scheduler.step()
     
     batch = [v.reshape((BATCH_SIZE,) + v.shape[2:]).to(device) for v in batch]
 
@@ -98,7 +135,8 @@ for epoch in range(NUM_EPOCHS):
     draw_mover_perspective = y_white_perspective[:,1:2]
     lose_mover_perspective = y_white_perspective[:,2:3] * (turn == 1).float() + y_white_perspective[:,0:1] * (turn == -1).float()
 
-    output = torch.sigmoid(model(x, turn))[:,0:1]
+    output, penalty = model(x, turn)
+    output = torch.sigmoid(output)[:,0:1]
     label = wdl2score(win_mover_perspective, draw_mover_perspective, lose_mover_perspective)
     assert output.shape == label.shape
     loss = nn.functional.mse_loss(
@@ -107,12 +145,13 @@ for epoch in range(NUM_EPOCHS):
     mse = loss.item()
     baseline = ((label - 0.5) ** 2).mean().item()
 
-    loss.backward()
+    (loss + penalty * 0.02).backward()
     opt.step()
     metrics["loss"].append(loss.item())
     metrics["mse"].append(mse / baseline)
+    metrics["penalty"].append(penalty.item())
     if batch_idx % 500 == 0:
-      print(f"loss: {np.mean(metrics['loss'][-100:]):.4f}, mse: {np.mean(metrics['mse'][-100:]):.4f}")
+      print(f"loss: {np.mean(metrics['loss'][-100:]):.4f}, mse: {np.mean(metrics['mse'][-100:]):.4f}, penalty: {np.mean(metrics['penalty'][-100:]):.4f}")
 
 def save_tensor(tensor: torch.Tensor, name: str, out: io.BufferedWriter):
   tensor = tensor.cpu().detach().numpy()
@@ -130,14 +169,16 @@ with open('model.bin', 'wb') as f:
   save_tensor(model.mlp[0].bias, 'linear0.bias', f)
   save_tensor(model.mlp[2].weight, 'linear1.weight', f)
   save_tensor(model.mlp[2].bias, 'linear1.bias', f)
+  save_tensor(model.mlp[4].weight, 'linear2.weight', f)
+  save_tensor(model.mlp[4].bias, 'linear2.bias', f)
 
 plt.figure(figsize=(10,10))
-yhat = yhat.squeeze().cpu().detach().numpy()
+output = output.squeeze().cpu().detach().numpy()
 label = label.squeeze().cpu().detach().numpy()
-I = np.argsort(yhat)
-yhat, label = yhat[I], label[I]
-plt.scatter(yhat, label, alpha=0.1)
-plt.scatter(np.convolve(yhat, np.ones(100)/100, mode='valid'), np.convolve(label, np.ones(100)/100, mode='valid'), color='red', label='moving average')
+I = np.argsort(output)
+output, label = output[I], label[I]
+plt.scatter(output, label, alpha=0.1)
+plt.scatter(np.convolve(output, np.ones(100)/100, mode='valid'), np.convolve(label, np.ones(100)/100, mode='valid'), color='red', label='moving average')
 plt.savefig('nnue-scatter.png')
 
 plt.figure(figsize=(10,10))
@@ -157,7 +198,7 @@ for move in moves:
   board.pop()
 
 # Flip bc these are all from black's perspective
-output = -model(torch.cat(X, dim=0), torch.tensor(T, device=device).unsqueeze(1))[:,0]
+output = -model(torch.cat(X, dim=0), torch.tensor(T, device=device).unsqueeze(1))[0][:,0]
 
 I = output.cpu().detach().numpy().argsort()[::-1]
 for i in I:
@@ -170,6 +211,6 @@ board = chess.Board(white_winning)
 output = model(
   torch.tensor(board2x(board)).unsqueeze(0).to(device),
   torch.tensor([1], device=device).unsqueeze(0),
-)[:,0]
+)[0][:,0]
 print(f"White winning position score: {output[0].item():.4f}")
 

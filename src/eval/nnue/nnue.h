@@ -36,8 +36,9 @@ double randn(double stddev = 1.0) {
 
 
 constexpr int SCALE_SHIFT = 6;
-constexpr int EMBEDDING_DIM = 512;
-constexpr int HIDDEN1_DIM = 64;
+constexpr int EMBEDDING_DIM = 1024;
+constexpr int HIDDEN1_DIM = 256;
+constexpr int HIDDEN2_DIM = 64;
 constexpr int OUTPUT_DIM = 16;
 
 constexpr int MAX_NUM_ONES_IN_INPUT = 32 + 4;
@@ -88,7 +89,11 @@ int16_t feature_index(ChessEngine::SafeColoredPiece piece, unsigned square) {
 }
 
 int16_t flip_feature_index(int16_t index) {
-  return index;  // TODO
+  // Flip the board position vertically (rank 8 <-> rank 1, etc.) and swap colors.
+  int16_t piece_type = (((index / 64) + 6) % 12) * 64;
+  int16_t square = index % 64;
+  int16_t flipped_square = (7 - (square / 8)) * 8 + (square % 8);
+  return piece_type + flipped_square;
 }
 
 Features pos2features(const struct ChessEngine::Position& pos) {
@@ -123,11 +128,15 @@ struct Nnue {
 
   Eigen::Matrix<int16_t, Eigen::Dynamic, HIDDEN1_DIM> layer1;
   Eigen::Matrix<int16_t, 1, HIDDEN1_DIM> bias1;
-  Eigen::Matrix<int16_t, 1, HIDDEN1_DIM> hidden1;
+  Eigen::Matrix<int32_t, 1, HIDDEN1_DIM> hidden1;
 
-  Eigen::Matrix<int16_t, HIDDEN1_DIM, OUTPUT_DIM> layer2;
-  Eigen::Matrix<int16_t, 1, OUTPUT_DIM> bias2;
-  Eigen::Matrix<int16_t, 1, OUTPUT_DIM> hidden2;
+  Eigen::Matrix<int16_t, HIDDEN1_DIM, HIDDEN2_DIM> layer2;
+  Eigen::Matrix<int16_t, 1, HIDDEN2_DIM> bias2;
+  Eigen::Matrix<int32_t, 1, HIDDEN2_DIM> hidden2;
+
+  Eigen::Matrix<int16_t, HIDDEN2_DIM, OUTPUT_DIM> layer3;
+  Eigen::Matrix<int16_t, 1, OUTPUT_DIM> bias3;
+  Eigen::Matrix<int16_t, 1, OUTPUT_DIM> output;
 
   Nnue() {
     std::fill_n(x, INPUT_DIM, false);
@@ -156,12 +165,15 @@ struct Nnue {
   void zero_() {
     whiteAcc.setZero();
     blackAcc.setZero();
-    layer1.setZero(2 * EMBEDDING_DIM, HIDDEN1_DIM);
+    layer1.setZero(EMBEDDING_DIM, HIDDEN1_DIM);
     bias1.setZero();
     hidden1.setZero();
     layer2.setZero();
     bias2.setZero();
     hidden2.setZero();
+    layer3.setZero();
+    bias3.setZero();
+    output.setZero();
   }
 
   void randn_() {
@@ -171,14 +183,24 @@ struct Nnue {
     for (size_t i = 0; i < INPUT_DIM; ++i) {
       embWeights[i].array() = Eigen::Array<int16_t, 1, EMBEDDING_DIM>::Zero().unaryExpr([](int16_t) { return int16_t(randn(std::sqrt(1.0 / MAX_NUM_ONES_IN_INPUT)) * (1 << SCALE_SHIFT)); });
     }
-    layer1.array() = Eigen::Array<int16_t, 2 * EMBEDDING_DIM, HIDDEN1_DIM>::Zero().unaryExpr([](int16_t) { return int16_t(randn(std::sqrt(1.0 / (2 * EMBEDDING_DIM))) * (1 << SCALE_SHIFT)); });
+    layer1.array() = Eigen::Array<int16_t, EMBEDDING_DIM, HIDDEN1_DIM>::Zero().unaryExpr([](int16_t) { return int16_t(randn(std::sqrt(1.0 / (EMBEDDING_DIM))) * (1 << SCALE_SHIFT)); });
     bias1.array() = Eigen::Array<int16_t, 1, HIDDEN1_DIM>::Zero().unaryExpr([](int16_t) { return int16_t(0); });
-    layer2.array() = Eigen::Array<int16_t, HIDDEN1_DIM, OUTPUT_DIM>::Zero().unaryExpr([](int16_t) { return int16_t(randn(std::sqrt(1.0 / HIDDEN1_DIM)) * (1 << SCALE_SHIFT)); });
-    bias2.array() = Eigen::Array<int16_t, 1, OUTPUT_DIM>::Zero().unaryExpr([](int16_t) { return int16_t(0); });
-    this->compute_acc_from_scratch();
+    layer2.array() = Eigen::Array<int16_t, HIDDEN1_DIM, HIDDEN2_DIM>::Zero().unaryExpr([](int16_t) { return int16_t(randn(std::sqrt(1.0 / HIDDEN1_DIM)) * (1 << SCALE_SHIFT)); });
+    bias2.array() = Eigen::Array<int16_t, 1, HIDDEN2_DIM>::Zero().unaryExpr([](int16_t) { return int16_t(0); });
+    layer3.array() = Eigen::Array<int16_t, HIDDEN2_DIM, OUTPUT_DIM>::Zero().unaryExpr([](int16_t) { return int16_t(randn(std::sqrt(1.0 / HIDDEN2_DIM)) * (1 << SCALE_SHIFT)); });
+    bias3.array() = Eigen::Array<int16_t, 1, OUTPUT_DIM>::Zero().unaryExpr([](int16_t) { return int16_t(0); });
   }
 
-  void compute_acc_from_scratch() {
+  void compute_acc_from_scratch(const ChessEngine::Position& pos) {
+    std::fill_n(x, INPUT_DIM, false);
+    whiteAcc.setZero();
+    blackAcc.setZero();
+    Features features = pos2features(pos);
+    for (size_t i = 0; i < features.length; ++i) {
+      size_t index = features[i];
+      x[index] = true;
+    }
+
     whiteAcc.setZero();
     blackAcc.setZero();
     for (size_t i = 0; i < INPUT_DIM; ++i) {
@@ -189,12 +211,6 @@ struct Nnue {
     }
   }
 
-// Saving tensor embedding (768, 1024)
-// Saving tensor linear0.weight (128, 2048)
-// Saving tensor linear0.bias (128,)
-// Saving tensor linear1.weight (16, 128)
-// Saving tensor linear1.bias (16,)
-
   static Eigen::Matrix<int16_t, Eigen::Dynamic, Eigen::Dynamic> load_matrix(std::istream& in) {
     char name[16];
     in.read(name, 16);
@@ -202,7 +218,6 @@ struct Nnue {
     nameStr.erase(std::find_if(nameStr.rbegin(), nameStr.rend(), [](unsigned char ch) {
         return !std::isspace(ch);
     }).base(), nameStr.end());
-    std::cout << "Loading matrix named: " << nameStr << std::endl;
 
     // Read matrix dimensions
     uint32_t degree;
@@ -217,7 +232,6 @@ struct Nnue {
     } else {
       throw std::runtime_error("Only 1D and 2D matrices are supported");
     }
-    std::cout << "Matrix dimensions: " << std::dec << rows << " x " << cols << std::endl;
 
     Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> mat(rows, cols);
     in.read(reinterpret_cast<char*>(mat.data()), sizeof(float) * rows * cols);
@@ -255,19 +269,51 @@ struct Nnue {
     bias1 = load_matrix(in);
     layer2 = load_matrix(in).transpose();
     bias2 = load_matrix(in);
+    layer3 = load_matrix(in).transpose();
+    bias3 = load_matrix(in);
+
+    // Verify that the entire file has been read
+    char dummy;
+    if (in.read(&dummy, 1) || !in.eof()) {
+      throw std::runtime_error("File not completely read");
+    }
   }
 
   int16_t *forward(ChessEngine::Color sideToMove) {
     if (sideToMove == ChessEngine::Color::WHITE) {
-      hidden1.noalias() = (whiteAcc * layer1.topRows<EMBEDDING_DIM>() +
-                           blackAcc * layer1.bottomRows<EMBEDDING_DIM>() + bias1);
+      hidden1.noalias() = whiteAcc.cast<int32_t>() * layer1.cast<int32_t>();
     } else {
-      hidden1.noalias() = (blackAcc * layer1.topRows<EMBEDDING_DIM>() +
-                           whiteAcc * layer1.bottomRows<EMBEDDING_DIM>() + bias1);
+      hidden1.noalias() = blackAcc.cast<int32_t>() * layer1.cast<int32_t>();
     }
-    hidden1.array() = hidden1.array().cwiseMax(0).cwiseMin(127);
-    hidden2.noalias() = (hidden1 * layer2 + bias2);
-    return hidden2.data();
+    hidden1 += bias1.cast<int32_t>();
+    
+    // Debug: Print whiteAcc and hidden1 values
+    
+    // Right-shift by SCALE_SHIFT to account for fixed-point, then clip to [0, 64]
+    hidden1.array() = (hidden1.array() / (1 << SCALE_SHIFT)).cwiseMax(0).cwiseMin(64);
+    
+    hidden2.noalias() = hidden1.cast<int32_t>() * layer2.cast<int32_t>();
+    hidden2 += bias2.cast<int32_t>();
+    
+    hidden2.array() = (hidden2.array() / (1 << SCALE_SHIFT)).cwiseMax(0).cwiseMin(64);
+    
+    output.noalias() = (hidden2 * layer3.cast<int32_t>() + bias3.cast<int32_t>()).cast<int16_t>();
+    
+    return output.data();
+  }
+
+  std::shared_ptr<Nnue> clone() const {
+    std::shared_ptr<Nnue> copy = std::make_shared<Nnue>();
+    for (size_t i = 0; i < INPUT_DIM; ++i) {
+      copy->embWeights[i] = this->embWeights[i];
+    }
+    copy->layer1 = this->layer1;
+    copy->bias1 = this->bias1;
+    copy->layer2 = this->layer2;
+    copy->bias2 = this->bias2;
+    copy->layer3 = this->layer3;
+    copy->bias3 = this->bias3;
+    return copy;
   }
 };
 

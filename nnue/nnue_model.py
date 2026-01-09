@@ -39,8 +39,12 @@ class NNUE(nn.Module):
   def forward(self, x, turn):
     # Turn is 1 for white to move, -1 for black to move
     z = self.embed(x, turn)
-    out = self.mlp(z)
-    return out
+    penalty = torch.abs(torch.abs(z) - 4.0).mean()
+    for layer in self.mlp:
+      z = layer(z)
+      if isinstance(layer, nn.Linear):
+        penalty += torch.abs(torch.abs(z) - 4.0).mean()
+    return z, penalty
 
 def test():
   model = NNUE(input_size=kMaxNumOnesInInput, hidden_sizes=[768], output_size=2)
@@ -88,13 +92,12 @@ def test():
     return ('w' if v < 384 else 'b', t[(v // 64) % 6], v % 64)
 
   t = 'pnbrqk'
-  print('xxx', [f(v) for v in list(set(x1) - set(x0))], [f(v) for v in list(set(x0) - set(x1))])
-  print('xxx', [f(v) for v in list(set(x2) - set(x0))], [f(v) for v in list(set(x0) - set(x2))])
-  print('xxx', [f(v) for v in list(set(x3) - set(x0))], [f(v) for v in list(set(x0) - set(x3))])
-  print('xxx', [f(v) for v in list(set(x4) - set(x0))], [f(v) for v in list(set(x0) - set(x4))])
-  print('xxx', [f(v) for v in list(set(x5) - set(x0))], [f(v) for v in list(set(x0) - set(x5))])
-  print('xxx', [f(v) for v in list(set(x6) - set(x0))], [f(v) for v in list(set(x0) - set(x6))])
-
+  # print('xxx', [f(v) for v in list(set(x1) - set(x0))], [f(v) for v in list(set(x0) - set(x1))])
+  # print('xxx', [f(v) for v in list(set(x2) - set(x0))], [f(v) for v in list(set(x0) - set(x2))])
+  # print('xxx', [f(v) for v in list(set(x3) - set(x0))], [f(v) for v in list(set(x0) - set(x3))])
+  # print('xxx', [f(v) for v in list(set(x4) - set(x0))], [f(v) for v in list(set(x0) - set(x4))])
+  # print('xxx', [f(v) for v in list(set(x5) - set(x0))], [f(v) for v in list(set(x0) - set(x5))])
+  # print('xxx', [f(v) for v in list(set(x6) - set(x0))], [f(v) for v in list(set(x0) - set(x6))])
 
   # On white's turn, the first half of z is white's pieces.
   assert np.nonzero(z0.squeeze()).squeeze().tolist()[:len(x0)] == x0

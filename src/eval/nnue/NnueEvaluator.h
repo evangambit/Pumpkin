@@ -20,9 +20,9 @@ struct WDL {
 };
 
 struct NnueEvaluator : public EvaluatorInterface {
-  Nnue *nnue_model;
+  std::shared_ptr<Nnue> nnue_model;
 
-  NnueEvaluator(Nnue *model) : nnue_model(model) {}
+  NnueEvaluator(std::shared_ptr<Nnue> model) : nnue_model(model) {}
 
   // Board listener
   void empty() override {
@@ -63,12 +63,14 @@ struct NnueEvaluator : public EvaluatorInterface {
 
   // TODO: get rid of WDL, stop using doubles.
   Evaluation _evaluate(const Position& pos) {
+    nnue_model->compute_acc_from_scratch(pos);
     int16_t *eval = nnue_model->forward(pos.turn_);
+    float score = static_cast<float>(eval[0]) / (1 << SCALE_SHIFT);
     return eval[0];
   }
 
   std::shared_ptr<EvaluatorInterface> clone() const override {
-    return std::make_shared<NnueEvaluator>(*this);
+    return std::make_shared<NnueEvaluator>(this->nnue_model->clone());
   }
   std::string to_string() const override {
     return "NnueEvaluator";
