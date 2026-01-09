@@ -7,7 +7,7 @@ sudo apt-get install -y libgflags-dev libgtest-dev
 g++ -std=c++20 -o test_runner $(find src/ -name "*.cpp" | grep -Ev '(main|uci|make_tables).cpp') -I/usr/local/include -L/usr/local/lib -lgtest -lgtest_main -pthread && ./test_runner
 
 # Run one test
-g++ -std=c++20 -o test_runner src/game/tests/PositionTests.cpp $(find src/ -name "*.cpp" | grep -Ev "([Tt]ests?|uci|main)\\.cpp") -I/usr/local/include -L/usr/local/lib -lgtest -lgtest_main -pthread && ./test_runner
+g++ -std=c++20 -o test_runner src/eval/nnue/tests/nnue-tests.cpp $(find src/ -name "*.cpp" | grep -Ev "([Tt]ests?|uci|main|make_tables)\\.cpp") -I/usr/local/include -L/usr/local/lib -lgtest -lgtest_main -pthread && ./test_runner
 
 
 # Build main
