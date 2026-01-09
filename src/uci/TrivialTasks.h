@@ -59,9 +59,9 @@ class SilenceTask : public Task {
 class PrintOptionsTask : public Task {
  public:
   void start(UciEngineState *state) {
-    // std::cout << "MultiPV: " << state->thinkerInterface()->get_multi_pv() << " variations" << std::endl;
+    std::cout << "MultiPV: " << state->multiPV << " variations" << std::endl;
     // std::cout << "Threads: " << state->thinkerInterface()->get_num_threads() << " threads" << std::endl;
-    // std::cout << "Hash: " << state->thinkerInterface()->get_cache_size_kb() << " kilobytes" << std::endl;
+    std::cout << "Hash: " << state->tt_->kb_size() << " kilobytes" << std::endl;
   }
 };
 
@@ -102,7 +102,7 @@ class SetEvaluatorTask : public Task {
       state->evaluator = std::make_shared<PieceSquareEvaluator>();
       std::cout << "Evaluator set to pst." << std::endl;
     } else if (evaluatorName == "nnue") {
-      NNUE::Nnue *nnue_model = new NNUE::Nnue();
+      std::shared_ptr<NNUE::Nnue> nnue_model = std::make_shared<NNUE::Nnue>();
       std::ifstream f("model.bin", std::ios::binary);
       nnue_model->load(f);
       state->evaluator = std::make_shared<NNUE::NnueEvaluator>(nnue_model);

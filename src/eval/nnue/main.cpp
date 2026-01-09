@@ -1,6 +1,7 @@
 
 #include <iostream>
 #include <fstream>
+#include <memory>
 
 #include "nnue.h"
 
@@ -12,7 +13,7 @@ using namespace ChessEngine;
 using namespace NNUE;
 
 int main(int argc, char** argv) {
-  Nnue *nnue_model = new Nnue();
+  std::shared_ptr<Nnue> nnue_model = std::make_shared<Nnue>();
 
   std::ifstream f("model.bin", std::ios::binary);
   nnue_model->load(f);

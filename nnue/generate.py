@@ -14,10 +14,10 @@ import chess
 from chess import engine as chess_engine
 
 """
-a=de8-md3-tuning
+a=de7-md4
 sqlite3 data/${a}/db.sqlite3 "select * from positions" > data/${a}/positions.txt
-sort -R data/${a}/positions.txt > data/${a}/positions.shuf.txt
-./opt 
+sort -R data/${a}/pos.txt > data/${a}/pos.shuf.txt
+./make_tables data/de7-md4/pos.shuf.txt data/de7-md4/tables
 """
 
 def wdl2score(wdl):
