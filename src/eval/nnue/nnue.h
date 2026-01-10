@@ -1,7 +1,6 @@
 #ifndef SRC_EVAL_NNUE_NNUE_H
 #define SRC_EVAL_NNUE_NNUE_H
 
-#include <eigen3/Eigen/Dense>
 #include <cstdint>
 #include <algorithm>
 #include <cmath>
@@ -12,29 +11,247 @@
 
 namespace NNUE {
 
+template <size_t HEIGHT, size_t WIDTH>
+struct Matrix {
+  int16_t *data;
+
+  Matrix() {
+    data = new int16_t[HEIGHT * WIDTH];
+    setZero();
+  }
+
+  ~Matrix() {
+    delete[] data;
+  }
+
+  Matrix& operator=(const Matrix& other) {
+    for (size_t i = 0; i < HEIGHT; ++i) {
+      for (size_t j = 0; j < WIDTH; ++j) {
+        data[i * WIDTH + j] = other.data[i * WIDTH + j];
+      }
+    }
+    return *this;
+  }
+  Matrix(const Matrix& other) {
+    data = new int16_t[HEIGHT * WIDTH];
+    for (size_t i = 0; i < HEIGHT; ++i) {
+      for (size_t j = 0; j < WIDTH; ++j) {
+        data[i * WIDTH + j] = other.data[i * WIDTH + j];
+      }
+    }
+  }
+
+  void setZero() {
+    for (size_t i = 0; i < HEIGHT; ++i) {
+      for (size_t j = 0; j < WIDTH; ++j) {
+        data[i * WIDTH + j] = 0;
+      }
+    }
+  }
+
+  void load_from_stream(std::istream& in) {
+    char name[16];
+    in.read(name, 16);
+
+    uint32_t degree;
+    in.read(reinterpret_cast<char*>(&degree), sizeof(uint32_t));
+    if (degree != 2) {
+      throw std::runtime_error("Only 2D matrices are supported");
+    }
+    uint32_t rows, cols;
+    in.read(reinterpret_cast<char*>(&rows), sizeof(uint32_t));
+    in.read(reinterpret_cast<char*>(&cols), sizeof(uint32_t));
+    if (rows != HEIGHT || cols != WIDTH) {
+      throw std::runtime_error("Matrix size mismatch");
+    }
+    float *buffer = new float[rows * cols];
+    in.read(reinterpret_cast<char*>(buffer), sizeof(float) * rows * cols);
+    for (size_t i = 0; i < HEIGHT; ++i) {
+      for (size_t j = 0; j < WIDTH; ++j) {
+        data[i * WIDTH + j] = static_cast<int16_t>(buffer[i * WIDTH + j] * (1 << SCALE_SHIFT));
+      }
+    }
+    delete[] buffer;
+  }
+
+  friend std::ostream& operator<<(std::ostream& os, const Matrix<HEIGHT, WIDTH>& mat) {
+    for (size_t i = 0; i < std::min(HEIGHT, size_t(4)); ++i) {
+      for (size_t j = 0; j < std::min(WIDTH, size_t(4)); ++j) {
+        os << mat.data[i * WIDTH + j] << " ";
+      }
+      if (WIDTH > 4) {
+        os << "...";
+      }
+      os << std::endl;
+    }
+    return os;
+  }
+
+  void randn_() {
+    for (size_t i = 0; i < HEIGHT; ++i) {
+      for (size_t j = 0; j < WIDTH; ++j) {
+        data[i * WIDTH + j] = static_cast<int16_t>(randn());
+      }
+    }
+  }
+};
+
+template<size_t DIM>
+struct Vector {
+  int16_t *data;
+
+  Vector() {
+    data = new int16_t[DIM];
+    setZero();
+  }
+
+  ~Vector() {
+    delete[] data;
+  }
+
+  Vector& operator=(const Vector& other) {
+    for (size_t i = 0; i < DIM; ++i) {
+      data[i] = other.data[i];
+    }
+    return *this;
+  }
+
+  Vector(const Vector& other) {
+    data = new int16_t[DIM];
+    for (size_t i = 0; i < DIM; ++i) {
+      data[i] = other.data[i];
+    }
+  }
+
+  void setZero() {
+    for (size_t i = 0; i < DIM; ++i) {
+      data[i] = 0;
+    }
+  }
+
+  template<size_t HEIGHT>
+  void load_from_row(const Matrix<HEIGHT, DIM>& mat, size_t rowIndex) {
+    if (rowIndex >= HEIGHT) {
+      throw std::runtime_error("Row index out of bounds");
+    }
+    for (size_t j = 0; j < DIM; ++j) {
+      data[j] = mat.data[rowIndex * DIM + j];
+    }
+  }
+
+  void load_from_stream(std::istream& in) {
+    char name[16];
+    in.read(name, 16);
+
+    uint32_t degree;
+    in.read(reinterpret_cast<char*>(&degree), sizeof(uint32_t));
+
+    uint32_t size;
+    if (degree == 1) {
+      in.read(reinterpret_cast<char*>(&size), sizeof(uint32_t));
+    } else if (degree == 2) {
+      uint32_t rows, cols;
+      in.read(reinterpret_cast<char*>(&rows), sizeof(uint32_t));
+      in.read(reinterpret_cast<char*>(&cols), sizeof(uint32_t));
+      if (rows != 1 || cols != 1) {
+        throw std::runtime_error("Only vectors with one row are supported");
+      }
+      size = cols == 1 ? rows : cols;
+    } else {
+      throw std::runtime_error("Only 1D or 2D vectors are supported");
+    }
+    if (size != DIM) {
+      throw std::runtime_error("Vector size mismatch");
+    }
+
+    float buffer[DIM];
+    in.read(reinterpret_cast<char*>(buffer), sizeof(float) * size);
+    for (size_t i = 0; i < DIM; ++i) {
+      data[i] = static_cast<int16_t>(buffer[i] * (1 << SCALE_SHIFT));
+    }
+  }
+
+  Vector<DIM>& operator+=(const Vector< DIM >& other) {
+    for (size_t i = 0; i < DIM; ++i) {
+      data[i] += other.data[i];
+    }
+    return *this;
+  }
+
+  Vector<DIM>& operator-=(const Vector< DIM >& other) {
+    for (size_t i = 0; i < DIM; ++i) {
+      data[i] -= other.data[i];
+    }
+    return *this;
+  }
+
+  void clip_(int16_t minVal, int16_t maxVal) {
+    for (size_t i = 0; i < DIM; ++i) {
+      if (data[i] < minVal) {
+        data[i] = minVal;
+      } else if (data[i] > maxVal) {
+        data[i] = maxVal;
+      }
+    }
+  }
+
+  void randn_() {
+    for (size_t i = 0; i < DIM; ++i) {
+      data[i] = static_cast<int16_t>(randn());
+    }
+  }
+
+  int16_t* data_ptr() {
+    return &data[0];
+  }
+
+  friend std::ostream& operator<<(std::ostream& os, const Vector<DIM>& vec) {
+    for (size_t i = 0; i < std::min(DIM, size_t(10)); ++i) {
+      os << vec.data[i] << " ";
+    }
+    if (DIM > 10) {
+      os << "...";
+    }
+    os << std::endl;
+    return os;
+  }
+};
+
+template<size_t HEIGHT, size_t WIDTH>
+void matmul(Matrix<HEIGHT, WIDTH>& mat, const Vector<WIDTH>& vec, Vector<HEIGHT>* out) {
+  for (size_t i = 0; i < HEIGHT; ++i) {
+    int32_t sum = 0;
+    for (size_t j = 0; j < WIDTH; ++j) {
+      sum += static_cast<int32_t>(mat.data[i * WIDTH + j]) * static_cast<int32_t>(vec.data[j]);
+    }
+    out->data[i] = static_cast<int16_t>(sum >> SCALE_SHIFT);
+  }
+}
+
 struct Nnue {
+      // layer1.matmul(sideToMove == ChessEngine::Color::WHITE ? whiteAcc : blackAcc, &hidden1);
+
   bool x[INPUT_DIM];
-  Eigen::Matrix<int16_t, 1, EMBEDDING_DIM> embWeights[INPUT_DIM];
-  Eigen::Matrix<int16_t, 1, EMBEDDING_DIM> whiteAcc;
-  Eigen::Matrix<int16_t, 1, EMBEDDING_DIM> blackAcc;
+  Vector<EMBEDDING_DIM> embWeights[INPUT_DIM];
+  Vector<EMBEDDING_DIM> whiteAcc;
+  Vector<EMBEDDING_DIM> blackAcc;
 
-  Eigen::Matrix<int16_t, Eigen::Dynamic, HIDDEN1_DIM> layer1;
-  Eigen::Matrix<int16_t, 1, HIDDEN1_DIM> bias1;
-  Eigen::Matrix<int32_t, 1, HIDDEN1_DIM> hidden1;
+  Matrix<HIDDEN1_DIM, EMBEDDING_DIM> layer1;
+  Vector<HIDDEN1_DIM> bias1;
+  Vector<HIDDEN1_DIM> hidden1;
 
-  Eigen::Matrix<int16_t, HIDDEN1_DIM, HIDDEN2_DIM> layer2;
-  Eigen::Matrix<int16_t, 1, HIDDEN2_DIM> bias2;
-  Eigen::Matrix<int32_t, 1, HIDDEN2_DIM> hidden2;
-
-  Eigen::Matrix<int16_t, HIDDEN2_DIM, OUTPUT_DIM> layer3;
-  Eigen::Matrix<int16_t, 1, OUTPUT_DIM> bias3;
-  Eigen::Matrix<int16_t, 1, OUTPUT_DIM> output;
+  Matrix<HIDDEN2_DIM, HIDDEN1_DIM> layer2;
+  Vector<HIDDEN2_DIM> bias2;
+  Vector<HIDDEN2_DIM> hidden2;
+  Matrix<OUTPUT_DIM, HIDDEN2_DIM> layer3;
+  Vector<OUTPUT_DIM> bias3;
+  Vector<OUTPUT_DIM> output;
 
   Nnue() {
     std::fill_n(x, INPUT_DIM, false);
     whiteAcc.setZero();
     blackAcc.setZero();
-    layer1.setZero(EMBEDDING_DIM, HIDDEN1_DIM);
+    layer1.setZero();
     bias1.setZero();
     hidden1.setZero();
     layer2.setZero();
@@ -65,18 +282,15 @@ struct Nnue {
   }
 
   void randn_() {
-    /**
-      Initialize weights and biases with gaussian random values.
-     */
     for (size_t i = 0; i < INPUT_DIM; ++i) {
-      embWeights[i].array() = Eigen::Array<int16_t, 1, EMBEDDING_DIM>::Zero().unaryExpr([](int16_t) { return int16_t(randn(std::sqrt(1.0 / MAX_NUM_ONES_IN_INPUT)) * (1 << SCALE_SHIFT)); });
+      embWeights[i].randn_();
     }
-    layer1.array() = Eigen::Array<int16_t, EMBEDDING_DIM, HIDDEN1_DIM>::Zero().unaryExpr([](int16_t) { return int16_t(randn(std::sqrt(1.0 / (EMBEDDING_DIM))) * (1 << SCALE_SHIFT)); });
-    bias1.array() = Eigen::Array<int16_t, 1, HIDDEN1_DIM>::Zero().unaryExpr([](int16_t) { return int16_t(0); });
-    layer2.array() = Eigen::Array<int16_t, HIDDEN1_DIM, HIDDEN2_DIM>::Zero().unaryExpr([](int16_t) { return int16_t(randn(std::sqrt(1.0 / HIDDEN1_DIM)) * (1 << SCALE_SHIFT)); });
-    bias2.array() = Eigen::Array<int16_t, 1, HIDDEN2_DIM>::Zero().unaryExpr([](int16_t) { return int16_t(0); });
-    layer3.array() = Eigen::Array<int16_t, HIDDEN2_DIM, OUTPUT_DIM>::Zero().unaryExpr([](int16_t) { return int16_t(randn(std::sqrt(1.0 / HIDDEN2_DIM)) * (1 << SCALE_SHIFT)); });
-    bias3.array() = Eigen::Array<int16_t, 1, OUTPUT_DIM>::Zero().unaryExpr([](int16_t) { return int16_t(0); });
+    layer1.randn_();
+    bias1.randn_();
+    layer2.randn_();
+    bias2.randn_();
+    layer3.randn_();
+    bias3.randn_();
   }
 
   void compute_acc_from_scratch(const ChessEngine::Position& pos) {
@@ -99,66 +313,18 @@ struct Nnue {
     }
   }
 
-  static Eigen::Matrix<int16_t, Eigen::Dynamic, Eigen::Dynamic> load_matrix(std::istream& in) {
-    char name[16];
-    in.read(name, 16);
-    std::string nameStr(name, 16);
-    nameStr.erase(std::find_if(nameStr.rbegin(), nameStr.rend(), [](unsigned char ch) {
-        return !std::isspace(ch);
-    }).base(), nameStr.end());
-
-    // Read matrix dimensions
-    uint32_t degree;
-    in.read(reinterpret_cast<char*>(&degree), sizeof(uint32_t));
-    uint32_t rows, cols;
-    if (degree == 1) {
-      rows = 1;
-      in.read(reinterpret_cast<char*>(&cols), sizeof(uint32_t));
-    } else if (degree == 2) {
-      in.read(reinterpret_cast<char*>(&rows), sizeof(uint32_t));
-      in.read(reinterpret_cast<char*>(&cols), sizeof(uint32_t));
-    } else {
-      throw std::runtime_error("Only 1D and 2D matrices are supported");
-    }
-
-    Eigen::Matrix<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> mat(rows, cols);
-    in.read(reinterpret_cast<char*>(mat.data()), sizeof(float) * rows * cols);
-
-    size_t low = 0;
-    size_t high = 0;
-    for (size_t i = 0; i < rows; ++i) {
-      for (size_t j = 0; j < cols; ++j) {
-        if (std::isnan(mat(i, j)) || std::isinf(mat(i, j))) {
-          throw std::runtime_error("Matrix contains NaN or Inf values");
-        }
-        if (std::abs(mat(i, j)) > 1.0) {
-          high++;
-        } else {
-          low++;
-        }
-      }
-    }
-
-    Eigen::Matrix<int16_t, Eigen::Dynamic, Eigen::Dynamic> mat_int = mat.unaryExpr([](float v) {
-      return static_cast<int16_t>(std::clamp(std::round(v * (1 << SCALE_SHIFT)), -32768.0f, 32767.0f));
-    });
-
-    return mat_int;
-  }
-
   void load(std::istream& in) {
-    Eigen::Matrix<int16_t, Eigen::Dynamic, Eigen::Dynamic> emb = load_matrix(in);;
-    assert(emb.rows() == INPUT_DIM && emb.cols() == EMBEDDING_DIM);
+    Matrix<INPUT_DIM, EMBEDDING_DIM> emb;
+    emb.load_from_stream(in);
     for (size_t i = 0; i < INPUT_DIM; ++i) {
-      embWeights[i] = emb.row(i);
+      embWeights[i].load_from_row(emb, i);
     }
-
-    layer1 = load_matrix(in).transpose();
-    bias1 = load_matrix(in);
-    layer2 = load_matrix(in).transpose();
-    bias2 = load_matrix(in);
-    layer3 = load_matrix(in).transpose();
-    bias3 = load_matrix(in);
+    layer1.load_from_stream(in);
+    bias1.load_from_stream(in);
+    layer2.load_from_stream(in);
+    bias2.load_from_stream(in);
+    layer3.load_from_stream(in);
+    bias3.load_from_stream(in);
 
     // Verify that the entire file has been read
     char dummy;
@@ -168,26 +334,18 @@ struct Nnue {
   }
 
   int16_t *forward(ChessEngine::Color sideToMove) {
-    if (sideToMove == ChessEngine::Color::WHITE) {
-      hidden1.noalias() = whiteAcc.cast<int32_t>() * layer1.cast<int32_t>();
-    } else {
-      hidden1.noalias() = blackAcc.cast<int32_t>() * layer1.cast<int32_t>();
-    }
-    hidden1 += bias1.cast<int32_t>();
-    
-    // Debug: Print whiteAcc and hidden1 values
-    
-    // Right-shift by SCALE_SHIFT to account for fixed-point, then clip to [0, 64]
-    hidden1.array() = (hidden1.array() / (1 << SCALE_SHIFT)).cwiseMax(0).cwiseMin(64);
-    
-    hidden2.noalias() = hidden1.cast<int32_t>() * layer2.cast<int32_t>();
-    hidden2 += bias2.cast<int32_t>();
-    
-    hidden2.array() = (hidden2.array() / (1 << SCALE_SHIFT)).cwiseMax(0).cwiseMin(64);
-    
-    output.noalias() = (hidden2 * layer3.cast<int32_t>() + bias3.cast<int32_t>()).cast<int16_t>();
-    
-    return output.data();
+    matmul(layer1, sideToMove == ChessEngine::Color::WHITE ? whiteAcc : blackAcc, &hidden1);
+    hidden1 += bias1;
+    hidden1.clip_(0, 64);
+
+    matmul(layer2, hidden1, &hidden2);
+    hidden2 += bias2;
+    hidden2.clip_(0, 64);
+
+    matmul(layer3, hidden2, &output);
+    output += bias3;
+
+    return output.data_ptr();
   }
 
   std::shared_ptr<Nnue> clone() const {
