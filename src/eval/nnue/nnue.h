@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <cstring>
+#include <memory>
 
 #include "../../game/Position.h"
 #include "utils.h"
@@ -25,28 +27,26 @@ struct Matrix {
   }
 
   Matrix& operator=(const Matrix& other) {
-    for (size_t i = 0; i < HEIGHT; ++i) {
-      for (size_t j = 0; j < WIDTH; ++j) {
-        data[i * WIDTH + j] = other.data[i * WIDTH + j];
-      }
-    }
+    std::memcpy(data, other.data, HEIGHT * WIDTH * sizeof(int16_t));
     return *this;
   }
+
   Matrix(const Matrix& other) {
     data = new int16_t[HEIGHT * WIDTH];
-    for (size_t i = 0; i < HEIGHT; ++i) {
-      for (size_t j = 0; j < WIDTH; ++j) {
-        data[i * WIDTH + j] = other.data[i * WIDTH + j];
-      }
-    }
+    std::memcpy(data, other.data, HEIGHT * WIDTH * sizeof(int16_t));
+  }
+
+  Matrix& operator=(Matrix&& other) noexcept {
+    std::swap(data, other.data);
+    return *this;
+  }
+
+  Matrix(Matrix&& other) noexcept : data(other.data) {
+    other.data = nullptr;
   }
 
   void setZero() {
-    for (size_t i = 0; i < HEIGHT; ++i) {
-      for (size_t j = 0; j < WIDTH; ++j) {
-        data[i * WIDTH + j] = 0;
-      }
-    }
+    std::fill(data, data + HEIGHT * WIDTH, int16_t(0));
   }
 
   void load_from_stream(std::istream& in) {
@@ -110,23 +110,26 @@ struct Vector {
   }
 
   Vector& operator=(const Vector& other) {
-    for (size_t i = 0; i < DIM; ++i) {
-      data[i] = other.data[i];
-    }
+    std::memcpy(data, other.data, DIM * sizeof(int16_t));
     return *this;
   }
 
   Vector(const Vector& other) {
     data = new int16_t[DIM];
-    for (size_t i = 0; i < DIM; ++i) {
-      data[i] = other.data[i];
-    }
+    std::memcpy(data, other.data, DIM * sizeof(int16_t));
+  }
+
+  Vector& operator=(Vector&& other) noexcept {
+    std::swap(data, other.data);
+    return *this;
+  }
+
+  Vector(Vector&& other) noexcept : data(other.data) {
+    other.data = nullptr;
   }
 
   void setZero() {
-    for (size_t i = 0; i < DIM; ++i) {
-      data[i] = 0;
-    }
+    std::fill(data, data + DIM, int16_t(0));
   }
 
   template<size_t HEIGHT>
@@ -187,11 +190,7 @@ struct Vector {
 
   void clip_(int16_t minVal, int16_t maxVal) {
     for (size_t i = 0; i < DIM; ++i) {
-      if (data[i] < minVal) {
-        data[i] = minVal;
-      } else if (data[i] > maxVal) {
-        data[i] = maxVal;
-      }
+      data[i] = std::max(minVal, std::min(data[i], maxVal));
     }
   }
 
@@ -218,7 +217,7 @@ struct Vector {
 };
 
 template<size_t HEIGHT, size_t WIDTH>
-void matmul(Matrix<HEIGHT, WIDTH>& mat, const Vector<WIDTH>& vec, Vector<HEIGHT>* out) {
+inline void matmul(Matrix<HEIGHT, WIDTH>& mat, const Vector<WIDTH>& vec, Vector<HEIGHT>* out) {
   for (size_t i = 0; i < HEIGHT; ++i) {
     int32_t sum = 0;
     for (size_t j = 0; j < WIDTH; ++j) {
@@ -301,15 +300,8 @@ struct Nnue {
     for (size_t i = 0; i < features.length; ++i) {
       size_t index = features[i];
       x[index] = true;
-    }
-
-    whiteAcc.setZero();
-    blackAcc.setZero();
-    for (size_t i = 0; i < INPUT_DIM; ++i) {
-      if (x[i]) {
-        whiteAcc += embWeights[i];
-        blackAcc += embWeights[flip_feature_index(i)];
-      }
+      whiteAcc += embWeights[index];
+      blackAcc += embWeights[flip_feature_index(index)];
     }
   }
 
