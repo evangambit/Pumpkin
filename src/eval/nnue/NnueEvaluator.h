@@ -5,6 +5,7 @@
 #include <fstream>
 
 #include "nnue.h"
+#include "utils.h"
 
 #include "../../game/Position.h"
 #include "../evaluator.h"
