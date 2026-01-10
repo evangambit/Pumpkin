@@ -31,6 +31,16 @@ cutechess/build/cutechess-cli -engine cmd=uci arg="evaluator pst" -engine cmd=uc
 
 ```
 
+## Perf Analysis
+
+/usr/local/go/bin/go install github.com/google/pprof@latest
+
+g++ -std=c++20 -o uci src/uci.cpp $(find src/ -name "*.cpp" | grep -Ev "([Tt]ests?|uci|main|make_tables)\\.cpp") -pthread -lgflags -DNDEBUG -O3 $(pkg-config --cflags --libs libprofiler)
+
+CPUPROFILE=/tmp/prof.out ./uci "move e2e4 c7c5 g1f3 d7d6" "go depth 8" "lazyquit"
+
+~/go/bin/pprof -png ./uci /tmp/prof.out
+
 ## Known bugs
 
 - Capturing enpassant into check (e.g. "r4Q2/1pk2pp1/8/3qpP1K/8/8/PP5B/n7 w - - 0 25")

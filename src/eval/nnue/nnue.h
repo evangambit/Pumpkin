@@ -32,7 +32,17 @@ struct Nnue {
 
   Nnue() {
     std::fill_n(x, INPUT_DIM, false);
-    zero_();
+    whiteAcc.setZero();
+    blackAcc.setZero();
+    layer1.setZero(EMBEDDING_DIM, HIDDEN1_DIM);
+    bias1.setZero();
+    hidden1.setZero();
+    layer2.setZero();
+    bias2.setZero();
+    hidden2.setZero();
+    layer3.setZero();
+    bias3.setZero();
+    output.setZero();
   }
 
   void increment(size_t index) {
@@ -52,20 +62,6 @@ struct Nnue {
   void clear_accumulator() {
     whiteAcc.setZero();
     blackAcc.setZero();
-  }
-
-  void zero_() {
-    whiteAcc.setZero();
-    blackAcc.setZero();
-    layer1.setZero(EMBEDDING_DIM, HIDDEN1_DIM);
-    bias1.setZero();
-    hidden1.setZero();
-    layer2.setZero();
-    bias2.setZero();
-    hidden2.setZero();
-    layer3.setZero();
-    bias3.setZero();
-    output.setZero();
   }
 
   void randn_() {
