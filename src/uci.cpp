@@ -167,6 +167,8 @@ struct UciEngine {
     } else if (parts[0] == "isready") {
       state->taskQueue.push_back(std::make_shared<IsReadyTask>());
     } else if (parts[0] == "move" || parts[0] == "m") {
+      state->taskQueue.push_back(std::make_shared<MoveTask>(parts));
+    } else if (parts[0] == "hash") {
       state->taskQueue.push_back(std::make_shared<HashTask>());
     } else if (parts[0] == "lazyquit") {
       state->taskQueue.push_back(std::make_shared<QuitTask>());
