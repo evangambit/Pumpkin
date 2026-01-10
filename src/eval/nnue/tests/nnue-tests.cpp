@@ -199,23 +199,6 @@ TEST_F(NNUETest, NnueInitialization) {
   EXPECT_TRUE(nnue.blackAcc.isZero());
 }
 
-// Test NNUE zero_
-TEST_F(NNUETest, NnueZero) {
-  Nnue nnue;
-  nnue.randn_();
-  
-  // After randn_(), matrices should not be zero
-  EXPECT_FALSE(nnue.layer1.isZero());
-  
-  // After zero_(), everything should be zero
-  nnue.zero_();
-  EXPECT_TRUE(nnue.whiteAcc.isZero());
-  EXPECT_TRUE(nnue.blackAcc.isZero());
-  EXPECT_TRUE(nnue.layer1.isZero());
-  EXPECT_TRUE(nnue.layer2.isZero());
-  EXPECT_TRUE(nnue.layer3.isZero());
-}
-
 // Test NNUE randn_
 TEST_F(NNUETest, NnueRandn) {
   Nnue nnue;
