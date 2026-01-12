@@ -259,6 +259,22 @@ struct Vector {
     }
     return true;
   }
+
+  Vector<DIM> operator-(const Vector<DIM>& other) const {
+    Vector<DIM> result;
+    for (size_t i = 0; i < DIM; ++i) {
+      result.data[i] = this->data[i] - other.data[i];
+    }
+    return result;
+  }
+
+  void print_diff(const Vector<DIM>& other) const {
+    for (size_t i = 0; i < DIM; ++i) {
+      if (this->data[i] != other.data[i]) {
+        std::cout << "Index " << i << ": " << this->data[i] << " vs " << other.data[i] << std::endl;
+      }
+    }
+  }
 };
 
 template<size_t HEIGHT, size_t WIDTH>
@@ -368,6 +384,19 @@ struct Nnue {
     if (in.read(&dummy, 1) || !in.eof()) {
       throw std::runtime_error("File not completely read");
     }
+  }
+
+  void use_debug_weights() {
+    for (size_t i = 0; i < INPUT_DIM; ++i) {
+      embWeights[i].setZero();
+      embWeights[i].data[i] = static_cast<int16_t>(1);
+    }
+    layer1.randn_();
+    bias1.randn_();
+    layer2.randn_();
+    bias2.randn_();
+    layer3.randn_();
+    bias3.randn_();
   }
 
   int16_t *forward(ChessEngine::Color sideToMove) {
