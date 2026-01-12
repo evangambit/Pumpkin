@@ -64,10 +64,53 @@ struct NnueEvaluator : public EvaluatorInterface {
 
   // TODO: get rid of WDL, stop using doubles.
   Evaluation _evaluate(const Position& pos) {
-    nnue_model->compute_acc_from_scratch(pos);
+    #ifndef NDEBUG
+      Vector<1024> accCopy = nnue_model->whiteAcc;
+    #endif
+
+    if (((pos.currentState_.castlingRights & kCastlingRights_WhiteKing) > 0) != nnue_model->x[WHITE_KINGSIDE_CASTLING_RIGHT]) {
+      if ((pos.currentState_.castlingRights & kCastlingRights_WhiteKing)) {
+        nnue_model->increment(WHITE_KINGSIDE_CASTLING_RIGHT);
+      } else {
+        nnue_model->decrement(WHITE_KINGSIDE_CASTLING_RIGHT);
+      }
+    }
+    if (((pos.currentState_.castlingRights & kCastlingRights_WhiteQueen) > 0) != nnue_model->x[WHITE_QUEENSIDE_CASTLING_RIGHT]) {
+      if ((pos.currentState_.castlingRights & kCastlingRights_WhiteQueen)) {
+        nnue_model->increment(WHITE_QUEENSIDE_CASTLING_RIGHT);
+      } else {
+        nnue_model->decrement(WHITE_QUEENSIDE_CASTLING_RIGHT);
+      }
+    }
+    if (((pos.currentState_.castlingRights & kCastlingRights_BlackKing) > 0) != nnue_model->x[BLACK_KINGSIDE_CASTLING_RIGHT]) {
+      if ((pos.currentState_.castlingRights & kCastlingRights_BlackKing)) {
+        nnue_model->increment(BLACK_KINGSIDE_CASTLING_RIGHT);
+      } else {
+        nnue_model->decrement(BLACK_KINGSIDE_CASTLING_RIGHT);
+      }
+    }
+    if (((pos.currentState_.castlingRights & kCastlingRights_BlackQueen) > 0) != nnue_model->x[BLACK_QUEENSIDE_CASTLING_RIGHT]) {
+      if ((pos.currentState_.castlingRights & kCastlingRights_BlackQueen)) {
+        nnue_model->increment(BLACK_QUEENSIDE_CASTLING_RIGHT);
+      } else {
+        nnue_model->decrement(BLACK_QUEENSIDE_CASTLING_RIGHT);
+      }
+    }
+
     int16_t *eval = nnue_model->forward(pos.turn_);
-    float score = static_cast<float>(eval[0]) / (1 << SCALE_SHIFT);
-    return eval[0];
+    int16_t score = eval[0];
+
+    #ifndef NDEBUG
+      nnue_model->compute_acc_from_scratch(pos);
+      int16_t score2 = nnue_model->forward(pos.turn_)[0];
+      if (score != score2) {
+        std::cerr << "NNUE evaluation mismatch: " << score << " vs " << score2 << std::endl;
+        accCopy.print_diff(nnue_model->whiteAcc);
+        throw std::runtime_error("NNUE evaluation mismatch");
+      }
+    #endif
+
+    return Evaluation(score);
   }
 
   std::shared_ptr<EvaluatorInterface> clone() const override {
