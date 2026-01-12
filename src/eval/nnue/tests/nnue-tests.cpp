@@ -195,8 +195,8 @@ TEST_F(NNUETest, NnueInitialization) {
   }
   
   // Accumulators should be zero
-  EXPECT_TRUE(nnue.whiteAcc.isZero());
-  EXPECT_TRUE(nnue.blackAcc.isZero());
+  EXPECT_TRUE(nnue.whiteAcc == 0);
+  EXPECT_TRUE(nnue.blackAcc == 0);
 }
 
 // Test NNUE randn_
@@ -205,14 +205,14 @@ TEST_F(NNUETest, NnueRandn) {
   nnue.randn_();
   
   // After random initialization, matrices should not be all zero
-  EXPECT_FALSE(nnue.layer1.isZero());
-  EXPECT_FALSE(nnue.layer2.isZero());
-  EXPECT_FALSE(nnue.layer3.isZero());
+  EXPECT_FALSE(nnue.layer1 == 0);
+  EXPECT_FALSE(nnue.layer2 == 0);
+  EXPECT_FALSE(nnue.layer3 == 0);
   
   // Embedding weights should be initialized
   bool has_nonzero_emb = false;
   for (int i = 0; i < INPUT_DIM; ++i) {
-    if (!nnue.embWeights[i].isZero()) {
+    if (!(nnue.embWeights[i] == 0)) {
       has_nonzero_emb = true;
       break;
     }
@@ -225,15 +225,15 @@ TEST_F(NNUETest, NnueIncrement) {
   Nnue nnue;
   nnue.randn_();
   
-  Eigen::Matrix<int16_t, 1, EMBEDDING_DIM> initial_white = nnue.whiteAcc;
-  Eigen::Matrix<int16_t, 1, EMBEDDING_DIM> initial_black = nnue.blackAcc;
+  Vector<EMBEDDING_DIM> initial_white = nnue.whiteAcc;
+  Vector<EMBEDDING_DIM> initial_black = nnue.blackAcc;
   
   size_t index = 100;
   nnue.increment(index);
   
   EXPECT_TRUE(nnue.x[index]);
-  EXPECT_NE((nnue.whiteAcc - initial_white).isZero(), true);
-  EXPECT_NE((nnue.blackAcc - initial_black).isZero(), true);
+  EXPECT_NE(nnue.whiteAcc == initial_white, true);
+  EXPECT_NE(nnue.blackAcc == initial_black, true);
 }
 
 // Test NNUE decrement
@@ -244,13 +244,13 @@ TEST_F(NNUETest, NnueDecrement) {
   size_t index = 100;
   nnue.increment(index);
   
-  Eigen::Matrix<int16_t, 1, EMBEDDING_DIM> after_incr = nnue.whiteAcc;
+  Vector<EMBEDDING_DIM> after_incr = nnue.whiteAcc;
   
   nnue.decrement(index);
   
   EXPECT_FALSE(nnue.x[index]);
-  EXPECT_TRUE(nnue.whiteAcc.isZero());
-  EXPECT_TRUE(nnue.blackAcc.isZero());
+  EXPECT_TRUE(nnue.whiteAcc == 0);
+  EXPECT_TRUE(nnue.blackAcc == 0);
 }
 
 // Test NNUE increment/decrement symmetry
@@ -263,8 +263,8 @@ TEST_F(NNUETest, NnueIncrementDecrementSymmetry) {
   nnue.decrement(index);
   
   // After increment then decrement, should be back to zero
-  EXPECT_TRUE(nnue.whiteAcc.isZero());
-  EXPECT_TRUE(nnue.blackAcc.isZero());
+  EXPECT_TRUE(nnue.whiteAcc == 0);
+  EXPECT_TRUE(nnue.blackAcc == 0);
   EXPECT_FALSE(nnue.x[index]);
 }
 
@@ -275,12 +275,12 @@ TEST_F(NNUETest, NnueClearAccumulator) {
   
   size_t index = 100;
   nnue.increment(index);
-  EXPECT_FALSE(nnue.whiteAcc.isZero());
+  EXPECT_FALSE(nnue.whiteAcc == 0);
   
   nnue.clear_accumulator();
   
-  EXPECT_TRUE(nnue.whiteAcc.isZero());
-  EXPECT_TRUE(nnue.blackAcc.isZero());
+  EXPECT_TRUE(nnue.whiteAcc == 0);
+  EXPECT_TRUE(nnue.blackAcc == 0);
   // x should still be set
   EXPECT_TRUE(nnue.x[index]);
 }
@@ -295,8 +295,8 @@ TEST_F(NNUETest, NnueComputeAccFromScratch) {
   nnue.compute_acc_from_scratch(pos);
   
   // After computing from scratch, accumulators should be filled
-  EXPECT_FALSE(nnue.whiteAcc.isZero());
-  EXPECT_FALSE(nnue.blackAcc.isZero());
+  EXPECT_FALSE(nnue.whiteAcc == 0);
+  EXPECT_FALSE(nnue.blackAcc == 0);
   
   // x array should reflect the board position
   bool has_features = false;
@@ -319,8 +319,8 @@ TEST_F(NNUETest, NnueComputeAccFromScratchEmptyBoard) {
   nnue.compute_acc_from_scratch(pos);
   
   // Empty board means no piece features, only castling (if any)
-  EXPECT_TRUE(nnue.whiteAcc.isZero());
-  EXPECT_TRUE(nnue.blackAcc.isZero());
+  EXPECT_TRUE(nnue.whiteAcc == 0);
+  EXPECT_TRUE(nnue.blackAcc == 0);
 }
 
 // Test NNUE forward with WHITE to move
@@ -335,10 +335,7 @@ TEST_F(NNUETest, NnueForwardWhite) {
   
   // Output should be non-null
   EXPECT_NE(output, nullptr);
-  EXPECT_EQ(output, nnue.output.data());
-  
-  // Output dimension should match
-  EXPECT_EQ(nnue.output.cols(), OUTPUT_DIM);
+  EXPECT_EQ(output, nnue.output.data_ptr());
 }
 
 // Test NNUE forward with BLACK to move
@@ -352,7 +349,7 @@ TEST_F(NNUETest, NnueForwardBlack) {
   int16_t *output = nnue.forward(Color::BLACK);
   
   EXPECT_NE(output, nullptr);
-  EXPECT_EQ(output, nnue.output.data());
+  EXPECT_EQ(output, nnue.output.data_ptr());
 }
 
 // Test NNUE clone
@@ -367,18 +364,18 @@ TEST_F(NNUETest, NnueClone) {
   
   // Check that embedding weights are copied
   for (int i = 0; i < INPUT_DIM; ++i) {
-    EXPECT_TRUE((cloned->embWeights[i] - nnue.embWeights[i]).isZero(1e-10));
+    EXPECT_TRUE(cloned->embWeights[i] == nnue.embWeights[i]);
   }
   
   // Check that layers are copied
-  EXPECT_TRUE((cloned->layer1 - nnue.layer1).isZero(1e-10));
-  EXPECT_TRUE((cloned->layer2 - nnue.layer2).isZero(1e-10));
-  EXPECT_TRUE((cloned->layer3 - nnue.layer3).isZero(1e-10));
+  EXPECT_TRUE(cloned->layer1 == nnue.layer1);
+  EXPECT_TRUE(cloned->layer2 == nnue.layer2);
+  EXPECT_TRUE(cloned->layer3 == nnue.layer3);
   
   // Check that biases are copied
-  EXPECT_TRUE((cloned->bias1 - nnue.bias1).isZero(1e-10));
-  EXPECT_TRUE((cloned->bias2 - nnue.bias2).isZero(1e-10));
-  EXPECT_TRUE((cloned->bias3 - nnue.bias3).isZero(1e-10));
+  EXPECT_TRUE(cloned->bias1 == nnue.bias1);
+  EXPECT_TRUE(cloned->bias2 == nnue.bias2);
+  EXPECT_TRUE(cloned->bias3 == nnue.bias3);
 }
 
 // Test constant values
@@ -412,16 +409,16 @@ TEST_F(NNUETest, NnueMultipleIncrementDecrement) {
     EXPECT_TRUE(nnue.x[idx]);
   }
   
-  Eigen::Matrix<int16_t, 1, EMBEDDING_DIM> after_increments = nnue.whiteAcc;
-  EXPECT_FALSE(after_increments.isZero());
+  Vector<EMBEDDING_DIM> after_increments = nnue.whiteAcc;
+  EXPECT_FALSE(after_increments == 0);
   
   for (size_t idx : indices) {
     nnue.decrement(idx);
     EXPECT_FALSE(nnue.x[idx]);
   }
   
-  EXPECT_TRUE(nnue.whiteAcc.isZero());
-  EXPECT_TRUE(nnue.blackAcc.isZero());
+  EXPECT_TRUE(nnue.whiteAcc == 0);
+  EXPECT_TRUE(nnue.blackAcc == 0);
 }
 
 // Test empty Features
@@ -469,8 +466,8 @@ TEST_F(NNUETest, AccumulatorStateAfterCompute) {
   // Computing again should give the same result
   nnue.compute_acc_from_scratch(pos);
   
-  EXPECT_TRUE((nnue.whiteAcc - white_acc_copy).isZero());
-  EXPECT_TRUE((nnue.blackAcc - black_acc_copy).isZero());
+  EXPECT_TRUE(nnue.whiteAcc == white_acc_copy);
+  EXPECT_TRUE(nnue.blackAcc == black_acc_copy);
 }
 
 TEST_F(NNUETest, AccumulatorIncrementallyUpdated) {

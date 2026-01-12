@@ -94,6 +94,24 @@ struct Matrix {
       }
     }
   }
+
+  bool operator==(const Matrix<HEIGHT, WIDTH>& other) const {
+    for (size_t i = 0; i < HEIGHT * WIDTH; ++i) {
+      if (data[i] != other.data[i]) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  bool operator==(int16_t val) const {
+    for (size_t i = 0; i < HEIGHT * WIDTH; ++i) {
+      if (data[i] != val) {
+        return false;
+      }
+    }
+    return true;
+  }
 };
 
 template<size_t DIM>
@@ -213,6 +231,33 @@ struct Vector {
     }
     os << std::endl;
     return os;
+  }
+
+  bool operator==(const Vector<DIM>& other) const {
+    for (size_t i = 0; i < DIM; ++i) {
+      if (data[i] != other.data[i]) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  bool operator==(int16_t val) const {
+    for (size_t i = 0; i < DIM; ++i) {
+      if (data[i] != val) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  bool isZero() const {
+    for (size_t i = 0; i < DIM; ++i) {
+      if (data[i] != 0) {
+        return false;
+      }
+    }
+    return true;
   }
 };
 
