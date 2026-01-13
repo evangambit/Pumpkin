@@ -9,15 +9,18 @@ g++ -std=c++20 -o test_runner $(find src/ -name "*.cpp" | grep -Ev '(main|uci|ma
 # Run one test
 g++ -std=c++20 -o test_runner src/eval/nnue/tests/nnue-tests.cpp $(find src/ -name "*.cpp" | grep -Ev "([Tt]ests?|uci|main|make_tables)\\.cpp") -I/usr/local/include -L/usr/local/lib -lgtest -lgtest_main -pthread && ./test_runner
 
+# Update NNUE object file (model_bin.o) from a binary file
+
+ld -r -b binary -o model_bin.o model.bin
 
 # Build main
-g++ -std=c++20 -o main src/main.cpp $(find src/ -name "*.cpp" | grep -Ev "([Tt]ests?|uci|main|make_tables)\\.cpp") -pthread -L/usr/local/lib -lgflags
+g++ -std=c++20 -o main src/main.cpp model_bin.o $(find src/ -name "*.cpp" | grep -Ev "([Tt]ests?|uci|main|make_tables)\\.cpp") -pthread -L/usr/local/lib -lgflags
 
 ./main rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2
 
 # Build uci
 
-g++ -std=c++20 -o uci src/uci.cpp $(find src/ -name "*.cpp" | grep -Ev "([Tt]ests?|uci|main|make_tables)\\.cpp") -pthread -L/usr/local/lib -lgflags -DNDEBUG -O3
+g++ -std=c++20 -o uci src/uci.cpp model_bin.o $(find src/ -name "*.cpp" | grep -Ev "([Tt]ests?|uci|main|make_tables)\\.cpp") -pthread -L/usr/local/lib -lgflags -DNDEBUG -O3
 
 # Make tables
 

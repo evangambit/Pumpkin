@@ -3,6 +3,7 @@
 
 #ifndef IS_PRINT_NODE
 #define IS_PRINT_NODE 0
+// #define IS_PRINT_NODE (thread->position_.currentState_.hash == 412260009870427727ULL)
 #endif
 
 #ifndef IS_PRINT_QNODE
@@ -503,7 +504,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   else if (bestResult.evaluation >= beta) bound = BoundType::LOWER;
 
   if (IS_PRINT_NODE) {
-  std::cout << repeat("  ", plyFromRoot) << "Storing in TT: depth=" << depth << " eval=" << bestResult.evaluation.value << " bound=" << static_cast<int>(bound) << std::endl;
+    std::cout << repeat("  ", plyFromRoot) << "Storing in TT: depth=" << depth << " eval=" << bestResult.evaluation.value << " bound=" << bound_type_to_string(bound) << std::endl;
   }
   thread->tt_->store(
     thread->position_.currentState_.hash,
@@ -608,6 +609,7 @@ SearchResult<TURN> search(Thread* thread, std::atomic<bool> *stopThinking, std::
     stopThinking
   );
   if (onDepthCompleted != nullptr) {
+    // TODO: guarantee we always search at least depth 1 before stopping.
     SearchResult<TURN> searchResult = negamax_result_to_search_result<TURN>(result, thread);
     onDepthCompleted(1, searchResult);
   }
@@ -622,6 +624,20 @@ SearchResult<TURN> search(Thread* thread, std::atomic<bool> *stopThinking, std::
       /*plyFromRoot=*/0,
       stopThinking
     );
+    if (stopThinking->load()) {
+      // Primary variations may be incomplete or invalid if the search was stopped.
+      // Re-run the search at depth=1 to get a valid result.
+      stopThinking->store(false);
+      thread->primaryVariations_.clear();
+      result = negamax<TURN, SearchType::ROOT>(
+        thread,
+        1,
+        /*alpha=*/ColoredEvaluation<TURN>(kMinEval),
+        /*beta=*/ColoredEvaluation<TURN>(kMaxEval),
+        /*plyFromRoot=*/0,
+        stopThinking
+      );
+    }
     if (onDepthCompleted != nullptr) {
       onDepthCompleted(i, negamax_result_to_search_result<TURN>(result, thread));
     }

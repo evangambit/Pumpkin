@@ -1,6 +1,10 @@
 #ifndef PUMPKIN_UCI_TRIVIALTASKS_H
 #define PUMPKIN_UCI_TRIVIALTASKS_H
 
+// model.o
+extern const char _binary_model_bin_start[];
+extern const char _binary_model_bin_end[];
+
 #include <atomic>
 #include <condition_variable>
 #include <deque>
@@ -166,7 +170,8 @@ class SetEvaluatorTask : public Task {
       std::cout << "Evaluator set to pst." << std::endl;
     } else if (evaluatorName == "nnue") {
       std::shared_ptr<NNUE::Nnue> nnue_model = std::make_shared<NNUE::Nnue>();
-      std::ifstream f("model.bin", std::ios::binary);
+      std::istringstream f(std::string(_binary_model_bin_start, _binary_model_bin_end));
+      // std::ifstream f("model.bin", std::ios::binary);
       nnue_model->load(f);
       state->evaluator = std::make_shared<NNUE::NnueEvaluator>(nnue_model);
       std::cout << "Evaluator set to nnue." << std::endl;

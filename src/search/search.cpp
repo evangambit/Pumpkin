@@ -45,6 +45,9 @@ void extract_variation_from_tt(const Position& pos, TranspositionTable* tt, std:
   while (move != kNullMove) {
     ez_make_move(&position, move);
     movesOut->push_back(move);
+    if (movesOut->size() >= 10) {
+      break;
+    }
     if (visitedHashes.count(position.currentState_.hash) > 0) {
       break;
     }
