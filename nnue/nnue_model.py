@@ -39,12 +39,12 @@ class NNUE(nn.Module):
   def forward(self, x, turn):
     # Turn is 1 for white to move, -1 for black to move
     z = self.embed(x, turn)
-    penalty = (z.mean() ** 2 + (z.std() - 1.0) ** 2)
+    layers = [z]
     for layer in self.mlp:
       z = layer(z)
       if isinstance(layer, nn.Linear):
-        penalty += (z.mean() ** 2 + (z.std() - 1.0) ** 2)
-    return z, penalty
+        layers.append(z)
+    return z, layers
 
 def test():
   model = NNUE(input_size=kMaxNumOnesInInput, hidden_sizes=[768], output_size=2)

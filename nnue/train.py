@@ -115,6 +115,11 @@ earliness_weights = torch.tensor([
 ]).to(device) / 18.0
 
 def wdl2score(win_mover_perspective, draw_mover_perspective, lose_mover_perspective):
+  assert len(win_mover_perspective.shape) == 1
+  assert len(draw_mover_perspective.shape) == 1
+  assert len(lose_mover_perspective.shape) == 1
+  assert win_mover_perspective.shape == draw_mover_perspective.shape
+  assert win_mover_perspective.shape == lose_mover_perspective.shape
   return win_mover_perspective + draw_mover_perspective * 0.5
 
 metrics = defaultdict(list)
@@ -131,14 +136,22 @@ for epoch in range(NUM_EPOCHS):
     x, y_white_perspective, turn, piece_counts = batch
     y_white_perspective = y_white_perspective.float() / 1000.0
 
-    win_mover_perspective = y_white_perspective[:,0:1] * (turn == 1).float() + y_white_perspective[:,2:3] * (turn == -1).float()
-    draw_mover_perspective = y_white_perspective[:,1:2]
-    lose_mover_perspective = y_white_perspective[:,2:3] * (turn == 1).float() + y_white_perspective[:,0:1] * (turn == -1).float()
+    win_mover_perspective = y_white_perspective[:,0] * (turn.squeeze() == 1).float() + y_white_perspective[:,2] * (turn.squeeze() == -1).float()
+    draw_mover_perspective = y_white_perspective[:,1]
+    lose_mover_perspective = y_white_perspective[:,2] * (turn.squeeze() == 1).float() + y_white_perspective[:,0] * (turn.squeeze() == -1).float()
 
-    output, penalty = model(x, turn)
-    output = torch.sigmoid(output)[:,0:1]
+    output, layers = model(x, turn)
+
+    penalty = 0.0
+    for layer_output in layers:
+      penalty += (layer_output.mean() ** 2 + (layer_output.std() - 1.0) ** 2)
+
+    output = torch.sigmoid(output)[:,0:2]
+    earliness = piece_counts.to(torch.float32) @ earliness_weights
+    output = output[:,0] * earliness + output[:,1] * (1.0 - earliness)
+
     label = wdl2score(win_mover_perspective, draw_mover_perspective, lose_mover_perspective)
-    assert output.shape == label.shape
+    assert output.shape == label.shape, f"{output.shape} vs {label.shape}"
     loss = nn.functional.mse_loss(
       output, label, reduction='mean',
     )
@@ -163,6 +176,10 @@ def save_tensor(tensor: torch.Tensor, name: str, out: io.BufferedWriter):
   out.write(tensor.tobytes())
 
 # Save the model
+
+with open('model.pt', 'wb') as f:
+  torch.save(model.state_dict(), f)
+
 with open('model.bin', 'wb') as f:
   save_tensor(model.emb.weight(False)[:-1], 'embedding', f)
   save_tensor(model.mlp[0].weight, 'linear0.weight', f)
@@ -214,31 +231,25 @@ output = model(
 )[0][:,0]
 print(f"White winning position score: {output[0].item():.4f}")
 
-# d4      0.3291
-# Nc3     0.3143
-# d3      0.2154
-# Nf3     0.1487
-# e4      0.1422
-# Na3     0.1072
-# c4      0.0749
-# Nh3     0.0422
-# b4     -0.0233
-# a4     -0.0523
-# c3     -0.0547
-# h4     -0.0691
-# b3     -0.0708
-# a3     -0.0817
-# g4     -0.0836
-# e3     -0.0856
-# g3     -0.0905
-# h3     -0.1435
-# f3     -0.1687
-# f4     -0.1873
-# >>> white_winning = 'rnbqkbnr/pppppppp/8/8/2BPPB2/2N2N2/PPP2PPP/R2Q1RK1 w Qkq - 0 1'
-# >>> board = chess.Board(white_winning)
-# >>> output = model(
-# ...   torch.tensor(board2x(board)).unsqueeze(0).to(device),
-# ...   torch.tensor([1], device=device).unsqueeze(0),
-# ... )[0][:,0]
-# >>> print(f"White winning position score: {output[0].item():.4f}")
-# White winning position score: 2.0020
+# loss: 0.0339, mse: 0.2576, penalty: 0.0019
+# Nf3     0.1300
+# e4      0.0932
+# d4      0.0859
+# e3      0.0574
+# Nc3     0.0509
+# c4      0.0509
+# g3      0.0504
+# b4      0.0237
+# g4      0.0216
+# d3      0.0211
+# c3      0.0112
+# a3      0.0069
+# h3      0.0011
+# Nh3    -0.0027
+# a4     -0.0108
+# h4     -0.0155
+# b3     -0.0220
+# Na3    -0.0391
+# f4     -0.1045
+# f3     -0.1073
+# White winning position score: 3.7974

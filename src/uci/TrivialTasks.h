@@ -173,6 +173,7 @@ class SetEvaluatorTask : public Task {
     } else {
       std::cout << "Error: unrecognized evaluator name \"" << evaluatorName << "\"" << std::endl;
     }
+    state->tt_->clear();
   }
  private:
   std::deque<std::string> command;

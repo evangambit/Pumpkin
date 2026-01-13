@@ -13,7 +13,7 @@ namespace NNUE {
 
 double randn(double stddev = 1.0);
 
-constexpr int SCALE_SHIFT = 6;
+constexpr int SCALE_SHIFT = 8;
 constexpr int EMBEDDING_DIM = 1024;
 constexpr int HIDDEN1_DIM = 256;
 constexpr int HIDDEN2_DIM = 64;
