@@ -15,11 +15,17 @@ class Emb(nn.Module):
     din = 768
 
     s = (1.0 / kMaxNumOnesInInput) ** 0.5    
+    self.pieces = nn.Parameter(torch.randn(12, 1, 1, dout) * s)
+    self.ranks = nn.Parameter(torch.randn(1, 8, 1, dout) * s)
+    self.files = nn.Parameter(torch.randn(1, 1, 8, dout) * s)
     self.tiles = nn.Parameter(torch.randn(12, 8, 8, dout) * s)
     self.zeros = nn.Parameter(torch.zeros(1, dout), requires_grad=False)
   
   def zero_(self):
     with torch.no_grad():
+      self.pieces.zero_()
+      self.ranks.zero_()
+      self.files.zero_()
       self.tiles.zero_()
 
   def weight(self, vertically_flipped=False):
@@ -33,7 +39,7 @@ class Emb(nn.Module):
 
     Shape: (768 + 1, dout)
     """
-    tiles = self.tiles
+    tiles = self.tiles + self.pieces + self.ranks + self.files
     if vertically_flipped:
       # Flip the pieces (White <-> Black) and the ranks.
       tiles = tiles.flip(1).roll(6, dims=0)

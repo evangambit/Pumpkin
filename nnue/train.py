@@ -215,7 +215,7 @@ for move in moves:
   board.pop()
 
 # Flip bc these are all from black's perspective
-output = -model(torch.cat(X, dim=0), torch.tensor(T, device=device).unsqueeze(1))[0][:,0]
+output = -model(torch.cat(X, dim=0), torch.tensor(T, device=device).unsqueeze(1))[0][:,0] # Same as using earliness=1.0
 
 I = output.cpu().detach().numpy().argsort()[::-1]
 for i in I:
@@ -228,7 +228,7 @@ board = chess.Board(white_winning)
 output = model(
   torch.tensor(board2x(board)).unsqueeze(0).to(device),
   torch.tensor([1], device=device).unsqueeze(0),
-)[0][:,0]
+)[0][:,0]  # Same as using earliness=1.0
 print(f"White winning position score: {output[0].item():.4f}")
 
 # loss: 0.0339, mse: 0.2576, penalty: 0.0019
