@@ -165,7 +165,7 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
     if (IS_PRINT_QNODE) {
       std::cout << repeat("  ", plyFromRoot) << "Checkmate detected in quiescence search." << std::endl;
     }
-    return NegamaxResult<TURN>(kNullMove, kCheckmate + plyFromRoot);
+    return NegamaxResult<TURN>(kNullMove, kCheckmate);
   }
 
   NegamaxResult<TURN> bestResult(kNullMove, evaluate<TURN>(thread->evaluator_, thread->position_));
@@ -243,6 +243,11 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
     }
 
     ColoredEvaluation<TURN> eval = -qsearch<opposite_color<TURN>()>(thread, -beta, -alpha, plyFromRoot + 1, quiescenceDepth + 1, stopThinking).evaluation;
+    if (eval.value < kLongestForcedMate) {
+      eval.value += 1;
+    } else if (eval.value > -kLongestForcedMate) {
+      eval.value -= 1;
+    }
     undo<TURN>(&thread->position_);
     if (eval > bestResult.evaluation) {
       bestResult.bestMove = move->move;
@@ -292,17 +297,17 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     if (SEARCH_TYPE != SearchType::ROOT) {
       if (entry.bound == BoundType::EXACT) {
         if (IS_PRINT_NODE) {
-        std::cout << repeat("  ", plyFromRoot) << "TT Hit: EXACT" << std::endl;
+          std::cout << repeat("  ", plyFromRoot) << "TT Hit: EXACT" << std::endl;
         }
         return NegamaxResult<TURN>(entry.bestMove, entry.value);
       } else if (entry.bound == BoundType::LOWER && entry.value >= beta.value) {
         if (IS_PRINT_NODE) {
-        std::cout << repeat("  ", plyFromRoot) << "TT Hit: LOWER" << std::endl;
+          std::cout << repeat("  ", plyFromRoot) << "TT Hit: LOWER" << std::endl;
         }
         return NegamaxResult<TURN>(entry.bestMove, entry.value);
       } else if (entry.bound == BoundType::UPPER && entry.value <= alpha.value) {
         if (IS_PRINT_NODE) {
-        std::cout << repeat("  ", plyFromRoot) << "TT Hit: UPPER" << std::endl;
+          std::cout << repeat("  ", plyFromRoot) << "TT Hit: UPPER" << std::endl;
         }
         return NegamaxResult<TURN>(entry.bestMove, entry.value);
       }
@@ -363,7 +368,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
       if (IS_PRINT_NODE) {
       std::cout << repeat("  ", plyFromRoot) << "Checkmate detected." << std::endl;
       }
-      return NegamaxResult<TURN>(kNullMove, kCheckmate + plyFromRoot);
+      return NegamaxResult<TURN>(kNullMove, kCheckmate);
     } else {
       if (IS_PRINT_NODE) {
       std::cout << repeat("  ", plyFromRoot) << "Stalemate detected." << std::endl;
@@ -417,6 +422,19 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
 
 
     ColoredEvaluation<TURN> eval = -negamax<opposite_color<TURN>(), SearchType::NORMAL_SEARCH>(thread, depth - 1, -beta, -alpha, plyFromRoot + 1, stopThinking).evaluation;
+
+    // We adjust mate scores to reflect the distance to mate here, rather than when we return kCheckmate. The
+    // reason is that otherwise our transposition table scores will reflect the conditions in which they happened
+    // to be computed, which wouldn't be accurate if they're being probed further from the root. An alternative
+    // solution is to adjust scores before storing them in the transposition table (and unadjusting after probing
+    // /them), but it seems simpler to just guarantee that all transposition table scores and negamax returns are
+    // always correct for their position, regardless of plyFromRoot.
+    if (eval.value < kLongestForcedMate) {
+      eval.value += 1;
+    } else if (eval.value > -kLongestForcedMate) {
+      eval.value -= 1;
+    }
+
     undo<TURN>(&thread->position_);
     if (eval > bestResult.evaluation) {
       bestResult.bestMove = move->move;
@@ -488,7 +506,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   );
 
   if (IS_PRINT_NODE) {
-  std::cout << repeat("  ", plyFromRoot) << "Negamax returning: bestMove=" << bestResult.bestMove.uci() << " eval=" << bestResult.evaluation.value << std::endl;
+  std::cout << repeat("  ", plyFromRoot) << "Negamax returning: bestMove=" << bestResult.bestMove.uci() << " eval=" << bestResult.evaluation.value  << " depth=" << depth << std::endl;
   }
 
 

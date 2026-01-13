@@ -72,8 +72,8 @@ struct Matrix {
         data[i * WIDTH + j] = static_cast<int16_t>(buffer[i * WIDTH + j] * (1 << SCALE_SHIFT));
       }
     }
-    std::cout << "Loaded matrix " << name << " of size " << HEIGHT << "x" << WIDTH << std::endl;
-    std::cout << *this << std::endl;
+    // std::cout << "Loaded matrix " << name << " of size " << HEIGHT << "x" << WIDTH << std::endl;
+    // std::cout << *this << std::endl;
     delete[] buffer;
   }
 
@@ -218,8 +218,8 @@ struct Vector {
     for (size_t i = 0; i < DIM; ++i) {
       data[i] = static_cast<int16_t>(buffer[i] * (1 << SCALE_SHIFT));
     }
-    std::cout << "Loaded vector " << name << " of size " << DIM << std::endl;
-    std::cout << *this << std::endl;
+    // std::cout << "Loaded vector " << name << " of size " << DIM << std::endl;
+    // std::cout << *this << std::endl;
   }
 
   Vector<DIM>& operator+=(const Vector< DIM >& other) {

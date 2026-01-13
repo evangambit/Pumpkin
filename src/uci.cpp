@@ -185,6 +185,9 @@ struct UciEngine {
       UciEngine::print_preamble();
     } else if (parts[0] == "ponderhit") {
       // Ignore. (TODO: handle pondering better).
+    } else if (parts[0] == "probe") {
+      // For probing the TT from UCI.
+      state->taskQueue.push_back(std::make_shared<ProbeTask>(parts));
     } else if (parts[0] == "debug") {
       // Todo
     } else if (parts[0] == "evaluator") {
