@@ -293,11 +293,11 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   // Check for immediate cutoffs based on mate distance.
   Evaluation lowestPossibleEvaluation = kCheckmate + plyFromRoot;
   if (lowestPossibleEvaluation >= beta.value) {
-    return NegamaxResult<TURN>(kNullMove, lowestPossibleEvaluation);
+    return NegamaxResult<TURN>(kNullMove, beta.value);
   }
   Evaluation highestPossibleEvaluation = -kCheckmate - plyFromRoot;
   if (highestPossibleEvaluation <= alpha.value) {
-    return NegamaxResult<TURN>(kNullMove, highestPossibleEvaluation);
+    return NegamaxResult<TURN>(kNullMove, alpha.value);
   }
 
   // Transposition Table probe
