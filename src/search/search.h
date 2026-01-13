@@ -283,12 +283,22 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
 }
 
 template<Color TURN, SearchType SEARCH_TYPE>
-NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> alpha, ColoredEvaluation<TURN> beta, int plyFromRoot, std::atomic<bool> *stopThinking) {
+NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> alpha, ColoredEvaluation<TURN> beta, unsigned plyFromRoot, std::atomic<bool> *stopThinking) {
   assert(thread->position_.turn_ == TURN);
   if (IS_PRINT_NODE) {
     std::cout << repeat("  ", plyFromRoot) << "Negamax called: depth=" << depth << " alpha=" << alpha.value << " beta=" << beta.value << " plyFromRoot=" << plyFromRoot << " history " << thread->position_.history_ << std::endl;
   }
   const ColoredEvaluation<TURN> originalAlpha = alpha;
+
+  // Check for immediate cutoffs based on mate distance.
+  Evaluation lowestPossibleEvaluation = kCheckmate + plyFromRoot;
+  if (lowestPossibleEvaluation >= beta.value) {
+    return NegamaxResult<TURN>(kNullMove, lowestPossibleEvaluation);
+  }
+  Evaluation highestPossibleEvaluation = -kCheckmate - plyFromRoot;
+  if (highestPossibleEvaluation <= alpha.value) {
+    return NegamaxResult<TURN>(kNullMove, highestPossibleEvaluation);
+  }
 
   // Transposition Table probe
   TTEntry entry;
@@ -427,8 +437,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     // reason is that otherwise our transposition table scores will reflect the conditions in which they happened
     // to be computed, which wouldn't be accurate if they're being probed further from the root. An alternative
     // solution is to adjust scores before storing them in the transposition table (and unadjusting after probing
-    // /them), but it seems simpler to just guarantee that all transposition table scores and negamax returns are
-    // always correct for their position, regardless of plyFromRoot.
+    // /them), but this seems simpler.
     if (eval.value < kLongestForcedMate) {
       eval.value += 1;
     } else if (eval.value > -kLongestForcedMate) {
