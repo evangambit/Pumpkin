@@ -117,29 +117,6 @@ earliness_weights = torch.tensor([
 def wdl2score(win_mover_perspective, draw_mover_perspective, lose_mover_perspective):
   return win_mover_perspective + draw_mover_perspective * 0.5
 
-# loss: 0.0532, mse: 0.4050, penalty: 1.5753
-# d4      0.1008
-# Nf3     0.0643
-# e4      0.0253
-# c4      0.0253
-# Nc3     0.0253
-# d3      0.0253
-# e3      0.0253
-# c3      0.0071
-# Nh3    -0.0026
-# a4     -0.0122
-# h3     -0.0122
-# h4     -0.0122
-# a3     -0.0122
-# b3     -0.0122
-# Na3    -0.0187
-# b4     -0.0315
-# g3     -0.0317
-# g4     -0.0616
-# f4     -0.0638
-# f3     -0.0744
-# White winning position score: 2.3148
-
 metrics = defaultdict(list)
 print("Starting training...")
 for epoch in range(NUM_EPOCHS):

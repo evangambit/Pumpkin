@@ -39,14 +39,30 @@ SearchResult<Color::WHITE> search(Position pos, std::shared_ptr<EvaluatorInterfa
 void extract_variation_from_tt(const Position& pos, TranspositionTable* tt, std::vector<Move>* movesOut, Move startMove) {
   Position position = pos;
   Move move = startMove;
+  assert(move != kNullMove);
+  std::unordered_set<uint64_t> visitedHashes;
+  visitedHashes.insert(position.currentState_.hash);
   while (move != kNullMove) {
     ez_make_move(&position, move);
     movesOut->push_back(move);
+    if (visitedHashes.count(position.currentState_.hash) > 0) {
+      break;
+    }
     TTEntry entry;
     if (!tt->probe(position.currentState_.hash, entry)) {
       break;
     }
     move = entry.bestMove;
+  }
+}
+
+Evaluation increment_mate(Evaluation eval, Evaluation delta) {
+  if (eval <= kLongestForcedMate) {
+    return Evaluation(eval + delta);
+  } else if (eval >= -kLongestForcedMate) {
+    return Evaluation(eval - delta);
+  } else {
+    return eval;
   }
 }
 

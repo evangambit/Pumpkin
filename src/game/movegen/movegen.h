@@ -483,6 +483,7 @@ bool is_stalemate(Position* pos) {
 
 bool colorless_is_stalemate(Position *pos);
 
+Move uci_to_move(const Position& pos, const std::string& uci);
 
 }  // namespace ChessEngine
 

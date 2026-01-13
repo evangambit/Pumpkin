@@ -14,6 +14,7 @@
 #include "../eval/PieceSquareEvaluator.h"
 #include "../eval/evaluator.h"
 #include "../eval/nnue/NnueEvaluator.h"
+#include "../game/movegen/movegen.h"
 
 namespace ChessEngine {
 
@@ -34,8 +35,49 @@ class HashTask : public Task {
   }
 };
 
-struct MoveTask : public Task {
+class ProbeTask : public Task {
  public:
+  ProbeTask(std::deque<std::string> command) : command(command) {}
+  void start(UciEngineState *state) {
+    if (command.size() < 2) {
+      std::cout << "Error: probe command requires a move argument." << std::endl;
+      return;
+    }
+    command.pop_front();
+    Position pos = state->position;
+    while (command.size() > 0) {
+      std::string moveStr = command.at(0);
+      command.pop_front();
+      Move move = uci_to_move(pos, moveStr);
+      if (move == kNullMove) {
+        std::cout << "Error: invalid move \"" << moveStr << "\"" << std::endl;
+        return;
+      }
+      ez_make_move(&pos, move);
+    }
+    TTEntry entry;
+    if (state->tt_->probe(pos.currentState_.hash, entry)) {
+      std::cout << "TT Entry found for current position:" << std::endl;
+      std::cout << "  Hash: " << pos.currentState_.hash << std::endl;
+      std::cout << "  Best Move: " << entry.bestMove.uci() << std::endl;
+      if (entry.value <= kLongestForcedMate) {
+        std::cout << "Value: " << entry.value << "(mate " << -(entry.value - kCheckmate + 1) / 2 << ")" << std::endl;
+      } else if (entry.value >= -kLongestForcedMate) {
+        std::cout << "Value: " << entry.value << "(mate " << -(entry.value + kCheckmate - 1) / 2 << ")" << std::endl;
+      } else {
+        std::cout << "Value: " << entry.value << "(cp " << entry.value << ")" << std::endl;
+      }
+      std::cout << "  Depth: " << entry.depth << std::endl;
+      std::cout << "  Bound: " << bound_type_to_string(entry.bound) << std::endl;
+    } else {
+      std::cout << "No TT Entry found for current position." << std::endl;
+    }
+  }
+ private:
+  std::deque<std::string> command;
+};
+
+struct MoveTask : public Task {
   MoveTask(std::deque<std::string> command) : command(command) {}
   void start(UciEngineState *state) {
     command.pop_front();
@@ -49,24 +91,6 @@ struct MoveTask : public Task {
       }
       ez_make_move(&state->position, move);
     }
-  }
-
-  Move uci_to_move(const Position& pos, const std::string& uci) {
-    ExtMove moves[kMaxNumMoves];
-    ExtMove *end;
-    Position tempPos = pos;
-    if (pos.turn_ == Color::WHITE) {
-      end = compute_legal_moves<Color::WHITE>(&tempPos, moves);
-    } else {
-      end = compute_legal_moves<Color::BLACK>(&tempPos, moves);
-    }
-    for (ExtMove* m = moves; m != end; ++m) {
-      Move move = m->move;
-      if (move.uci() == uci) {
-        return move;
-      }
-    }
-    return kNullMove;
   }
 
  private:
