@@ -127,6 +127,29 @@ class GoTask : public Task {
 
     GoCommand goCommand = make_go_command(&command, &state->position);
 
+    // go wtime 60000 btime 60000 movestogo 40
+    if (goCommand.wtimeMs != 0 || goCommand.btimeMs != 0) {
+      // We're in a timed game. Convert to a time limit.
+      uint64_t timeForMoveMs;
+      if (state->position.turn_ == Color::WHITE) {
+        if (goCommand.movesUntilTimeControl != (uint64_t)-1) {
+          timeForMoveMs = goCommand.wtimeMs / goCommand.movesUntilTimeControl;
+        } else {
+          timeForMoveMs = goCommand.wtimeMs / 30;  // Assume 30 moves remaining if not specified.
+        }
+        timeForMoveMs += goCommand.wIncrementMs;
+      } else {
+        if (goCommand.movesUntilTimeControl != (uint64_t)-1) {
+          timeForMoveMs = goCommand.btimeMs / goCommand.movesUntilTimeControl;
+        } else {
+          timeForMoveMs = goCommand.btimeMs / 30;  // Assume 30 moves remaining if not specified.
+        }
+        timeForMoveMs += goCommand.bIncrementMs;
+      }
+      // Use 95% of the calculated time to leave some buffer.
+      goCommand.timeLimitMs = timeForMoveMs * 95 / 100;
+    }
+
     this->baseThreadState = std::make_shared<Thread>(
       /* thread id=*/ 0,
       state->position,
