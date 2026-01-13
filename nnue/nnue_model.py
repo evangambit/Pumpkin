@@ -39,11 +39,11 @@ class NNUE(nn.Module):
   def forward(self, x, turn):
     # Turn is 1 for white to move, -1 for black to move
     z = self.embed(x, turn)
-    penalty = torch.abs(torch.abs(z) - 4.0).mean()
+    penalty = (z.mean() ** 2 + (z.std() - 1.0) ** 2)
     for layer in self.mlp:
       z = layer(z)
       if isinstance(layer, nn.Linear):
-        penalty += torch.abs(torch.abs(z) - 4.0).mean()
+        penalty += (z.mean() ** 2 + (z.std() - 1.0) ** 2)
     return z, penalty
 
 def test():
