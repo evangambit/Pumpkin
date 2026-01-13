@@ -95,7 +95,7 @@ print("Creating optimizer...")
 opt = torch.optim.AdamW(model.parameters(), lr=0.0, weight_decay=0.1)
 
 # Calculate total steps
-NUM_EPOCHS = 1
+NUM_EPOCHS = 4
 steps_per_epoch = len(dataloader)
 total_steps = NUM_EPOCHS * steps_per_epoch
 warmup_steps = 250  # 10% of first epoch for warmup
@@ -116,6 +116,29 @@ earliness_weights = torch.tensor([
 
 def wdl2score(win_mover_perspective, draw_mover_perspective, lose_mover_perspective):
   return win_mover_perspective + draw_mover_perspective * 0.5
+
+# loss: 0.0532, mse: 0.4050, penalty: 1.5753
+# d4      0.1008
+# Nf3     0.0643
+# e4      0.0253
+# c4      0.0253
+# Nc3     0.0253
+# d3      0.0253
+# e3      0.0253
+# c3      0.0071
+# Nh3    -0.0026
+# a4     -0.0122
+# h3     -0.0122
+# h4     -0.0122
+# a3     -0.0122
+# b3     -0.0122
+# Na3    -0.0187
+# b4     -0.0315
+# g3     -0.0317
+# g4     -0.0616
+# f4     -0.0638
+# f3     -0.0744
+# White winning position score: 2.3148
 
 metrics = defaultdict(list)
 print("Starting training...")
@@ -214,3 +237,31 @@ output = model(
 )[0][:,0]
 print(f"White winning position score: {output[0].item():.4f}")
 
+# d4      0.3291
+# Nc3     0.3143
+# d3      0.2154
+# Nf3     0.1487
+# e4      0.1422
+# Na3     0.1072
+# c4      0.0749
+# Nh3     0.0422
+# b4     -0.0233
+# a4     -0.0523
+# c3     -0.0547
+# h4     -0.0691
+# b3     -0.0708
+# a3     -0.0817
+# g4     -0.0836
+# e3     -0.0856
+# g3     -0.0905
+# h3     -0.1435
+# f3     -0.1687
+# f4     -0.1873
+# >>> white_winning = 'rnbqkbnr/pppppppp/8/8/2BPPB2/2N2N2/PPP2PPP/R2Q1RK1 w Qkq - 0 1'
+# >>> board = chess.Board(white_winning)
+# >>> output = model(
+# ...   torch.tensor(board2x(board)).unsqueeze(0).to(device),
+# ...   torch.tensor([1], device=device).unsqueeze(0),
+# ... )[0][:,0]
+# >>> print(f"White winning position score: {output[0].item():.4f}")
+# White winning position score: 2.0020

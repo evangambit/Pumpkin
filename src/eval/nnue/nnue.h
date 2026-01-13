@@ -15,6 +15,7 @@ namespace NNUE {
 
 template <size_t HEIGHT, size_t WIDTH>
 struct Matrix {
+  static_assert(WIDTH > 0 && HEIGHT > 0, "Matrix dimensions must be greater than zero");
   int16_t *data;
 
   Matrix() {
@@ -71,20 +72,46 @@ struct Matrix {
         data[i * WIDTH + j] = static_cast<int16_t>(buffer[i * WIDTH + j] * (1 << SCALE_SHIFT));
       }
     }
+    std::cout << "Loaded matrix " << name << " of size " << HEIGHT << "x" << WIDTH << std::endl;
+    std::cout << *this << std::endl;
     delete[] buffer;
   }
 
   friend std::ostream& operator<<(std::ostream& os, const Matrix<HEIGHT, WIDTH>& mat) {
-    for (size_t i = 0; i < std::min(HEIGHT, size_t(4)); ++i) {
-      for (size_t j = 0; j < std::min(WIDTH, size_t(4)); ++j) {
+    for (size_t i = 0; i < std::min(HEIGHT, size_t(5)); ++i) {
+      for (size_t j = 0; j < std::min(WIDTH, size_t(5)); ++j) {
         os << mat.data[i * WIDTH + j] << " ";
       }
-      if (WIDTH > 4) {
+      if (WIDTH > 5) {
         os << "...";
       }
       os << std::endl;
     }
+    if (HEIGHT > 5) {
+      os << "...";
+    }
+    std::cout << "( max: " << mat.max() << ", min: " << mat.min() << " )" << std::endl;
     return os;
+  }
+
+  int16_t max() const {
+    int16_t maxVal = data[0];
+    for (size_t i = 1; i < HEIGHT * WIDTH; ++i) {
+      if (data[i] > maxVal) {
+        maxVal = data[i];
+      }
+    }
+    return maxVal;
+  }
+
+  int16_t min() const {
+    int16_t minVal = data[0];
+    for (size_t i = 1; i < HEIGHT * WIDTH; ++i) {
+      if (data[i] < minVal) {
+        minVal = data[i];
+      }
+    }
+    return minVal;
   }
 
   void randn_() {
@@ -116,6 +143,7 @@ struct Matrix {
 
 template<size_t DIM>
 struct Vector {
+  static_assert(DIM > 0, "Vector dimension must be greater than zero");
   int16_t *data;
 
   Vector() {
@@ -190,6 +218,8 @@ struct Vector {
     for (size_t i = 0; i < DIM; ++i) {
       data[i] = static_cast<int16_t>(buffer[i] * (1 << SCALE_SHIFT));
     }
+    std::cout << "Loaded vector " << name << " of size " << DIM << std::endl;
+    std::cout << *this << std::endl;
   }
 
   Vector<DIM>& operator+=(const Vector< DIM >& other) {
@@ -289,8 +319,6 @@ inline void matmul(Matrix<HEIGHT, WIDTH>& mat, const Vector<WIDTH>& vec, Vector<
 }
 
 struct Nnue {
-      // layer1.matmul(sideToMove == ChessEngine::Color::WHITE ? whiteAcc : blackAcc, &hidden1);
-
   bool x[INPUT_DIM];
   Vector<EMBEDDING_DIM> embWeights[INPUT_DIM];
   Vector<EMBEDDING_DIM> whiteAcc;
@@ -402,12 +430,11 @@ struct Nnue {
   int16_t *forward(ChessEngine::Color sideToMove) {
     matmul(layer1, sideToMove == ChessEngine::Color::WHITE ? whiteAcc : blackAcc, &hidden1);
     hidden1 += bias1;
-    hidden1.clip_(0, 64);
+    hidden1.clip_(0, 1 << SCALE_SHIFT);
 
     matmul(layer2, hidden1, &hidden2);
     hidden2 += bias2;
-    hidden2.clip_(0, 64);
-
+    hidden2.clip_(0, 1 << SCALE_SHIFT);
     matmul(layer3, hidden2, &output);
     output += bias3;
 
