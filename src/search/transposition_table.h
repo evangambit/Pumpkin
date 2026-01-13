@@ -27,7 +27,7 @@ struct TTEntry {
 };
 
 class TranspositionTable {
-public:
+ public:
   TranspositionTable(size_t kilobytes);
   void clear();
   void new_search();
