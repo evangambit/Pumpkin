@@ -28,6 +28,9 @@ struct ColoredEvaluation {
   bool operator!=(const ColoredEvaluation<TURN>& other) const {
     return value != other.value;
   }
+  ColoredEvaluation<TURN> operator+(Evaluation other) const {
+    return ColoredEvaluation<TURN>(value + other);
+  }
   ColoredEvaluation<TURN>& operator+=(const ColoredEvaluation<TURN>& other) {
     value += other.value;
     return *this;
