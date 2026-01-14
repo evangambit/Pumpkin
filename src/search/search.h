@@ -432,7 +432,16 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     }
 
 
-    ColoredEvaluation<TURN> eval = -negamax<opposite_color<TURN>(), SearchType::NORMAL_SEARCH>(thread, depth - 1, -beta, -alpha, plyFromRoot + 1, stopThinking).evaluation;
+    ColoredEvaluation<TURN> eval(0);
+    if (move->move != moves[0].move && (SEARCH_TYPE != SearchType::ROOT || thread->multiPV_ == 1)) {
+      // Null window search.
+      eval = -negamax<opposite_color<TURN>(), SearchType::NORMAL_SEARCH>(thread, depth - 1, -(alpha + 1), -alpha, plyFromRoot + 1, stopThinking).evaluation;
+      if (eval.value > alpha.value) {
+        eval = -negamax<opposite_color<TURN>(), SearchType::NORMAL_SEARCH>(thread, depth - 1, -beta, -alpha, plyFromRoot + 1, stopThinking).evaluation;
+      }
+    } else {
+      eval = -negamax<opposite_color<TURN>(), SearchType::NORMAL_SEARCH>(thread, depth - 1, -beta, -alpha, plyFromRoot + 1, stopThinking).evaluation;
+    }
 
     // We adjust mate scores to reflect the distance to mate here, rather than when we return kCheckmate. The
     // reason is that otherwise our transposition table scores will reflect the conditions in which they happened
@@ -600,16 +609,16 @@ SearchResult<TURN> negamax_result_to_search_result(const NegamaxResult<TURN>& re
 template<Color TURN>
 SearchResult<TURN> search(Thread* thread, std::atomic<bool> *stopThinking, std::function<void(int, SearchResult<TURN>)> onDepthCompleted) {
   assert(thread->position_.turn_ == TURN);
+  std::atomic<bool> neverStopThinking{false};
   NegamaxResult<TURN> result = negamax<TURN, SearchType::ROOT>(
     thread,
     1,
     /*alpha=*/ColoredEvaluation<TURN>(kMinEval),
     /*beta=*/ColoredEvaluation<TURN>(kMaxEval),
     /*plyFromRoot=*/0,
-    stopThinking
+    &neverStopThinking  // Guarantee we always search at least depth 1 before stopping.
   );
   if (onDepthCompleted != nullptr) {
-    // TODO: guarantee we always search at least depth 1 before stopping.
     SearchResult<TURN> searchResult = negamax_result_to_search_result<TURN>(result, thread);
     onDepthCompleted(1, searchResult);
   }
@@ -627,7 +636,6 @@ SearchResult<TURN> search(Thread* thread, std::atomic<bool> *stopThinking, std::
     if (stopThinking->load()) {
       // Primary variations may be incomplete or invalid if the search was stopped.
       // Re-run the search at depth=1 to get a valid result.
-      stopThinking->store(false);
       thread->primaryVariations_.clear();
       result = negamax<TURN, SearchType::ROOT>(
         thread,
@@ -635,7 +643,7 @@ SearchResult<TURN> search(Thread* thread, std::atomic<bool> *stopThinking, std::
         /*alpha=*/ColoredEvaluation<TURN>(kMinEval),
         /*beta=*/ColoredEvaluation<TURN>(kMaxEval),
         /*plyFromRoot=*/0,
-        stopThinking
+        &neverStopThinking
       );
     }
     if (onDepthCompleted != nullptr) {
