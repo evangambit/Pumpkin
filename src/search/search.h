@@ -303,7 +303,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
 
   // Transposition Table probe
   TTEntry entry;
-  uint64_t key = thread->position_.currentState_.hash;
+  const uint64_t key = thread->position_.currentState_.hash;
   if (thread->tt_->probe(key, entry) && entry.depth >= depth) {
     if (SEARCH_TYPE != SearchType::ROOT) {
       if (entry.bound == BoundType::EXACT) {
@@ -396,9 +396,15 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     return NegamaxResult<TURN>(kNullMove, 0);
   }
 
+  // If we don't have a best move from the TT, we compute one with reduced depth.
+  Move bestMove = entry.key != key ? kNullMove : entry.bestMove;
+  if (depth > 2 && (entry.key != key || entry.bestMove == kNullMove)) {
+    bestMove = negamax<TURN, SEARCH_TYPE>(thread, depth - 2, alpha, beta, plyFromRoot, stopThinking).bestMove;
+  }
+
   // Add score to each move.
   for (ExtMove* move = moves; move < end; ++move) {
-    move->score = move->move == entry.bestMove ? 10000 : 0;
+    move->score = move->move == bestMove ? 10000 : 0;
     move->score += (move->capture != ColoredPiece::NO_COLORED_PIECE);
   }
   std::sort(
