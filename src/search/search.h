@@ -105,7 +105,7 @@ enum SearchType {
   NORMAL_SEARCH,
 };
 
-const Evaluation kMoveOrderingPieceValue[Piece::NUM_PIECES] = {
+const Evaluation kQMoveOrderingPieceValue[Piece::NUM_PIECES] = {
   1000,    // NO_PIECE (means it's a check)
   100,  // PAWN
   320,  // KNIGHT
@@ -191,10 +191,10 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
     Piece capturedPiece = cp2p(thread->position_.tiles_[move->move.to]);
     assert(capturedPiece < Piece::NUM_PIECES);
 
-    move->score = kMoveOrderingPieceValue[cp2p(move->capture)];
+    move->score = kQMoveOrderingPieceValue[cp2p(move->capture)];
     move->score -= value_or_zero(
       ((threats.badForOur[move->piece] & bb(move->move.to)) > 0) && !((threats.badForOur[move->piece] & bb(move->move.from)) > 0),
-      kMoveOrderingPieceValue[move->piece]
+      kQMoveOrderingPieceValue[move->piece]
     );
   }
   std::sort(
@@ -398,7 +398,8 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
 
   // Add score to each move.
   for (ExtMove* move = moves; move < end; ++move) {
-    move->score = move->move == entry.bestMove ? 1 : 0;
+    move->score = move->move == entry.bestMove ? 10000 : 0;
+    move->score += (move->capture != ColoredPiece::NO_COLORED_PIECE);
   }
   std::sort(
     moves,
