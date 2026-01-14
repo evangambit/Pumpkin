@@ -293,11 +293,11 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
 
   // Check for immediate cutoffs based on mate distance.
   Evaluation lowestPossibleEvaluation = kCheckmate + plyFromRoot;
-  if (lowestPossibleEvaluation >= beta.value) {
+  if (SEARCH_TYPE != SearchType::ROOT && lowestPossibleEvaluation >= beta.value) {
     return NegamaxResult<TURN>(kNullMove, beta.value);
   }
   Evaluation highestPossibleEvaluation = -kCheckmate - plyFromRoot;
-  if (highestPossibleEvaluation <= alpha.value) {
+  if (SEARCH_TYPE != SearchType::ROOT && highestPossibleEvaluation <= alpha.value) {
     return NegamaxResult<TURN>(kNullMove, alpha.value);
   }
 
@@ -414,6 +414,10 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
       return a.score > b.score;
     }
   );
+
+  if (SEARCH_TYPE == SearchType::ROOT) {
+    thread->primaryVariations_.clear();
+  }
 
   NegamaxResult<TURN> bestResult(kNullMove, kMinEval);
   Move bestMoveTT = kNullMove;
@@ -631,7 +635,6 @@ SearchResult<TURN> search(Thread* thread, std::atomic<bool> *stopThinking, std::
   }
   for (int i = 2; i <= thread->depth_; ++i) {
     if (stopThinking->load()) break;
-    thread->primaryVariations_.clear();
     result = negamax<TURN, SearchType::ROOT>(
       thread,
       i,
@@ -643,7 +646,6 @@ SearchResult<TURN> search(Thread* thread, std::atomic<bool> *stopThinking, std::
     if (stopThinking->load()) {
       // Primary variations may be incomplete or invalid if the search was stopped.
       // Re-run the search at depth=1 to get a valid result.
-      thread->primaryVariations_.clear();
       result = negamax<TURN, SearchType::ROOT>(
         thread,
         1,
