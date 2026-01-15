@@ -127,9 +127,10 @@ class GoTask : public Task {
 
     GoCommand goCommand = make_go_command(&command, &state->position);
 
-    // go wtime 60000 btime 60000 movestogo 40
+    bool isTimeSensitive = false;
     if (goCommand.wtimeMs != 0 || goCommand.btimeMs != 0) {
       // We're in a timed game. Convert to a time limit.
+      isTimeSensitive = true;
       uint64_t timeForMoveMs;
       if (state->position.turn_ == Color::WHITE) {
         if (goCommand.movesUntilTimeControl != (uint64_t)-1) {
@@ -171,7 +172,7 @@ class GoTask : public Task {
     } else {
       this->baseThreadState->stopTime_ = std::chrono::high_resolution_clock::time_point::max();
     }
-    this->thread = new std::thread(GoTask::_threaded_think, this->baseThreadState.get(), state, &isRunning);
+    this->thread = new std::thread(GoTask::_threaded_think, this->baseThreadState.get(), state, &isRunning, isTimeSensitive);
   }
 
   bool is_running() override {
@@ -185,7 +186,7 @@ class GoTask : public Task {
     delete this->thread;
   }
 
-  static void _threaded_think(Thread* baseThread, UciEngineState* state, bool* isRunning) {
+  static void _threaded_think(Thread* baseThread, UciEngineState* state, bool* isRunning, bool timeSensitive) {
 
     // TODO: support more than one thread.
     Thread thread0 = *baseThread;
@@ -196,7 +197,7 @@ class GoTask : public Task {
       auto now = std::chrono::high_resolution_clock::now();
       double secs = std::chrono::duration<double>(now - startTime).count();
       GoTask::_print_variations(depth, secs, result, state, &thread0);
-    });
+    }, /*timeSensitive=*/timeSensitive);
 
     std::cout << "bestmove " << result.bestMove.uci() << std::endl;
 

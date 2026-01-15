@@ -2,9 +2,14 @@
 
 namespace ChessEngine {
 
-SearchResult<Color::WHITE> colorless_search(Thread* thread, std::atomic<bool> *stopThinking, std::function<void(int, SearchResult<Color::WHITE>)> onDepthCompleted) {
+SearchResult<Color::WHITE> colorless_search(
+  Thread* thread,
+  std::atomic<bool> *stopThinking,
+  std::function<void(int, SearchResult<Color::WHITE>)> onDepthCompleted,
+  bool timeSensitive
+) {
   if (thread->position_.turn_ == Color::WHITE) {
-    return search<Color::WHITE>(thread, stopThinking, onDepthCompleted);
+    return search<Color::WHITE>(thread, stopThinking, onDepthCompleted, timeSensitive);
   } else {
     if (onDepthCompleted != nullptr) {
       std::function<void(int, SearchResult<Color::BLACK>)> wrappedOnDepthCompleted =
@@ -12,10 +17,10 @@ SearchResult<Color::WHITE> colorless_search(Thread* thread, std::atomic<bool> *s
           SearchResult<Color::WHITE> resultWhite = -resultBlack;
           onDepthCompleted(depth, resultWhite);
         };
-      return -search<Color::BLACK>(thread, stopThinking, wrappedOnDepthCompleted);
+      return -search<Color::BLACK>(thread, stopThinking, wrappedOnDepthCompleted, timeSensitive);
     }
     else {
-      return -search<Color::BLACK>(thread, stopThinking, nullptr);
+      return -search<Color::BLACK>(thread, stopThinking, nullptr, timeSensitive);
     }
   }
 }
@@ -29,9 +34,9 @@ SearchResult<Color::WHITE> search(Position pos, std::shared_ptr<EvaluatorInterfa
   std::atomic<bool> stopThinking {false};
 
   if (pos.turn_ == Color::WHITE) {
-    return search<Color::WHITE>(&thread, &stopThinking, nullptr);
+    return search<Color::WHITE>(&thread, &stopThinking, nullptr, /*timeSensitive=*/false);
   } else {
-    SearchResult<Color::BLACK> result = search<Color::BLACK>(&thread, &stopThinking, nullptr);
+    SearchResult<Color::BLACK> result = search<Color::BLACK>(&thread, &stopThinking, nullptr, /*timeSensitive=*/false);
     return -result;
   }
 }
