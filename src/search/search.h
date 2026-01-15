@@ -651,10 +651,6 @@ SearchResult<TURN> search(Thread* thread, std::atomic<bool> *stopThinking, std::
       /*plyFromRoot=*/0,
       stopThinking
     );
-    if (timeSensitive && (result.evaluation.value <= kLongestForcedMate || result.evaluation.value >= -kLongestForcedMate)) {
-      // If we're in an actual game, stop searching deeper once we find a forced mate.
-      break;
-    }
     if (stopThinking->load()) {
       // Primary variations may be incomplete or invalid if the search was stopped.
       // Re-run the search at depth=1 to get a valid result.
@@ -669,6 +665,10 @@ SearchResult<TURN> search(Thread* thread, std::atomic<bool> *stopThinking, std::
     }
     if (onDepthCompleted != nullptr) {
       onDepthCompleted(i, negamax_result_to_search_result<TURN>(result, thread));
+    }
+    if (timeSensitive && (result.evaluation.value <= kLongestForcedMate || result.evaluation.value >= -kLongestForcedMate)) {
+      // If we're in an actual game, stop searching deeper once we find a forced mate.
+      break;
     }
   }
   return negamax_result_to_search_result<TURN>(result, thread);
