@@ -626,7 +626,7 @@ SearchResult<TURN> negamax_result_to_search_result(const NegamaxResult<TURN>& re
 
 // Color-templated search function to be used by the UCI interface.
 template<Color TURN>
-SearchResult<TURN> search(Thread* thread, std::atomic<bool> *stopThinking, std::function<void(int, SearchResult<TURN>)> onDepthCompleted) {
+SearchResult<TURN> search(Thread* thread, std::atomic<bool> *stopThinking, std::function<void(int, SearchResult<TURN>)> onDepthCompleted, bool timeSensitive) {
   assert(thread->position_.turn_ == TURN);
   std::atomic<bool> neverStopThinking{false};
   NegamaxResult<TURN> result = negamax<TURN, SearchType::ROOT>(
@@ -641,9 +641,6 @@ SearchResult<TURN> search(Thread* thread, std::atomic<bool> *stopThinking, std::
     SearchResult<TURN> searchResult = negamax_result_to_search_result<TURN>(result, thread);
     onDepthCompleted(1, searchResult);
   }
-  // TODO: stop searching immediately if
-  // 1) we have a forced mate and
-  // 2) we're searching on a time limit
   for (int i = 2; i <= thread->depth_; ++i) {
     if (stopThinking->load()) break;
     result = negamax<TURN, SearchType::ROOT>(
@@ -654,6 +651,10 @@ SearchResult<TURN> search(Thread* thread, std::atomic<bool> *stopThinking, std::
       /*plyFromRoot=*/0,
       stopThinking
     );
+    if (timeSensitive && (result.evaluation.value <= kLongestForcedMate || result.evaluation.value >= -kLongestForcedMate)) {
+      // If we're in an actual game, stop searching deeper once we find a forced mate.
+      break;
+    }
     if (stopThinking->load()) {
       // Primary variations may be incomplete or invalid if the search was stopped.
       // Re-run the search at depth=1 to get a valid result.
@@ -674,7 +675,12 @@ SearchResult<TURN> search(Thread* thread, std::atomic<bool> *stopThinking, std::
 }
 
 // Non-color-templated search function to be used by the UCI interface.
-SearchResult<Color::WHITE> colorless_search(Thread* thread, std::atomic<bool> *stopThinking, std::function<void(int, SearchResult<Color::WHITE>)> onDepthCompleted);
+SearchResult<Color::WHITE> colorless_search(
+  Thread* thread,
+  std::atomic<bool> *stopThinking,
+  std::function<void(int, SearchResult<Color::WHITE>)> onDepthCompleted,
+  bool timeSensitive
+);
 
 // Convenience function to search programmatically without needing to specify color or create a thread.
 SearchResult<Color::WHITE> search(Position pos, std::shared_ptr<EvaluatorInterface> evaluator, int depth, int multiPV, TranspositionTable* tt);
