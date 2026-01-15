@@ -641,6 +641,9 @@ SearchResult<TURN> search(Thread* thread, std::atomic<bool> *stopThinking, std::
     SearchResult<TURN> searchResult = negamax_result_to_search_result<TURN>(result, thread);
     onDepthCompleted(1, searchResult);
   }
+  // TODO: stop searching immediately if
+  // 1) we have a forced mate and
+  // 2) we're searching on a time limit
   for (int i = 2; i <= thread->depth_; ++i) {
     if (stopThinking->load()) break;
     result = negamax<TURN, SearchType::ROOT>(
