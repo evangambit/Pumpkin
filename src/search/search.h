@@ -397,14 +397,15 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   }
 
   // If we don't have a best move from the TT, we compute one with reduced depth.
-  Move bestMove = entry.key != key ? kNullMove : entry.bestMove;
   if (depth > 2 && (entry.key != key || entry.bestMove == kNullMove)) {
-    bestMove = negamax<TURN, SEARCH_TYPE>(thread, depth - 2, alpha, beta, plyFromRoot, stopThinking).bestMove;
+    NegamaxResult<TURN> result = negamax<TURN, SEARCH_TYPE>(thread, depth - 2, alpha, beta, plyFromRoot, stopThinking);
+    entry.bestMove = result.bestMove;
+    entry.value = result.evaluation.value;
   }
 
   // Add score to each move.
   for (ExtMove* move = moves; move < end; ++move) {
-    move->score = move->move == bestMove ? 10000 : 0;
+    move->score = move->move == entry.bestMove ? 10000 : 0;
     move->score += (move->capture != ColoredPiece::NO_COLORED_PIECE);
   }
   std::sort(
@@ -444,14 +445,21 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
 
 
     ColoredEvaluation<TURN> eval(0);
+    int childDepth = depth - 1;
+
+    // Don't reduce depth for sensible captures (Elo difference: 254.7 +/- 286.2, LOS: 98.7 %)
+    if (move->capture != ColoredPiece::NO_COLORED_PIECE && cp2p(move->capture) > move->piece) {
+      childDepth += 1;
+    }
+
     if (move->move != moves[0].move && (SEARCH_TYPE != SearchType::ROOT || thread->multiPV_ == 1)) {
       // Null window search.
-      eval = -negamax<opposite_color<TURN>(), SearchType::NORMAL_SEARCH>(thread, depth - 1, -(alpha + 1), -alpha, plyFromRoot + 1, stopThinking).evaluation;
+      eval = -negamax<opposite_color<TURN>(), SearchType::NORMAL_SEARCH>(thread, childDepth, -(alpha + 1), -alpha, plyFromRoot + 1, stopThinking).evaluation;
       if (eval.value > alpha.value) {
-        eval = -negamax<opposite_color<TURN>(), SearchType::NORMAL_SEARCH>(thread, depth - 1, -beta, -alpha, plyFromRoot + 1, stopThinking).evaluation;
+        eval = -negamax<opposite_color<TURN>(), SearchType::NORMAL_SEARCH>(thread, childDepth, -beta, -alpha, plyFromRoot + 1, stopThinking).evaluation;
       }
     } else {
-      eval = -negamax<opposite_color<TURN>(), SearchType::NORMAL_SEARCH>(thread, depth - 1, -beta, -alpha, plyFromRoot + 1, stopThinking).evaluation;
+      eval = -negamax<opposite_color<TURN>(), SearchType::NORMAL_SEARCH>(thread, childDepth, -beta, -alpha, plyFromRoot + 1, stopThinking).evaluation;
     }
 
     // We adjust mate scores to reflect the distance to mate here, rather than when we return kCheckmate. The
