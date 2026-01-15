@@ -108,12 +108,6 @@ scheduler = CosineAnnealingWithWarmup(
   total_steps=total_steps
 )
 
-earliness_weights = torch.tensor([
-  # p    n    b    r    q
-  0.0, 1.0, 1.0, 1.0, 3.0,
-  0.0, 1.0, 1.0, 1.0, 3.0,
-]).to(device) / 18.0
-
 def wdl2score(win_mover_perspective, draw_mover_perspective, lose_mover_perspective):
   assert len(win_mover_perspective.shape) == 1
   assert len(draw_mover_perspective.shape) == 1
@@ -146,9 +140,7 @@ for epoch in range(NUM_EPOCHS):
     for layer_output in layers:
       penalty += (layer_output.mean() ** 2 + (layer_output.std() - 1.0) ** 2)
 
-    output = torch.sigmoid(output)[:,0:2]
-    earliness = piece_counts.to(torch.float32) @ earliness_weights
-    output = output[:,0] * earliness + output[:,1] * (1.0 - earliness)
+    output = torch.sigmoid(output)[:,0]
 
     label = wdl2score(win_mover_perspective, draw_mover_perspective, lose_mover_perspective)
     assert output.shape == label.shape, f"{output.shape} vs {label.shape}"
@@ -215,7 +207,7 @@ for move in moves:
   board.pop()
 
 # Flip bc these are all from black's perspective
-output = -model(torch.cat(X, dim=0), torch.tensor(T, device=device).unsqueeze(1))[0][:,0] # Same as using earliness=1.0
+output = -model(torch.cat(X, dim=0), torch.tensor(T, device=device).unsqueeze(1))[0][:,0]
 
 I = output.cpu().detach().numpy().argsort()[::-1]
 for i in I:
@@ -228,7 +220,7 @@ board = chess.Board(white_winning)
 output = model(
   torch.tensor(board2x(board)).unsqueeze(0).to(device),
   torch.tensor([1], device=device).unsqueeze(0),
-)[0][:,0]  # Same as using earliness=1.0
+)[0][:,0]
 print(f"White winning position score: {output[0].item():.4f}")
 
 # loss: 0.0339, mse: 0.2576, penalty: 0.0019
