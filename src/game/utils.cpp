@@ -152,6 +152,20 @@ std::string lpad(int32_t x) {
   return r;
 }
 
+std::string ljust(std::string s, size_t width) {
+  while (s.size() < width) {
+    s += " ";
+  }
+  return s;
+}
+
+std::string rjust(std::string s, size_t width) {
+  while (s.size() < width) {
+    s = " " + s;
+  }
+  return s;
+}
+
 std::string piece_to_string(Piece piece) {
   switch (piece) {
     case Piece::NO_PIECE:

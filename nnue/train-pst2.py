@@ -13,31 +13,164 @@ import torch.utils.data as tdata
 from sharded_matrix import ShardedLoader
 from ShardedMatricesIterableDataset import ShardedMatricesIterableDataset
 from features import board2x, x2board, kMaxNumOnesInInput
-from accumulator import Emb
-from nnue_model import NNUE
 
-def evaluate_data_quality(dataset):
-  import chess
-  from chess import engine as chess_engine
-  engine = chess_engine.SimpleEngine.popen_uci('/usr/games/stockfish')
-  chunk = next(iter(dataset))
-  correct, mse = 0, 0
-  for i in range(100):
-    x, y, turn, piece_counts = chunk
-    x, y, turn, piece_counts = x[i], y[i], turn[i], piece_counts[i]
-    assert x.shape == (kMaxNumOnesInInput,)
-    assert y.shape == (3,)
-    assert turn.shape == (1,)
-    assert piece_counts.shape == (10,)
-    board = x2board(x, turn)
-    lines = engine.analyse(board, chess_engine.Limit(depth=7), multipv=1)
-    wdl = lines[0]['score'].white().wdl()
-    wdl = np.array([wdl.wins, wdl.draws, wdl.losses], dtype=np.int32)
-    if y.argmax() == wdl.argmax():
-      correct += 1
-    mse += (((y.astype(np.float32) / 1000.0) - (wdl.astype(np.float32) / wdl.sum())) ** 2).mean()
-  incorrect = 100 - correct
-  print(f"Data quality: Accuracy: {correct}%, MSE: {mse / 100:.6f}")
+def compute_x_black(x_white):
+  mask = x_white < 768
+  piece = x_white // 64
+  square = x_white % 64
+  rank = square // 8
+  file = square % 8
+  x_black = ((piece + 6) % 12) * 64 + (7 - rank) * 8 + file
+  return torch.where(mask, x_black, torch.tensor(768, device=x_white.device, dtype=x_white.dtype))
+
+def compute_x2(x_white):
+  assert len(x_white.shape) == 2, f"x.shape = {x_white.shape}"
+
+  mask = x_white < 768
+
+  x_black = compute_x_black(x_white)
+
+  x_white, x_black = x_white.to(torch.int32), x_black.to(torch.int32)
+
+  x2_white = (x_white.reshape(-1, 1, 36) + x_white.reshape(-1, 36, 1) * 768).reshape(-1, 36 * 36)
+  x2_black = (x_black.reshape(-1, 1, 36) + x_black.reshape(-1, 36, 1) * 768).reshape(-1, 36 * 36)
+
+  # An interaction is only valid if neither piece is padding
+  mask_2d_white = (x_white.reshape(-1, 1, 36) < 768) & (x_white.reshape(-1, 36, 1) < 768)
+  mask_2d_black = (x_black.reshape(-1, 1, 36) < 768) & (x_black.reshape(-1, 36, 1) < 768)
+
+  mask_2d_white = mask_2d_white.reshape(-1, 36 * 36)
+  mask_2d_black = mask_2d_black.reshape(-1, 36 * 36)
+
+  # Invalid interactions get mapped to the padding index
+  x2_white = torch.where(mask_2d_white, x2_white, 768 * 768)
+  x2_black = torch.where(mask_2d_black, x2_black, 768 * 768)
+
+  return x2_white, x2_black
+
+# class PST2(nn.Module):
+#   def __init__(self):
+#     super(PST2, self).__init__()
+#     self.emb = nn.EmbeddingBag(768 * 768 + 1, 1, mode='sum', sparse=False)
+#     nn.init.normal_(self.emb.weight, mean=0.0, std=np.sqrt(1 / (6 * kMaxNumOnesInInput * kMaxNumOnesInInput)))
+#     self.piece = nn.EmbeddingBag(12 * 12 + 1, 1, mode='sum', sparse=False)
+#     nn.init.normal_(self.piece.weight, mean=0.0, std=np.sqrt(1 / (6 * kMaxNumOnesInInput * kMaxNumOnesInInput)))
+#     self.nofile = nn.EmbeddingBag(12 * 8 * 12 * 8 + 1, 1, mode='sum', sparse=False)
+#     nn.init.normal_(self.nofile.weight, mean=0.0, std=np.sqrt(1 / (6 * kMaxNumOnesInInput * kMaxNumOnesInInput)))
+#     self.norank = nn.EmbeddingBag(12 * 8 * 12 * 8 + 1, 1, mode='sum', sparse=False)
+#     nn.init.normal_(self.norank.weight, mean=0.0, std=np.sqrt(1 / (6 * kMaxNumOnesInInput * kMaxNumOnesInInput)))
+#     self.nofilerank = nn.EmbeddingBag(12 * 8 * 12 * 8 + 1, 1, mode='sum', sparse=False)
+#     nn.init.normal_(self.nofilerank.weight, mean=0.0, std=np.sqrt(1 / (6 * kMaxNumOnesInInput * kMaxNumOnesInInput)))
+#     self.norankfile = nn.EmbeddingBag(12 * 8 * 12 * 8 + 1, 1, mode='sum', sparse=False)
+#     nn.init.normal_(self.norankfile.weight, mean=0.0, std=np.sqrt(1 / (6 * kMaxNumOnesInInput * kMaxNumOnesInInput)))
+
+#     # emb[(a, WHITE), (a, WHITE)] = - emb[(a, BLACK), (a, BLACK)]
+
+#     # emb[(a, WHITE), (b, WHITE)] = emb[(b, WHITE), (a, WHITE)]
+
+#     # emb[(a, WHITE), (b, WHITE)] = - emb[(a, BLACK), (b, WHITE)]
+
+#     # emb[(a, WHITE), (b, BLACK)] = - emb[(a, BLACK), (b, WHITE)]
+
+#   def forward(self, x):
+#     x = x.to(torch.int32)
+#     assert len(x.shape) == 2
+#     assert x.shape[1] == kMaxNumOnesInInput
+#     batch_size = x.shape[0]
+#     x2_white, x2_black = compute_x2(x)
+#     offsets = torch.arange(0, batch_size * x2_white.shape[1], x2_white.shape[1], device=x.device, dtype=torch.int32)
+
+#     i = x2_white // 768
+#     j = x2_white % 768
+
+#     piece_1 = i // 64
+#     piece_2 = j // 64
+
+#     sq_1 = i % 64
+#     sq_2 = j % 64
+
+#     rank_1 = sq_1 // 8
+#     file_1 = sq_1 % 8
+#     rank_2 = sq_2 // 8
+#     file_2 = sq_2 % 8
+
+#     mask = x2_white < 768 * 768
+
+#     pieces_index = piece_1 * 12 + piece_2
+#     pieces_index = torch.where(
+#       mask, pieces_index, torch.tensor(12 * 12, device=x.device, dtype=pieces_index.dtype)
+#     )
+
+#     nofile_index = piece_1 * 8 * 12 * 8 + rank_1 * 12 * 8 + piece_2 * 8 + rank_2
+#     norank_index = piece_1 * 8 * 12 * 8 + file_1 * 12 * 8 + piece_2 * 8 + file_2
+#     nofile_rank_index = piece_1 * 8 * 12 * 8 + rank_1 * 12 * 8 + piece_2 * 8 + file_2
+#     norank_file_index = piece_1 * 8 * 12 * 8 + file_1 * 12 * 8 + piece_2 * 8 + rank_2
+
+#     output = self.emb(x2_white.reshape(-1), offsets)
+#     # output -= self.emb(x2_black.reshape(-1), offsets)
+#     output += self.piece(pieces_index.reshape(-1), offsets)
+#     output += self.nofile(nofile_index.reshape(-1), offsets)
+#     output += self.norank(norank_index.reshape(-1), offsets)
+#     output += self.nofilerank(nofile_rank_index.reshape(-1), offsets)
+#     output += self.norankfile(norank_file_index.reshape(-1), offsets)
+#     return output.squeeze()
+
+"""
+The basic idea is we can have efficient, conditional, quantized piece-square tables by using bitmaps.
+
+Ex:
+
+x: Bitmap
+
+weights:
+ 4  0  0 -4
+ 0  0  0  4
+ 0  0  4  0
+ 0  0  0  0
+
+Can be computed easily as:
+
+val = (popcount(x & positive_mask) - popcount(x & negative_mask)) * 4
+
+This opens up cool possibilities like having different PSTs based on piece counts, threats, etc.
+
+For example, we can learn weights for each square that indicates how important the safety of
+that square is. Then we can do stuff like.
+
+for piece in pieces:
+  x = threats.badFor[piece]  # Bitmap for whether it is safe for the piece to be on each square
+
+  score += popcount(x & threats_pst[piece].positive_mask) * threats_pst[piece].positive_weight
+  score -= popcount(x & threats_pst[piece].negative_mask) * threats_pst[piece].negative_weight
+
+  x &= kDistFromKing[kingSquare][4]
+  score += popcount(x & king_safety_pst[piece].positive_mask) * king_safety_pst[piece].positive_weight
+  score -= popcount(x & king_safety_pst[piece].negative_mask) * king_safety_pst[piece].negative_weight
+
+We can also do PSTs conditioned on king-location:
+
+for piece in pieces:
+  w = king_location_pst[piece][kingSquare]
+  score += popcount(x & w.positive_mask) * w.positive_weight
+  score -= popcount(x & w.negative_mask) * w.negative_weight
+
+"""
+
+class PST2(nn.Module):
+  def __init__(self, dim_embedding=2048):
+    super(PST2, self).__init__()
+    self.pst = nn.Embedding(12 * 64 + 1, 1)
+    self.emb = nn.Embedding(12 * 64 + 1, dim_embedding)
+    nn.init.normal_(self.emb.weight, mean=0.0, std=np.sqrt(1 / (kMaxNumOnesInInput * dim_embedding)))
+    nn.init.normal_(self.pst.weight, mean=0.0, std=np.sqrt(1 / (kMaxNumOnesInInput)))
+  
+  def forward(self, x):
+    pst = self.pst(x.to(torch.int64)).sum((1, 2))  # (BS,)
+    if np.random.rand() < 1.0:
+      return pst
+    z = self.emb(x.to(torch.int64))  # (BS, 36, dim_embedding)
+    dot = torch.bmm(z, z.transpose(1, 2))  # (BS, 36, 36)
+    return dot.sum((1, 2)) + pst
 
 # Cosine learning rate scheduler with warmup
 class CosineAnnealingWithWarmup:
@@ -87,7 +220,6 @@ dataset = ShardedMatricesIterableDataset(
   f'data/{dataset_name}/tables-piece-counts',
   chunk_size=CHUNK_SIZE,
 )
-evaluate_data_quality(dataset)
 
 
 print(f'Dataset loaded with {len(dataset) * CHUNK_SIZE} rows.')
@@ -96,7 +228,7 @@ dataloader = tdata.DataLoader(dataset, batch_size=BATCH_SIZE//CHUNK_SIZE, shuffl
 
 print("Creating model...")
  # [512, 128]
-model = NNUE(input_size=kMaxNumOnesInInput, hidden_sizes=[1024, 256, 64], output_size=1).to(device)
+model = PST2().to(device)
 
 print("Creating optimizer...")
 opt = torch.optim.AdamW(model.parameters(), lr=0.0, weight_decay=0.1)
@@ -148,13 +280,9 @@ for epoch in range(NUM_EPOCHS):
     draw_mover_perspective = y_white_perspective[:,1]
     lose_mover_perspective = y_white_perspective[:,2] * (turn.squeeze() == 1).float() + y_white_perspective[:,0] * (turn.squeeze() == -1).float()
 
-    output, layers = model(x, turn)
+    output = model(x) * turn.squeeze()
 
-    penalty = 0.0
-    for layer_output in layers:
-      penalty += (layer_output.mean() ** 2 + (layer_output.std() - 1.0) ** 2)
-
-    output = torch.sigmoid(output)[:,0]
+    output = torch.sigmoid(output)
 
     label = wdl2score(win_mover_perspective, draw_mover_perspective, lose_mover_perspective)
     assert output.shape == label.shape, f"{output.shape} vs {label.shape}"
@@ -164,13 +292,12 @@ for epoch in range(NUM_EPOCHS):
     mse = loss.item()
     baseline = ((label - 0.5) ** 2).mean().item()
 
-    (loss + penalty * 0.02).backward()
+    loss.backward()
     opt.step()
     metrics["loss"].append(loss.item())
     metrics["mse"].append(mse / baseline)
-    metrics["penalty"].append(penalty.item())
-    if (batch_idx + 1) % 500 == 0:
-      print(f"loss: {np.mean(metrics['loss'][-1000:]):.4f}, mse: {np.mean(metrics['mse'][-1000:]):.4f}, penalty: {np.mean(metrics['penalty'][-1000:]):.4f}")
+    if (batch_idx + 1) % 100 == 0:
+      print(f"loss: {np.mean(metrics['loss'][-1000:]):.4f}, mse: {np.mean(metrics['mse'][-1000:]):.4f}")
 
 def save_tensor(tensor: torch.Tensor, name: str, out: io.BufferedWriter):
   tensor = tensor.cpu().detach().numpy()
@@ -220,8 +347,7 @@ for move in moves:
   T.append(-1)
   board.pop()
 
-# Flip bc these are all from black's perspective
-output = -model(torch.cat(X, dim=0), torch.tensor(T, device=device).unsqueeze(1))[0][:,0]
+output = model(torch.cat(X, dim=0))
 
 I = output.cpu().detach().numpy().argsort()[::-1]
 for i in I:

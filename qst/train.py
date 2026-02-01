@@ -12,32 +12,41 @@ import datetime
 import torch.utils.data as tdata
 from sharded_matrix import ShardedLoader
 from ShardedMatricesIterableDataset import ShardedMatricesIterableDataset
-from features import board2x, x2board, kMaxNumOnesInInput
-from accumulator import Emb
-from nnue_model import NNUE
 
-def evaluate_data_quality(dataset):
-  import chess
-  from chess import engine as chess_engine
-  engine = chess_engine.SimpleEngine.popen_uci('/usr/games/stockfish')
-  chunk = next(iter(dataset))
-  correct, mse = 0, 0
-  for i in range(100):
-    x, y, turn, piece_counts = chunk
-    x, y, turn, piece_counts = x[i], y[i], turn[i], piece_counts[i]
-    assert x.shape == (kMaxNumOnesInInput,)
-    assert y.shape == (3,)
-    assert turn.shape == (1,)
-    assert piece_counts.shape == (10,)
-    board = x2board(x, turn)
-    lines = engine.analyse(board, chess_engine.Limit(depth=7), multipv=1)
-    wdl = lines[0]['score'].white().wdl()
-    wdl = np.array([wdl.wins, wdl.draws, wdl.losses], dtype=np.int32)
-    if y.argmax() == wdl.argmax():
-      correct += 1
-    mse += (((y.astype(np.float32) / 1000.0) - (wdl.astype(np.float32) / wdl.sum())) ** 2).mean()
-  incorrect = 100 - correct
-  print(f"Data quality: Accuracy: {correct}%, MSE: {mse / 100:.6f}")
+names = [
+  'our_pawns',
+  'our_knights',
+  'our_bishops',
+  'our_rooks',
+  'our_queens',
+  'our_king',
+
+  'their_pawns',
+  'their_knights',
+  'their_bishops',
+  'their_rooks',
+  'their_queens',
+  'their_king',
+
+  'our_psd_pwns',
+  'their_psd_pwns',
+  'our_iso_pwns',
+  'their_iso_pwns',
+  'our_dbl_pwns',
+  'their_dbl_pwns',
+]
+
+for name in names:
+  assert len(name) <= 14
+
+def save_tensor(tensor: torch.Tensor, name: str, out: io.BufferedWriter):
+  tensor = tensor.cpu().detach().numpy()
+  name = name.ljust(16)
+  assert len(name) == 16
+  out.write(np.array([ord(c) for c in name], dtype=np.uint8).tobytes())
+  out.write(np.array(len(tensor.shape), dtype=np.int32).tobytes())
+  out.write(np.array(tensor.shape, dtype=np.int32).tobytes())
+  out.write(tensor.tobytes())
 
 # Cosine learning rate scheduler with warmup
 class CosineAnnealingWithWarmup:
@@ -81,13 +90,36 @@ print("Loading dataset...")
 # dataset_name = 'de6-md2'  # Accuracy: 78%, MSE: 0.077179
 dataset_name = 'de7-md4'  # Data quality: Accuracy: 92%, MSE: 0.037526
 dataset = ShardedMatricesIterableDataset(
-  f'data/{dataset_name}/tables-nnue',
-  f'data/{dataset_name}/tables-eval',
-  f'data/{dataset_name}/tables-turn',
-  f'data/{dataset_name}/tables-piece-counts',
+  f'data/{dataset_name}/qst-qst',
+  f'data/{dataset_name}/qst-eval',
+  f'data/{dataset_name}/qst-turn',
+  f'data/{dataset_name}/qst-piece-counts',
   chunk_size=CHUNK_SIZE,
 )
-evaluate_data_quality(dataset)
+
+class MyModel(nn.Module):
+  def __init__(self, input_dim):
+    super(MyModel, self).__init__()
+    self.bias = nn.Parameter(torch.zeros((2,)), requires_grad=True)
+    self.raw = nn.Parameter(torch.zeros((input_dim, 2)), requires_grad=True)
+    self.simple = nn.Parameter(torch.zeros((input_dim // 64, 2)), requires_grad=True)
+    self.files = nn.Parameter(torch.zeros((input_dim // 8, 2)), requires_grad=True)
+    self.ranks = nn.Parameter(torch.zeros((input_dim // 8, 2)), requires_grad=True)
+    nn.init.zeros_(self.raw)
+    nn.init.zeros_(self.simple)
+    nn.init.zeros_(self.files)
+    nn.init.zeros_(self.ranks)
+  
+  def weight(self):
+    w = self.raw.reshape(2, -1, 8, 8)
+    w = w + self.simple.reshape(2, -1, 1, 1)
+    w = w + self.files.reshape(2, -1, 8, 1)
+    w = w + self.ranks.reshape(2, -1, 1, 8)
+    return w
+
+  def forward(self, x):
+    weights = self.weight()
+    return nn.functional.linear(x, weights.reshape(2, -1), self.bias)
 
 
 print(f'Dataset loaded with {len(dataset) * CHUNK_SIZE} rows.')
@@ -96,7 +128,7 @@ dataloader = tdata.DataLoader(dataset, batch_size=BATCH_SIZE//CHUNK_SIZE, shuffl
 
 print("Creating model...")
  # [512, 128]
-model = NNUE(input_size=kMaxNumOnesInInput, hidden_sizes=[1024, 256, 64], output_size=1).to(device)
+model = MyModel(next(iter(dataset))[0].shape[1]).to(device)
 
 print("Creating optimizer...")
 opt = torch.optim.AdamW(model.parameters(), lr=0.0, weight_decay=0.1)
@@ -148,13 +180,14 @@ for epoch in range(NUM_EPOCHS):
     draw_mover_perspective = y_white_perspective[:,1]
     lose_mover_perspective = y_white_perspective[:,2] * (turn.squeeze() == 1).float() + y_white_perspective[:,0] * (turn.squeeze() == -1).float()
 
-    output, layers = model(x, turn)
+    output = model(x.to(torch.float32))
 
-    penalty = 0.0
-    for layer_output in layers:
-      penalty += (layer_output.mean() ** 2 + (layer_output.std() - 1.0) ** 2)
+    earliness = piece_counts[:,1] + piece_counts[:,2] + piece_counts[:,3] + piece_counts[:,4] * 3
+    earliness += piece_counts[:,6] + piece_counts[:,7] + piece_counts[:,8] + piece_counts[:,9] * 3
+    earliness = earliness.float() / 18.0
 
-    output = torch.sigmoid(output)[:,0]
+    output = output[:,0] * earliness + output[:,1] * (1.0 - earliness)
+    output = torch.sigmoid(output)
 
     label = wdl2score(win_mover_perspective, draw_mover_perspective, lose_mover_perspective)
     assert output.shape == label.shape, f"{output.shape} vs {label.shape}"
@@ -164,13 +197,12 @@ for epoch in range(NUM_EPOCHS):
     mse = loss.item()
     baseline = ((label - 0.5) ** 2).mean().item()
 
-    (loss + penalty * 0.02).backward()
+    loss.backward()
     opt.step()
     metrics["loss"].append(loss.item())
     metrics["mse"].append(mse / baseline)
-    metrics["penalty"].append(penalty.item())
-    if (batch_idx + 1) % 500 == 0:
-      print(f"loss: {np.mean(metrics['loss'][-1000:]):.4f}, mse: {np.mean(metrics['mse'][-1000:]):.4f}, penalty: {np.mean(metrics['penalty'][-1000:]):.4f}")
+    if (batch_idx + 1) % 100 == 0:
+      print(f"loss: {np.mean(metrics['loss'][-1000:]):.4f}, mse: {np.mean(metrics['mse'][-1000:]):.4f}")
 
 def save_tensor(tensor: torch.Tensor, name: str, out: io.BufferedWriter):
   tensor = tensor.cpu().detach().numpy()
@@ -181,81 +213,91 @@ def save_tensor(tensor: torch.Tensor, name: str, out: io.BufferedWriter):
   out.write(np.array(tensor.shape, dtype=np.int32).tobytes())
   out.write(tensor.tobytes())
 
+w = model.weight().detach().cpu().numpy()
+b = model.bias.detach().cpu().numpy()
+
+e = w[0]
+
+scale = 100.0 / e[0,3:-1].mean()
+
+for i, name in enumerate(names):
+  plt.figure(figsize=(5,5))
+  plt.imshow(e[i] * scale, cmap='seismic', vmin=e[i].min() * scale, vmax=e[i].max() * scale)
+  plt.colorbar()
+  plt.title(name)
+  plt.savefig(os.path.join(run_dir, f'embedding-slice-{i}.png'))
+
 # Save the model
 
 with open(os.path.join(run_dir, 'model.pt'), 'wb') as f:
   torch.save(model.state_dict(), f)
 
 with open(os.path.join(run_dir, 'model.bin'), 'wb') as f:
-  save_tensor(model.emb.weight(False)[:-1], 'embedding', f)
-  save_tensor(model.mlp[0].weight, 'linear0.weight', f)
-  save_tensor(model.mlp[0].bias, 'linear0.bias', f)
-  save_tensor(model.mlp[2].weight, 'linear1.weight', f)
-  save_tensor(model.mlp[2].bias, 'linear1.bias', f)
-  save_tensor(model.mlp[4].weight, 'linear2.weight', f)
-  save_tensor(model.mlp[4].bias, 'linear2.bias', f)
+  for i, name in enumerate(names):
+    save_tensor(torch.tensor(w[0,i]), 'e_' + name, f)
+    save_tensor(torch.tensor(w[1,i]), 'l_' + name, f)
+  save_tensor(torch.tensor(b), 'biases', f)
 
-plt.figure(figsize=(10,10))
-output = output.squeeze().cpu().detach().numpy()
-label = label.squeeze().cpu().detach().numpy()
-I = np.argsort(output)
-output, label = output[I], label[I]
-plt.scatter(output, label, alpha=0.1)
-plt.scatter(np.convolve(output, np.ones(100)/100, mode='valid'), np.convolve(label, np.ones(100)/100, mode='valid'), color='red', label='moving average')
-plt.savefig(os.path.join(run_dir, 'nnue-scatter.png'))
+# plt.figure(figsize=(10,10))
+# output = output.squeeze().cpu().detach().numpy()
+# label = label.squeeze().cpu().detach().numpy()
+# I = np.argsort(output)
+# output, label = output[I], label[I]
+# plt.scatter(output, label, alpha=0.1)
+# plt.scatter(np.convolve(output, np.ones(100)/100, mode='valid'), np.convolve(label, np.ones(100)/100, mode='valid'), color='red', label='moving average')
+# plt.savefig(os.path.join(run_dir, 'nnue-scatter.png'))
 
-plt.figure(figsize=(10,10))
-plt.plot(np.convolve(metrics['loss'][500:], np.ones(100)/100, mode='valid'), label='loss')
-plt.legend()
-plt.savefig(os.path.join(run_dir, 'nnue-loss.png'))
+# plt.figure(figsize=(10,10))
+# plt.plot(np.convolve(metrics['loss'][500:], np.ones(100)/100, mode='valid'), label='loss')
+# plt.legend()
+# plt.savefig(os.path.join(run_dir, 'nnue-loss.png'))
 
 
-board = chess.Board()
-X = []
-T = []
-moves = np.array(list(board.legal_moves))
-for move in moves:
-  board.push(move)
-  X.append(torch.tensor(board2x(board)).unsqueeze(0).to(device))
-  T.append(-1)
-  board.pop()
+# board = chess.Board()
+# X = []
+# T = []
+# moves = np.array(list(board.legal_moves))
+# for move in moves:
+#   board.push(move)
+#   X.append(torch.tensor(board2x(board)).unsqueeze(0).to(device))
+#   T.append(-1)
+#   board.pop()
 
-# Flip bc these are all from black's perspective
-output = -model(torch.cat(X, dim=0), torch.tensor(T, device=device).unsqueeze(1))[0][:,0]
+# output = model(torch.cat(X, dim=0))
 
-I = output.cpu().detach().numpy().argsort()[::-1]
-for i in I:
-  move = moves[i]
-  score = output[i].item()
-  print(f"{board.san(move):6s} {score: .4f}")
+# I = output.cpu().detach().numpy().argsort()[::-1]
+# for i in I:
+#   move = moves[i]
+#   score = output[i].item()
+#   print(f"{board.san(move):6s} {score: .4f}")
 
-white_winning = 'rnbqkbnr/pppppppp/8/8/2BPPB2/2N2N2/PPP2PPP/R2Q1RK1 w Qkq - 0 1'
-board = chess.Board(white_winning)
-output = model(
-  torch.tensor(board2x(board)).unsqueeze(0).to(device),
-  torch.tensor([1], device=device).unsqueeze(0),
-)[0][:,0]
-print(f"White winning position score: {output[0].item():.4f}")
+# white_winning = 'rnbqkbnr/pppppppp/8/8/2BPPB2/2N2N2/PPP2PPP/R2Q1RK1 w Qkq - 0 1'
+# board = chess.Board(white_winning)
+# output = model(
+#   torch.tensor(board2x(board)).unsqueeze(0).to(device),
+#   torch.tensor([1], device=device).unsqueeze(0),
+# )[0][:,0]
+# print(f"White winning position score: {output[0].item():.4f}")
 
-# loss: 0.0339, mse: 0.2576, penalty: 0.0019
-# Nf3     0.1300
-# e4      0.0932
-# d4      0.0859
-# e3      0.0574
-# Nc3     0.0509
-# c4      0.0509
-# g3      0.0504
-# b4      0.0237
-# g4      0.0216
-# d3      0.0211
-# c3      0.0112
-# a3      0.0069
-# h3      0.0011
-# Nh3    -0.0027
-# a4     -0.0108
-# h4     -0.0155
-# b3     -0.0220
-# Na3    -0.0391
-# f4     -0.1045
-# f3     -0.1073
-# White winning position score: 3.7974
+# # loss: 0.0339, mse: 0.2576, penalty: 0.0019
+# # Nf3     0.1300
+# # e4      0.0932
+# # d4      0.0859
+# # e3      0.0574
+# # Nc3     0.0509
+# # c4      0.0509
+# # g3      0.0504
+# # b4      0.0237
+# # g4      0.0216
+# # d3      0.0211
+# # c3      0.0112
+# # a3      0.0069
+# # h3      0.0011
+# # Nh3    -0.0027
+# # a4     -0.0108
+# # h4     -0.0155
+# # b3     -0.0220
+# # Na3    -0.0391
+# # f4     -0.1045
+# # f3     -0.1073
+# # White winning position score: 3.7974

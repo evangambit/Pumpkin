@@ -145,6 +145,10 @@ inline ColoredPiece to_colored_piece(SafeColoredPiece scp) {
 
 void assert_valid_colored_piece(ColoredPiece cp);
 
+std::string ljust(std::string s, size_t width);
+
+std::string rjust(std::string s, size_t width);
+
 template<Color color, Piece piece>
 constexpr ColoredPiece coloredPiece() {
   if (piece == Piece::NO_PIECE) {

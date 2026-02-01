@@ -18,6 +18,7 @@ extern const char _binary_model_bin_end[];
 #include "../eval/PieceSquareEvaluator.h"
 #include "../eval/evaluator.h"
 #include "../eval/nnue/NnueEvaluator.h"
+#include "../eval/qst/QstEvaluator.h"
 #include "../game/movegen/movegen.h"
 
 namespace ChessEngine {
@@ -175,6 +176,9 @@ class SetEvaluatorTask : public Task {
       nnue_model->load(f);
       state->evaluator = std::make_shared<NNUE::NnueEvaluator>(nnue_model);
       std::cout << "Evaluator set to nnue." << std::endl;
+    } else if (evaluatorName == "qst") {
+      state->evaluator = std::make_shared<QstEvaluator>();
+      std::cout << "Evaluator set to qst." << std::endl;
     } else {
       std::cout << "Error: unrecognized evaluator name \"" << evaluatorName << "\"" << std::endl;
     }

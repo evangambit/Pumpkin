@@ -111,6 +111,13 @@ inline SafeSquare vertical_mirror(SafeSquare sq) {
   return SafeSquare(sq ^ 0b111000);
 }
 
+inline Bitboard flip_vertically(Bitboard x) {
+    x = ((x >> 8) & 0x00FF00FF00FF00FF) | ((x << 8) & 0xFF00FF00FF00FF00);
+    x = ((x >> 16) & 0x0000FFFF0000FFFF) | ((x << 16) & 0xFFFF0000FFFF0000);
+    x = (x >> 32) | (x << 32);
+    return x;
+}
+
 constexpr Bitboard kMainWhiteDiagonal = 0x8040201008040201;
 constexpr Bitboard kMainBlackDiagonal = 0x10204081020408;
 

@@ -15,8 +15,8 @@ from chess import engine as chess_engine
 
 """
 a=de7-md4
-sqlite3 data/${a}/db.sqlite3 "select * from positions" > data/${a}/positions.txt
-sort -R data/${a}/pos.txt > data/${a}/pos.shuf.txt
+sqlite3 data/${a}/db.sqlite3 "select * from positions" > data/${a}/pos.txt
+shuf data/${a}/pos.txt > data/${a}/pos.shuf.txt
 ./make_tables data/de7-md4/pos.shuf.txt data/de7-md4/tables
 """
 
@@ -130,11 +130,11 @@ P1, P2, ..., P32 are integers from 0 to (64 * 12 - 1) and we'll use 16-bit integ
 if __name__ == '__main__':
   parser = argparse.ArgumentParser()
   parser.add_argument('--engine', default='/usr/games/stockfish')
-  parser.add_argument('--depth', type=int, default=6)
+  parser.add_argument('--depth', type=int, default=7)
   parser.add_argument('--multipv', type=int, default=5)
   parser.add_argument('--num_workers', type=int, default=4)
-  parser.add_argument('--min_depth', type=int, default=2)
-  parser.add_argument('--dropout', type=int, default=75, help='Probability of dropping a position (0-100)')
+  parser.add_argument('--min_depth', type=int, default=4)
+  parser.add_argument('--dropout', type=int, default=75, help='Probability of dropping a position (0-100). Helps promote higher diversity.')
   args = parser.parse_args()
 
   database = os.path.join('data', f'de{args.depth}-md{args.min_depth}', f'db.sqlite3')
