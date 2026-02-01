@@ -637,8 +637,8 @@ SearchResult<TURN> search(Thread* thread, std::atomic<bool> *stopThinking, std::
     /*plyFromRoot=*/0,
     &neverStopThinking  // Guarantee we always search at least depth 1 before stopping.
   );
+  SearchResult<TURN> searchResult = negamax_result_to_search_result<TURN>(result, thread);
   if (onDepthCompleted != nullptr) {
-    SearchResult<TURN> searchResult = negamax_result_to_search_result<TURN>(result, thread);
     onDepthCompleted(1, searchResult);
   }
   for (int i = 2; i <= thread->depth_; ++i) {
@@ -651,6 +651,7 @@ SearchResult<TURN> search(Thread* thread, std::atomic<bool> *stopThinking, std::
       /*plyFromRoot=*/0,
       stopThinking
     );
+    searchResult = negamax_result_to_search_result<TURN>(result, thread);
     if (stopThinking->load()) {
       // Primary variations may be incomplete or invalid if the search was stopped.
       // Re-run the search at depth=1 to get a valid result.
@@ -662,16 +663,17 @@ SearchResult<TURN> search(Thread* thread, std::atomic<bool> *stopThinking, std::
         /*plyFromRoot=*/0,
         &neverStopThinking
       );
+      searchResult = negamax_result_to_search_result<TURN>(result, thread);
     }
     if (onDepthCompleted != nullptr) {
-      onDepthCompleted(i, negamax_result_to_search_result<TURN>(result, thread));
+      onDepthCompleted(i, searchResult);
     }
     if (timeSensitive && (result.evaluation.value <= kLongestForcedMate || result.evaluation.value >= -kLongestForcedMate)) {
       // If we're in an actual game, stop searching deeper once we find a forced mate.
       break;
     }
   }
-  return negamax_result_to_search_result<TURN>(result, thread);
+  return searchResult;
 }
 
 // Non-color-templated search function to be used by the UCI interface.

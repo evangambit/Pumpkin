@@ -53,16 +53,16 @@ def board2x(board):
     vec[i] = val
     i += 1
   if board.has_kingside_castling_rights(chess.WHITE):
-    vec[i] = 0
+    vec[i] = 0  # White pawn on a1
     i += 1
   if board.has_queenside_castling_rights(chess.WHITE):
-    vec[i] = 1
+    vec[i] = 1  # White pawn on b1
     i += 1
   if board.has_kingside_castling_rights(chess.BLACK):
-    vec[i] = 440
+    vec[i] = 440  # Black pawn on a8
     i += 1
   if board.has_queenside_castling_rights(chess.BLACK):
-    vec[i] = 441
+    vec[i] = 441  # Black pawn on b8
     i += 1
   assert i <= kMaxNumOnesInInput
   vec.sort()
