@@ -30,7 +30,7 @@ g++ -std=c++20 -o nnue_main src/eval/nnue/main.cpp $(find src/ -name "*.cpp" | g
 
 # cutechess
 
-cutechess/build/cutechess-cli -engine cmd=uci arg="evaluator nnue" -engine cmd=uci arg="evaluator nnue" -each tc=40/60 proto=uci -rounds 100 -debug
+cutechess/build/cutechess-cli -engine cmd=uci arg="evaluator nnue" -engine cmd=old arg="evaluator nnue" -each tc=40/60 proto=uci -rounds 100 -debug
 
 ```
 

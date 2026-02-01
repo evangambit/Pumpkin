@@ -205,25 +205,26 @@ struct TaperedQuantizedSquareTable {
  * plus a host of quantized, conditional square tables for finer adjustments.
  */
 struct QstEvaluator : public EvaluatorInterface {
-  TaperedQuantizedSquareTable<64> ourPawns;
-  TaperedQuantizedSquareTable<64> ourKnights;
-  TaperedQuantizedSquareTable<64> ourBishops;
-  TaperedQuantizedSquareTable<64> ourRooks;
-  TaperedQuantizedSquareTable<64> ourQueens;
-  TaperedQuantizedSquareTable<64> ourKings;
-  TaperedQuantizedSquareTable<64> theirPawns;
-  TaperedQuantizedSquareTable<64> theirKnights;
-  TaperedQuantizedSquareTable<64> theirBishops;
-  TaperedQuantizedSquareTable<64> theirRooks;
-  TaperedQuantizedSquareTable<64> theirQueens;
-  TaperedQuantizedSquareTable<64> theirKings;
+  constexpr static size_t QUANTIZATION = 8;
+  TaperedQuantizedSquareTable<QUANTIZATION> ourPawns;
+  TaperedQuantizedSquareTable<QUANTIZATION> ourKnights;
+  TaperedQuantizedSquareTable<QUANTIZATION> ourBishops;
+  TaperedQuantizedSquareTable<QUANTIZATION> ourRooks;
+  TaperedQuantizedSquareTable<QUANTIZATION> ourQueens;
+  TaperedQuantizedSquareTable<QUANTIZATION> ourKings;
+  TaperedQuantizedSquareTable<QUANTIZATION> theirPawns;
+  TaperedQuantizedSquareTable<QUANTIZATION> theirKnights;
+  TaperedQuantizedSquareTable<QUANTIZATION> theirBishops;
+  TaperedQuantizedSquareTable<QUANTIZATION> theirRooks;
+  TaperedQuantizedSquareTable<QUANTIZATION> theirQueens;
+  TaperedQuantizedSquareTable<QUANTIZATION> theirKings;
   
-  TaperedQuantizedSquareTable<64> ourPassedPawns;
-  TaperedQuantizedSquareTable<64> theirPassedPawns;
-  TaperedQuantizedSquareTable<64> ourIsolatedPawns;
-  TaperedQuantizedSquareTable<64> theirIsolatedPawns;
-  TaperedQuantizedSquareTable<64> ourDoubledPawns;
-  TaperedQuantizedSquareTable<64> theirDoubledPawns;
+  TaperedQuantizedSquareTable<QUANTIZATION> ourPassedPawns;
+  TaperedQuantizedSquareTable<QUANTIZATION> theirPassedPawns;
+  TaperedQuantizedSquareTable<QUANTIZATION> ourIsolatedPawns;
+  TaperedQuantizedSquareTable<QUANTIZATION> theirIsolatedPawns;
+  TaperedQuantizedSquareTable<QUANTIZATION> ourDoubledPawns;
+  TaperedQuantizedSquareTable<QUANTIZATION> theirDoubledPawns;
 
   QstEvaluator() {
     std::string filename = "runs/20260201-144401/model.bin";
