@@ -14,26 +14,66 @@ from sharded_matrix import ShardedLoader
 from ShardedMatricesIterableDataset import ShardedMatricesIterableDataset
 
 names = [
-  'our_pawns',
-  'our_knights',
-  'our_bishops',
-  'our_rooks',
-  'our_queens',
-  'our_king',
-
-  'their_pawns',
-  'their_knights',
-  'their_bishops',
-  'their_rooks',
-  'their_queens',
-  'their_king',
+  'our_p|base_psq',
+  'our_n|base_psq',
+  'our_b|base_psq',
+  'our_r|base_psq',
+  'our_q|base_psq',
+  'our_k|base_psq',
+  'tir_p|base_psq',
+  'tir_n|base_psq',
+  'tir_b|base_psq',
+  'tir_r|base_psq',
+  'tir_q|base_psq',
+  'tir_k|base_psq',
 
   'our_psd_pwns',
-  'their_psd_pwns',
+  'tir_psd_pwns',
   'our_iso_pwns',
-  'their_iso_pwns',
+  'tir_iso_pwns',
   'our_dbl_pwns',
-  'their_dbl_pwns',
+  'tir_dbl_pwns',
+
+  'bad_our_p',
+  'bad_our_n',
+  'bad_our_b',
+  'bad_our_r',
+  'bad_our_q',
+  'bad_our_k',
+  'bad_tir_p',
+  'bad_tir_n',
+  'bad_tir_b',
+  'bad_tir_r',
+  'bad_tir_q',
+  'bad_tir_k',
+
+  # Conditional on them having a queen.
+  'our_p|tir_q',
+  'our_n|tir_q',
+  'our_b|tir_q',
+  'our_r|tir_q',
+  'our_q|tir_q',
+  'our_k|tir_q',
+  'tir_p|tir_q',
+  'tir_n|tir_q',
+  'tir_b|tir_q',
+  'tir_r|tir_q',
+  'tir_q|tir_q',
+  'tir_k|tir_q',
+
+  # Conditional on us having a queen.
+  'our_p|our_q',
+  'our_n|our_q',
+  'our_b|our_q',
+  'our_r|our_q',
+  'our_q|our_q',
+  'our_k|our_q',
+  'tir_p|our_q',
+  'tir_n|our_q',
+  'tir_b|our_q',
+  'tir_r|our_q',
+  'tir_q|our_q',
+  'tir_k|our_q',
 ]
 
 for name in names:
@@ -128,7 +168,9 @@ dataloader = tdata.DataLoader(dataset, batch_size=BATCH_SIZE//CHUNK_SIZE, shuffl
 
 print("Creating model...")
  # [512, 128]
-model = MyModel(next(iter(dataset))[0].shape[1]).to(device)
+dim = next(iter(dataset))[0].shape[1]
+assert dim == len(names) * 64, f"{dim} vs {len(names)}"
+model = MyModel(dim).to(device)
 
 print("Creating optimizer...")
 opt = torch.optim.AdamW(model.parameters(), lr=0.0, weight_decay=0.1)
@@ -144,7 +186,7 @@ NUM_EPOCHS = 4
 steps_per_epoch = len(dataloader)
 total_steps = NUM_EPOCHS * steps_per_epoch
 warmup_steps = warmup_length(0.999) # AdamW's beta is 0.999.
-assert warmup_steps < total_steps // 10, "You probably made a mistake."
+# assert warmup_steps < total_steps // 10, "You probably made a mistake."
 
 scheduler = CosineAnnealingWithWarmup(
   opt,

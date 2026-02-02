@@ -9,8 +9,29 @@
 #include "../../game/Position.h"
 #include "../evaluator.h"
 #include "../../game/utils.h"
+#include "../../game/Threats.h"
 
 namespace ChessEngine {
+
+inline void load64(std::istream& in, float *out, const std::string& name) {
+  char nameBuf[16];
+  int32_t shapeLen;
+  int32_t shape[2];
+
+  in.read(nameBuf, 16);
+  if (std::string(nameBuf, 16).find(name) == std::string::npos) {
+    throw std::runtime_error("Expected name " + name + ", got " + std::string(nameBuf, 16));
+  }
+  in.read(reinterpret_cast<char*>(&shapeLen), sizeof(int32_t));
+  if (shapeLen != 2) {
+    throw std::runtime_error("Unexpected shape length " + std::to_string(shapeLen));
+  }
+  in.read(reinterpret_cast<char*>(shape), sizeof(int32_t) * shapeLen);
+  if (shape[0] != 8 || shape[1] != 8) {
+    throw std::runtime_error("Unexpected shape " + std::to_string(shape[0]) + "," + std::to_string(shape[1]));
+  }
+  in.read(reinterpret_cast<char*>(out), sizeof(float) * 64);
+}
 
 template<Color US>
 struct PawnAnalysis {
@@ -191,10 +212,81 @@ struct TaperedQuantizedSquareTable {
   QuantizedSquareTable<QUANTIZATION> earlyWeights;
   QuantizedSquareTable<QUANTIZATION> lateWeights;
 
+  void load(std::istream& in) {
+    float *weights = new float[128];
+    in.read(reinterpret_cast<char*>(weights), sizeof(float) * 128);
+    // Scale weights for better quantization.
+    for (size_t i = 0; i < 128; ++i) {
+      weights[i] *= 200.0f;
+    }
+    earlyWeights = quantize<QUANTIZATION>(weights);
+    lateWeights = quantize<QUANTIZATION>(weights + 64);
+    delete[] weights;
+  }
+
   template<Color US>
   void contribute(Bitboard occupied, Evaluation *early, Evaluation *late) const {
+    if (QUANTIZATION == 0) {
+      return;
+    }
     earlyWeights.template contribute<US>(occupied, early);
     lateWeights.template contribute<US>(occupied, late);
+  }
+
+  static TaperedQuantizedSquareTable<QUANTIZATION> load_table(std::istream& in, const std::string& name) {
+    float *weights = new float[128];
+
+    TaperedQuantizedSquareTable<QUANTIZATION> out;
+
+    load64(in, weights, "e_" + name);
+    load64(in, weights + 64, "l_" + name);
+
+    // Scale weights for better quantization.
+    for (size_t i = 0; i < 128; ++i) {
+      weights[i] *= 200.0f;
+    }
+    out.earlyWeights = quantize<QUANTIZATION>(weights);
+    out.lateWeights = quantize<QUANTIZATION>(weights + 64);
+    delete[] weights;
+    return out;
+  }
+};
+
+template<size_t QUANTIZATION>
+struct ConditionedTaperedPieceSquareTables {
+  TaperedQuantizedSquareTable<QUANTIZATION> tables[12];
+  void load_table(std::istream& in, const std::string& base_name) {
+    tables[0] = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "our_p|" + base_name);
+    tables[1] = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "our_n|" + base_name);
+    tables[2] = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "our_b|" + base_name);
+    tables[3] = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "our_r|" + base_name);
+    tables[4] = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "our_q|" + base_name);
+    tables[5] = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "our_k|" + base_name);
+    tables[6] = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "tir_p|" + base_name);
+    tables[7] = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "tir_n|" + base_name);
+    tables[8] = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "tir_b|" + base_name);
+    tables[9] = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "tir_r|" + base_name);
+    tables[10] = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "tir_q|" + base_name);
+    tables[11] = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "tir_k|" + base_name);
+  }
+
+  template<Color US>
+  void contribute(const Position& pos, bool condition, Evaluation *early, Evaluation *late) const {
+    if (QUANTIZATION == 0 || !condition) {
+      return;
+    }
+    tables[0].template contribute<US>(pos.pieceBitboards_[coloredPiece<US, Piece::PAWN>()], early, late);
+    tables[1].template contribute<US>(pos.pieceBitboards_[coloredPiece<US, Piece::KNIGHT>()], early, late);
+    tables[2].template contribute<US>(pos.pieceBitboards_[coloredPiece<US, Piece::BISHOP>()], early, late);
+    tables[3].template contribute<US>(pos.pieceBitboards_[coloredPiece<US, Piece::ROOK>()], early, late);
+    tables[4].template contribute<US>(pos.pieceBitboards_[coloredPiece<US, Piece::QUEEN>()], early, late);
+    tables[5].template contribute<US>(pos.pieceBitboards_[coloredPiece<US, Piece::KING>()], early, late);
+    tables[6].template contribute<US>(pos.pieceBitboards_[coloredPiece<opposite_color<US>(), Piece::PAWN>()], early, late);
+    tables[7].template contribute<US>(pos.pieceBitboards_[coloredPiece<opposite_color<US>(), Piece::KNIGHT>()], early, late);
+    tables[8].template contribute<US>(pos.pieceBitboards_[coloredPiece<opposite_color<US>(), Piece::BISHOP>()], early, late);
+    tables[9].template contribute<US>(pos.pieceBitboards_[coloredPiece<opposite_color<US>(), Piece::ROOK>()], early, late);
+    tables[10].template contribute<US>(pos.pieceBitboards_[coloredPiece<opposite_color<US>(), Piece::QUEEN>()], early, late);
+    tables[11].template contribute<US>(pos.pieceBitboards_[coloredPiece<opposite_color<US>(), Piece::KING>()], early, late);
   }
 };
 
@@ -206,18 +298,8 @@ struct TaperedQuantizedSquareTable {
  */
 struct QstEvaluator : public EvaluatorInterface {
   constexpr static size_t QUANTIZATION = 8;
-  TaperedQuantizedSquareTable<QUANTIZATION> ourPawns;
-  TaperedQuantizedSquareTable<QUANTIZATION> ourKnights;
-  TaperedQuantizedSquareTable<QUANTIZATION> ourBishops;
-  TaperedQuantizedSquareTable<QUANTIZATION> ourRooks;
-  TaperedQuantizedSquareTable<QUANTIZATION> ourQueens;
-  TaperedQuantizedSquareTable<QUANTIZATION> ourKings;
-  TaperedQuantizedSquareTable<QUANTIZATION> theirPawns;
-  TaperedQuantizedSquareTable<QUANTIZATION> theirKnights;
-  TaperedQuantizedSquareTable<QUANTIZATION> theirBishops;
-  TaperedQuantizedSquareTable<QUANTIZATION> theirRooks;
-  TaperedQuantizedSquareTable<QUANTIZATION> theirQueens;
-  TaperedQuantizedSquareTable<QUANTIZATION> theirKings;
+  // Normal piece-square tables.
+  ConditionedTaperedPieceSquareTables<QUANTIZATION> pieces;
   
   TaperedQuantizedSquareTable<QUANTIZATION> ourPassedPawns;
   TaperedQuantizedSquareTable<QUANTIZATION> theirPassedPawns;
@@ -226,73 +308,51 @@ struct QstEvaluator : public EvaluatorInterface {
   TaperedQuantizedSquareTable<QUANTIZATION> ourDoubledPawns;
   TaperedQuantizedSquareTable<QUANTIZATION> theirDoubledPawns;
 
+  TaperedQuantizedSquareTable<QUANTIZATION> badOurPawns;
+  TaperedQuantizedSquareTable<QUANTIZATION> badOurKnights;
+  TaperedQuantizedSquareTable<QUANTIZATION> badOurBishops;
+  TaperedQuantizedSquareTable<QUANTIZATION> badOurRooks;
+  TaperedQuantizedSquareTable<QUANTIZATION> badOurQueens;
+  TaperedQuantizedSquareTable<QUANTIZATION> badOurKings;
+  TaperedQuantizedSquareTable<QUANTIZATION> badTheirPawns;
+  TaperedQuantizedSquareTable<QUANTIZATION> badTheirKnights;
+  TaperedQuantizedSquareTable<QUANTIZATION> badTheirBishops;
+  TaperedQuantizedSquareTable<QUANTIZATION> badTheirRooks;
+  TaperedQuantizedSquareTable<QUANTIZATION> badTheirQueens;
+  TaperedQuantizedSquareTable<QUANTIZATION> badTheirKings;
+
+  ConditionedTaperedPieceSquareTables<QUANTIZATION> conditionalOnOurQueen;
+  ConditionedTaperedPieceSquareTables<QUANTIZATION> conditionalOnTheirQueen;
+
+
   QstEvaluator() {
-    std::string filename = "runs/20260201-144401/model.bin";
+    std::string filename = "runs/20260201-164526/model.bin";
     std::ifstream in(filename, std::ios::binary);
     this->load(in);
     in.close();
   }
 
-  //   out.write(np.array([ord(c) for c in name], dtype=np.uint8).tobytes())
-  // out.write(np.array(len(tensor.shape), dtype=np.int32).tobytes())
-  // out.write(np.array(tensor.shape, dtype=np.int32).tobytes())
-  // out.write(tensor.tobytes())
-
-  void load64(std::istream& in, float *out, const std::string& name) {
-    char nameBuf[16];
-    int32_t shapeLen;
-    int32_t shape[2];
-
-    in.read(nameBuf, 16);
-    if (std::string(nameBuf, 16).find(name) == std::string::npos) {
-      throw std::runtime_error("Expected name " + name + ", got " + std::string(nameBuf, 16));
-    }
-    in.read(reinterpret_cast<char*>(&shapeLen), sizeof(int32_t));
-    if (shapeLen != 2) {
-      throw std::runtime_error("Unexpected shape length " + std::to_string(shapeLen));
-    }
-    in.read(reinterpret_cast<char*>(shape), sizeof(int32_t) * shapeLen);
-    if (shape[0] != 8 || shape[1] != 8) {
-      throw std::runtime_error("Unexpected shape " + std::to_string(shape[0]) + "," + std::to_string(shape[1]));
-    }
-    in.read(reinterpret_cast<char*>(out), sizeof(float) * 64);
-  }
-
-  template<size_t QUANTIZATION>
-  void load_table(std::istream& in, TaperedQuantizedSquareTable<QUANTIZATION> *out, const std::string& name) {
-    float *weights = new float[128];
-
-    load64(in, weights, "e_" + name);
-    load64(in, weights + 64, "l_" + name);
-
-    // Scale weights for better quantization.
-    for (size_t i = 0; i < 128; ++i) {
-      weights[i] *= 200.0f;
-    }
-    out->earlyWeights = quantize<QUANTIZATION>(weights);
-    out->lateWeights = quantize<QUANTIZATION>(weights + 64);
-    delete[] weights;
-  }
-
   void load(std::istream& in) {
-    load_table(in, &ourPawns, "our_pawns");
-    load_table(in, &ourKnights, "our_knights");
-    load_table(in, &ourBishops, "our_bishops");
-    load_table(in, &ourRooks, "our_rooks");
-    load_table(in, &ourQueens, "our_queens");
-    load_table(in, &ourKings, "our_king");
-    load_table(in, &theirPawns, "their_pawns");
-    load_table(in, &theirKnights, "their_knights");
-    load_table(in, &theirBishops, "their_bishops");
-    load_table(in, &theirRooks, "their_rooks");
-    load_table(in, &theirQueens, "their_queens");
-    load_table(in, &theirKings, "their_king");
-    load_table(in, &ourPassedPawns, "our_psd_pwns");
-    load_table(in, &theirPassedPawns, "their_psd_pwns");
-    load_table(in, &ourIsolatedPawns, "our_iso_pwns");
-    load_table(in, &theirIsolatedPawns, "their_iso_pwns");
-    load_table(in, &ourDoubledPawns, "our_dbl_pwns");
-    load_table(in, &theirDoubledPawns, "their_dbl_pwns");
+    pieces.load_table(in, "base_psq");
+    ourPassedPawns = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "our_psd_pwns");
+    theirPassedPawns = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "tir_psd_pwns");
+    ourIsolatedPawns = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "our_iso_pwns");
+    theirIsolatedPawns = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "tir_iso_pwns");
+    ourDoubledPawns = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "our_dbl_pwns");
+    theirDoubledPawns = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "tir_dbl_pwns");
+
+    badOurPawns = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "bad_our_p");
+    badOurKnights = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "bad_our_n");
+    badOurBishops = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "bad_our_b");
+    badOurRooks = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "bad_our_r");
+    badOurQueens = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "bad_our_q");
+    badOurKings = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "bad_our_k");
+    badTheirPawns = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "bad_tir_p");
+    badTheirKnights = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "bad_tir_n");
+    badTheirBishops = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "bad_tir_b");
+    badTheirRooks = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "bad_tir_r");
+    badTheirQueens = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "bad_tir_q");
+    badTheirKings = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "bad_tir_k");
   }
 
   // Extract features from the position from mover's perspective.
@@ -330,6 +390,50 @@ struct QstEvaluator : public EvaluatorInterface {
     out->push_back(pawnAnalysis.ourDoubledPawns);
     out->push_back(pawnAnalysis.theirDoubledPawns);
 
+    Threats<US> threats(pos);
+    out->push_back(threats.badForOur[Piece::PAWN]);
+    out->push_back(threats.badForOur[Piece::KNIGHT]);
+    out->push_back(threats.badForOur[Piece::BISHOP]);
+    out->push_back(threats.badForOur[Piece::ROOK]);
+    out->push_back(threats.badForOur[Piece::QUEEN]);
+    out->push_back(threats.badForOur[Piece::KING]);
+    out->push_back(threats.badForTheir[Piece::PAWN]);
+    out->push_back(threats.badForTheir[Piece::KNIGHT]);
+    out->push_back(threats.badForTheir[Piece::BISHOP]);
+    out->push_back(threats.badForTheir[Piece::ROOK]);
+    out->push_back(threats.badForTheir[Piece::QUEEN]);
+    out->push_back(threats.badForTheir[Piece::KING]);
+
+    // Conditional on them having a queen.
+    const bool themHasQueen = pos.pieceBitboards_[coloredPiece<THEM, Piece::QUEEN>()] > 0 ? 1 : -1;
+    out->push_back(pos.pieceBitboards_[coloredPiece<US, Piece::PAWN>()] * themHasQueen);
+    out->push_back(pos.pieceBitboards_[coloredPiece<US, Piece::KNIGHT>()] * themHasQueen);
+    out->push_back(pos.pieceBitboards_[coloredPiece<US, Piece::BISHOP>()] * themHasQueen);
+    out->push_back(pos.pieceBitboards_[coloredPiece<US, Piece::ROOK>()] * themHasQueen);
+    out->push_back(pos.pieceBitboards_[coloredPiece<US, Piece::QUEEN>()] * themHasQueen);
+    out->push_back(pos.pieceBitboards_[coloredPiece<US, Piece::KING>()] * themHasQueen);
+    out->push_back(pos.pieceBitboards_[coloredPiece<THEM, Piece::PAWN>()] * themHasQueen);
+    out->push_back(pos.pieceBitboards_[coloredPiece<THEM, Piece::KNIGHT>()] * themHasQueen);
+    out->push_back(pos.pieceBitboards_[coloredPiece<THEM, Piece::BISHOP>()] * themHasQueen);
+    out->push_back(pos.pieceBitboards_[coloredPiece<THEM, Piece::ROOK>()] * themHasQueen);
+    out->push_back(pos.pieceBitboards_[coloredPiece<THEM, Piece::QUEEN>()] * themHasQueen);
+    out->push_back(pos.pieceBitboards_[coloredPiece<THEM, Piece::KING>()] * themHasQueen);
+
+    // Conditional on us having a queen.
+    const bool usHasQueen = pos.pieceBitboards_[coloredPiece<US, Piece::QUEEN>()] > 0 ? 1 : -1;
+    out->push_back(pos.pieceBitboards_[coloredPiece<US, Piece::PAWN>()] * usHasQueen);
+    out->push_back(pos.pieceBitboards_[coloredPiece<US, Piece::KNIGHT>()] * usHasQueen);
+    out->push_back(pos.pieceBitboards_[coloredPiece<US, Piece::BISHOP>()] * usHasQueen);
+    out->push_back(pos.pieceBitboards_[coloredPiece<US, Piece::ROOK>()] * usHasQueen);
+    out->push_back(pos.pieceBitboards_[coloredPiece<US, Piece::QUEEN>()] * usHasQueen);
+    out->push_back(pos.pieceBitboards_[coloredPiece<US, Piece::KING>()] * usHasQueen);
+    out->push_back(pos.pieceBitboards_[coloredPiece<THEM, Piece::PAWN>()] * usHasQueen);
+    out->push_back(pos.pieceBitboards_[coloredPiece<THEM, Piece::KNIGHT>()] * usHasQueen);
+    out->push_back(pos.pieceBitboards_[coloredPiece<THEM, Piece::BISHOP>()] * usHasQueen);
+    out->push_back(pos.pieceBitboards_[coloredPiece<THEM, Piece::ROOK>()] * usHasQueen);
+    out->push_back(pos.pieceBitboards_[coloredPiece<THEM, Piece::QUEEN>()] * usHasQueen);
+    out->push_back(pos.pieceBitboards_[coloredPiece<THEM, Piece::KING>()] * usHasQueen);
+
     // Flip all bitboards if black to move. This helps us encode
     // symmetry and reduce the number of features.
     for (size_t i = startingLen; i < out->size(); ++i) {
@@ -348,19 +452,8 @@ struct QstEvaluator : public EvaluatorInterface {
 
     PawnAnalysis<US> pawnAnalysis(pos);
 
-    ourPawns.contribute<US>(pos.pieceBitboards_[coloredPiece<US, Piece::PAWN>()], &early, &late);
-    ourKnights.contribute<US>(pos.pieceBitboards_[coloredPiece<US, Piece::KNIGHT>()], &early, &late);
-    ourBishops.contribute<US>(pos.pieceBitboards_[coloredPiece<US, Piece::BISHOP>()], &early, &late);
-    ourRooks.contribute<US>(pos.pieceBitboards_[coloredPiece<US, Piece::ROOK>()], &early, &late);
-    ourQueens.contribute<US>(pos.pieceBitboards_[coloredPiece<US, Piece::QUEEN>()], &early, &late);
-    ourKings.contribute<US>(pos.pieceBitboards_[coloredPiece<US, Piece::KING>()], &early, &late);
-
-    theirPawns.contribute<US>(pos.pieceBitboards_[coloredPiece<THEM, Piece::PAWN>()], &early, &late);
-    theirKnights.contribute<US>(pos.pieceBitboards_[coloredPiece<THEM, Piece::KNIGHT>()], &early, &late);
-    theirBishops.contribute<US>(pos.pieceBitboards_[coloredPiece<THEM, Piece::BISHOP>()], &early, &late);
-    theirRooks.contribute<US>(pos.pieceBitboards_[coloredPiece<THEM, Piece::ROOK>()], &early, &late);
-    theirQueens.contribute<US>(pos.pieceBitboards_[coloredPiece<THEM, Piece::QUEEN>()], &early, &late);
-    theirKings.contribute<US>(pos.pieceBitboards_[coloredPiece<THEM, Piece::KING>()], &early, &late);
+    pieces.template contribute<US>(pos, true, &early, &late);
+    pieces.template contribute<US>(pos, true, &early, &late);
 
     ourPassedPawns.contribute<US>(pawnAnalysis.ourPassedPawns, &early, &late);
     theirPassedPawns.contribute<US>(pawnAnalysis.theirPassedPawns, &early, &late);
@@ -368,6 +461,20 @@ struct QstEvaluator : public EvaluatorInterface {
     theirIsolatedPawns.contribute<US>(pawnAnalysis.theirIsolatedPawns, &early, &late);
     ourDoubledPawns.contribute<US>(pawnAnalysis.ourDoubledPawns, &early, &late);
     theirDoubledPawns.contribute<US>(pawnAnalysis.theirDoubledPawns, &early, &late);
+
+    Threats<US> threats(pos);
+    badOurPawns.contribute<US>(threats.badForOur[Piece::PAWN], &early, &late);
+    badOurKnights.contribute<US>(threats.badForOur[Piece::KNIGHT], &early, &late);
+    badOurBishops.contribute<US>(threats.badForOur[Piece::BISHOP], &early, &late);
+    badOurRooks.contribute<US>(threats.badForOur[Piece::ROOK], &early, &late);
+    badOurQueens.contribute<US>(threats.badForOur[Piece::QUEEN], &early, &late);
+    badOurKings.contribute<US>(threats.badForOur[Piece::KING], &early, &late);
+    badTheirPawns.contribute<US>(threats.badForTheir[Piece::PAWN], &early, &late);
+    badTheirKnights.contribute<US>(threats.badForTheir[Piece::KNIGHT], &early, &late);
+    badTheirBishops.contribute<US>(threats.badForTheir[Piece::BISHOP], &early, &late);
+    badTheirRooks.contribute<US>(threats.badForTheir[Piece::ROOK], &early, &late);
+    badTheirQueens.contribute<US>(threats.badForTheir[Piece::QUEEN], &early, &late);
+    badTheirKings.contribute<US>(threats.badForTheir[Piece::KING], &early, &late);
 
     int32_t eval = early * stage + late * (16 - stage);
     return ColoredEvaluation<Color::WHITE>(eval / 16);
