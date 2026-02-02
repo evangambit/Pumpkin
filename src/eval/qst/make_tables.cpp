@@ -25,6 +25,7 @@ using namespace ChessEngine;
 using WriterI16 = ShardedMatrix::Writer<int16_t>;
 using WriterI8 = ShardedMatrix::Writer<int8_t>;
 using WriterB = ShardedMatrix::Writer<bool>;
+constexpr size_t NUM_BITBOARDS = 54;
 
 void process(
   const std::vector<std::string>& line,
@@ -46,8 +47,6 @@ void process(
     QstEvaluator::get_features<Color::BLACK>(pos, &features);
   }
   
-  // Convert 18 Bitboards to 1152 bools
-  constexpr size_t NUM_BITBOARDS = 18;
   if (features.size() != NUM_BITBOARDS) {
       std::cerr << "Error: Expected " << NUM_BITBOARDS << " features, got " << features.size() << std::endl;
       return;
@@ -104,7 +103,7 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  WriterB qstInputWriter(outpath + "-qst", { 18 * 64 });
+  WriterB qstInputWriter(outpath + "-qst", { NUM_BITBOARDS * 64 });
   WriterI16 evalWriter(outpath + "-eval", { 3 });
   WriterI8 turnWriter(outpath + "-turn", { 1 });
   WriterI8 pieceCountWriter(outpath + "-piece-counts", { 10 });
@@ -123,6 +122,7 @@ int main(int argc, char *argv[]) {
     if ((++counter) % 100'000 == 0) {
       double ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime).count();
       std::cout << "Finished " << counter / 1000 << "k in " << ms / 1000 << " seconds" << std::endl;
+      break;
     }
   }
 
