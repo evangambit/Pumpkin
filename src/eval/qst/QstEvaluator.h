@@ -315,7 +315,7 @@ struct ConditionedTaperedPieceSquareTables {
  * plus a host of quantized, conditional square tables for finer adjustments.
  */
 struct QstEvaluator : public EvaluatorInterface {
-  constexpr static size_t QUANTIZATION = 64;
+  constexpr static size_t QUANTIZATION = 8;
   // Normal piece-square tables.
   ConditionedTaperedPieceSquareTables<QUANTIZATION> pieces;
   
