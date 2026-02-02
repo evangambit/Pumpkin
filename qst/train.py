@@ -186,7 +186,7 @@ NUM_EPOCHS = 4
 steps_per_epoch = len(dataloader)
 total_steps = NUM_EPOCHS * steps_per_epoch
 warmup_steps = warmup_length(0.999) # AdamW's beta is 0.999.
-# assert warmup_steps < total_steps // 10, "You probably made a mistake."
+assert warmup_steps < total_steps // 10, "You probably made a mistake."
 
 scheduler = CosineAnnealingWithWarmup(
   opt,
