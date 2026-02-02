@@ -122,7 +122,6 @@ int main(int argc, char *argv[]) {
     if ((++counter) % 100'000 == 0) {
       double ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime).count();
       std::cout << "Finished " << counter / 1000 << "k in " << ms / 1000 << " seconds" << std::endl;
-      break;
     }
   }
 

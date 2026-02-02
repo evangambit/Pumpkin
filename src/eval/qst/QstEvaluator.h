@@ -13,6 +13,27 @@
 
 namespace ChessEngine {
 
+template<size_t N>
+inline void load_flat(std::istream& in, float *out, const std::string& name) {
+  char nameBuf[16];
+  int32_t shapeLen;
+  int32_t shape[1];
+
+  in.read(nameBuf, 16);
+  if (std::string(nameBuf, 16).find(name) == std::string::npos) {
+    throw std::runtime_error("Expected name " + name + ", got " + std::string(nameBuf, 16));
+  }
+  in.read(reinterpret_cast<char*>(&shapeLen), sizeof(int32_t));
+  if (shapeLen != 1) {
+    throw std::runtime_error("Unexpected shape length " + std::to_string(shapeLen));
+  }
+  in.read(reinterpret_cast<char*>(shape), sizeof(int32_t) * shapeLen);
+  if (shape[0] != N) {
+    throw std::runtime_error("Unexpected shape " + std::to_string(shape[0]));
+  }
+  in.read(reinterpret_cast<char*>(out), sizeof(float) * N);
+}
+
 inline void load64(std::istream& in, float *out, const std::string& name) {
   char nameBuf[16];
   int32_t shapeLen;
@@ -76,12 +97,11 @@ struct QuantizedSquareTable {
 
   template<Color US>
   inline void contribute(Bitboard occupied, Evaluation *eval) const {
+    if constexpr (US == Color::BLACK) {
+      occupied = flip_vertically(occupied);
+    }
     for (size_t i = 0; i < QUANTIZATION; ++i) {
-      if constexpr (US == Color::BLACK) {
-        *eval -= std::popcount(flip_vertically(occupied) & masks[i]) * weights[i];
-      } else {
-        *eval += std::popcount(occupied & masks[i]) * weights[i];
-      }
+      *eval -= std::popcount(occupied & masks[i]) * weights[i];
     }
   }
 
@@ -213,7 +233,7 @@ struct TaperedQuantizedSquareTable {
   QuantizedSquareTable<QUANTIZATION> lateWeights;
 
   void load(std::istream& in) {
-    float *weights = new float[128];
+    float weights[128];
     in.read(reinterpret_cast<char*>(weights), sizeof(float) * 128);
     // Scale weights for better quantization.
     for (size_t i = 0; i < 128; ++i) {
@@ -221,7 +241,6 @@ struct TaperedQuantizedSquareTable {
     }
     earlyWeights = quantize<QUANTIZATION>(weights);
     lateWeights = quantize<QUANTIZATION>(weights + 64);
-    delete[] weights;
   }
 
   template<Color US>
@@ -234,7 +253,7 @@ struct TaperedQuantizedSquareTable {
   }
 
   static TaperedQuantizedSquareTable<QUANTIZATION> load_table(std::istream& in, const std::string& name) {
-    float *weights = new float[128];
+    float weights[128];
 
     TaperedQuantizedSquareTable<QUANTIZATION> out;
 
@@ -247,7 +266,6 @@ struct TaperedQuantizedSquareTable {
     }
     out.earlyWeights = quantize<QUANTIZATION>(weights);
     out.lateWeights = quantize<QUANTIZATION>(weights + 64);
-    delete[] weights;
     return out;
   }
 };
@@ -297,7 +315,7 @@ struct ConditionedTaperedPieceSquareTables {
  * plus a host of quantized, conditional square tables for finer adjustments.
  */
 struct QstEvaluator : public EvaluatorInterface {
-  constexpr static size_t QUANTIZATION = 8;
+  constexpr static size_t QUANTIZATION = 64;
   // Normal piece-square tables.
   ConditionedTaperedPieceSquareTables<QUANTIZATION> pieces;
   
@@ -323,10 +341,11 @@ struct QstEvaluator : public EvaluatorInterface {
 
   ConditionedTaperedPieceSquareTables<QUANTIZATION> conditionalOnOurQueen;
   ConditionedTaperedPieceSquareTables<QUANTIZATION> conditionalOnTheirQueen;
+  Evaluation bias[2];
 
 
   QstEvaluator() {
-    std::string filename = "runs/20260201-164526/model.bin";
+    std::string filename = "runs/20260201-171038/model.bin";
     std::ifstream in(filename, std::ios::binary);
     this->load(in);
     in.close();
@@ -353,6 +372,14 @@ struct QstEvaluator : public EvaluatorInterface {
     badTheirRooks = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "bad_tir_r");
     badTheirQueens = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "bad_tir_q");
     badTheirKings = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "bad_tir_k");
+
+    conditionalOnTheirQueen.load_table(in, "tir_q");
+    conditionalOnOurQueen.load_table(in, "our_q");
+
+    float biasWeights[2];
+    load_flat<2>(in, biasWeights, "bias");
+    bias[0] = static_cast<Evaluation>(std::round(biasWeights[0] * 200.0f));
+    bias[1] = static_cast<Evaluation>(std::round(biasWeights[1] * 200.0f));
   }
 
   // Extract features from the position from mover's perspective.
@@ -376,10 +403,6 @@ struct QstEvaluator : public EvaluatorInterface {
     out->push_back(pos.pieceBitboards_[coloredPiece<THEM, Piece::ROOK>()]);
     out->push_back(pos.pieceBitboards_[coloredPiece<THEM, Piece::QUEEN>()]);
     out->push_back(pos.pieceBitboards_[coloredPiece<THEM, Piece::KING>()]);
-
-    // Passed pawns
-    Bitboard ourPawns = pos.pieceBitboards_[coloredPiece<US, Piece::PAWN>()];
-    Bitboard theirPawns = pos.pieceBitboards_[coloredPiece<THEM, Piece::PAWN>()];
 
     PawnAnalysis<US> pawnAnalysis(pos);
 
@@ -405,7 +428,7 @@ struct QstEvaluator : public EvaluatorInterface {
     out->push_back(threats.badForTheir[Piece::KING]);
 
     // Conditional on them having a queen.
-    const bool themHasQueen = pos.pieceBitboards_[coloredPiece<THEM, Piece::QUEEN>()] > 0 ? 1 : -1;
+    const bool themHasQueen = pos.pieceBitboards_[coloredPiece<THEM, Piece::QUEEN>()] > 0;
     out->push_back(pos.pieceBitboards_[coloredPiece<US, Piece::PAWN>()] * themHasQueen);
     out->push_back(pos.pieceBitboards_[coloredPiece<US, Piece::KNIGHT>()] * themHasQueen);
     out->push_back(pos.pieceBitboards_[coloredPiece<US, Piece::BISHOP>()] * themHasQueen);
@@ -420,7 +443,7 @@ struct QstEvaluator : public EvaluatorInterface {
     out->push_back(pos.pieceBitboards_[coloredPiece<THEM, Piece::KING>()] * themHasQueen);
 
     // Conditional on us having a queen.
-    const bool usHasQueen = pos.pieceBitboards_[coloredPiece<US, Piece::QUEEN>()] > 0 ? 1 : -1;
+    const bool usHasQueen = pos.pieceBitboards_[coloredPiece<US, Piece::QUEEN>()] > 0;
     out->push_back(pos.pieceBitboards_[coloredPiece<US, Piece::PAWN>()] * usHasQueen);
     out->push_back(pos.pieceBitboards_[coloredPiece<US, Piece::KNIGHT>()] * usHasQueen);
     out->push_back(pos.pieceBitboards_[coloredPiece<US, Piece::BISHOP>()] * usHasQueen);
@@ -444,15 +467,14 @@ struct QstEvaluator : public EvaluatorInterface {
   }
 
   template<Color US>
-  ColoredEvaluation<Color::WHITE> evaluate(const Position& pos) {
+  ColoredEvaluation<US> evaluate(const Position& pos) {
     constexpr Color THEM = opposite_color<US>();
     int32_t stage = earliness(pos);
-    Evaluation early = 0;
-    Evaluation late = 0;
+    Evaluation early = bias[0];
+    Evaluation late = bias[1];
 
     PawnAnalysis<US> pawnAnalysis(pos);
 
-    pieces.template contribute<US>(pos, true, &early, &late);
     pieces.template contribute<US>(pos, true, &early, &late);
 
     ourPassedPawns.contribute<US>(pawnAnalysis.ourPassedPawns, &early, &late);
@@ -476,8 +498,13 @@ struct QstEvaluator : public EvaluatorInterface {
     badTheirQueens.contribute<US>(threats.badForTheir[Piece::QUEEN], &early, &late);
     badTheirKings.contribute<US>(threats.badForTheir[Piece::KING], &early, &late);
 
-    int32_t eval = early * stage + late * (16 - stage);
-    return ColoredEvaluation<Color::WHITE>(eval / 16);
+    const bool themHasQueen = pos.pieceBitboards_[coloredPiece<THEM, Piece::QUEEN>()] > 0;
+    conditionalOnTheirQueen.template contribute<US>(pos, themHasQueen, &early, &late);
+    const bool usHasQueen = pos.pieceBitboards_[coloredPiece<US, Piece::QUEEN>()] > 0;
+    conditionalOnOurQueen.template contribute<US>(pos, usHasQueen, &early, &late);
+
+    int32_t eval = int32_t(early) * stage + int32_t(late) * (16 - stage);
+    return ColoredEvaluation<US>(-eval / 16);
   }
 
   ColoredEvaluation<Color::WHITE> evaluate_white(const Position& pos) override {
@@ -485,7 +512,7 @@ struct QstEvaluator : public EvaluatorInterface {
   }
 
   ColoredEvaluation<Color::BLACK> evaluate_black(const Position& pos) override {
-    return -evaluate<Color::BLACK>(pos);
+    return evaluate<Color::BLACK>(pos);
   }
 
   std::shared_ptr<EvaluatorInterface> clone() const override {
@@ -505,7 +532,7 @@ struct QstEvaluator : public EvaluatorInterface {
   }
 
   std::string to_string() const override {
-    return "PieceSquareEvaluator";
+    return "QstEvaluator";
   }
 
  private:
