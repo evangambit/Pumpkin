@@ -84,12 +84,14 @@ struct QuantizedSquareTable {
   template<int SCALE = 1>
   inline void contribute(Bitboard occupied, Evaluation *eval) const {
     static_assert(SCALE == 1 || SCALE == -1, "SCALE must be 1 or -1");
+    Evaluation delta = 0;
     for (size_t i = 0; i < QUANTIZATION; ++i) {
-      if constexpr (SCALE == 1) {
-        *eval += std::popcount(occupied & masks[i]) * weights[i];
-      } else {
-        *eval -= std::popcount(occupied & masks[i]) * weights[i];
-      }
+      delta += std::popcount(occupied & masks[i]) * weights[i];
+    }
+    if constexpr (SCALE == 1) {
+      *eval += delta;
+    } else {
+      *eval -= delta;
     }
   }
 
@@ -288,7 +290,7 @@ struct TaperedQuantizedSquareTable {
  * weights.
  */
 struct QstEvaluator : public EvaluatorInterface {
-  constexpr static size_t QUANTIZATION = 8;
+  constexpr static size_t QUANTIZATION = 64;
   QstEvaluator() {}
 
   void load(std::string filename) {
@@ -320,7 +322,7 @@ struct QstEvaluator : public EvaluatorInterface {
   }
 
   // Normal piece-square tables.
-  TaperedQuantizedSquareTable<8> pieces[6];
+  TaperedQuantizedSquareTable<QUANTIZATION> pieces[6];
   
   TaperedQuantizedSquareTable<QUANTIZATION> kingAssumingNoCastling;
 
@@ -362,40 +364,40 @@ struct QstEvaluator : public EvaluatorInterface {
   ColoredEvaluation<US> evaluate(const Position& pos) {
     constexpr Color THEM = opposite_color<US>();
     int32_t stage = earliness(pos);
-    Evaluation early = biases[0];
-    Evaluation late = biases[1];
+    Evaluation early = 0;  // biases[0];
+    Evaluation late = 0;  // biases[1];
 
     PawnAnalysis<US> pawnAnalysis(pos);
 
     features[0] = orient<US>(pos.pieceBitboards_[coloredPiece<US, Piece::PAWN>()]);
     features[1] = orient<US>(pos.pieceBitboards_[coloredPiece<THEM, Piece::PAWN>()]);
-    pieces[Piece::PAWN].contribute(features[0], &early, &late);
-    pieces[Piece::PAWN].contribute<-1>(features[1], &early, &late);
+    pieces[0].contribute(features[0], &early, &late);
+    pieces[0].contribute<-1>(flip_vertically(features[1]), &early, &late);
 
     features[2] = orient<US>(pos.pieceBitboards_[coloredPiece<US, Piece::KNIGHT>()]);
     features[3] = orient<US>(pos.pieceBitboards_[coloredPiece<THEM, Piece::KNIGHT>()]);
-    pieces[Piece::KNIGHT].contribute(features[2], &early, &late);
-    pieces[Piece::KNIGHT].contribute<-1>(features[3], &early, &late);
+    pieces[1].contribute(features[2], &early, &late);
+    pieces[1].contribute<-1>(flip_vertically(features[3]), &early, &late);
 
     features[4] = orient<US>(pos.pieceBitboards_[coloredPiece<US, Piece::BISHOP>()]);
     features[5] = orient<US>(pos.pieceBitboards_[coloredPiece<THEM, Piece::BISHOP>()]);
-    pieces[Piece::BISHOP].contribute(features[4], &early, &late);
-    pieces[Piece::BISHOP].contribute<-1>(features[5], &early, &late);
+    pieces[2].contribute(features[4], &early, &late);
+    pieces[2].contribute<-1>(flip_vertically(features[5]), &early, &late);
 
     features[6] = orient<US>(pos.pieceBitboards_[coloredPiece<US, Piece::ROOK>()]);
     features[7] = orient<US>(pos.pieceBitboards_[coloredPiece<THEM, Piece::ROOK>()]);
-    pieces[Piece::ROOK].contribute(features[6], &early, &late);
-    pieces[Piece::ROOK].contribute<-1>(features[7], &early, &late);
+    pieces[3].contribute(features[6], &early, &late);
+    pieces[3].contribute<-1>(flip_vertically(features[7]), &early, &late);
 
     features[8] = orient<US>(pos.pieceBitboards_[coloredPiece<US, Piece::QUEEN>()]);
     features[9] = orient<US>(pos.pieceBitboards_[coloredPiece<THEM, Piece::QUEEN>()]);
-    pieces[Piece::QUEEN].contribute(features[8], &early, &late);
-    pieces[Piece::QUEEN].contribute<-1>(features[9], &early, &late);
+    pieces[4].contribute(features[8], &early, &late);
+    pieces[4].contribute<-1>(flip_vertically(features[9]), &early, &late);
 
     features[10] = orient<US>(pos.pieceBitboards_[coloredPiece<US, Piece::KING>()]);
     features[11] = orient<US>(pos.pieceBitboards_[coloredPiece<THEM, Piece::KING>()]);
-    pieces[Piece::KING].contribute(features[10], &early, &late);
-    pieces[Piece::KING].contribute<-1>(features[11], &early, &late);
+    pieces[5].contribute(features[10], &early, &late);
+    pieces[5].contribute<-1>(flip_vertically(features[11]), &early, &late);
 
     // kingAssumingNoCastling contributions
     constexpr uint8_t ourKingsideCastling = US == Color::WHITE ? kCastlingRights_WhiteKing : kCastlingRights_BlackKing;
@@ -407,7 +409,7 @@ struct QstEvaluator : public EvaluatorInterface {
     features[12] = orient<US>(pos.pieceBitboards_[coloredPiece<US, Piece::KING>()]) * weCannotCastle;
     features[13] = orient<US>(pos.pieceBitboards_[coloredPiece<THEM, Piece::KING>()]) * theyCannotCastle;
     kingAssumingNoCastling.contribute(features[12], &early, &late);
-    kingAssumingNoCastling.contribute<-1>(features[13], &early, &late);
+    kingAssumingNoCastling.contribute<-1>(flip_vertically(features[13]), &early, &late);
 
     features[14] = orient<US>(pawnAnalysis.ourPassedPawns);
     features[15] = orient<US>(pawnAnalysis.theirPassedPawns);
@@ -464,23 +466,23 @@ struct QstEvaluator : public EvaluatorInterface {
     features[41] = orient<US>(threats.badForTheir[Piece::QUEEN] & pos.pieceBitboards_[coloredPiece<THEM, Piece::QUEEN>()]);
     features[42] = orient<US>(threats.badForOur[Piece::KING] & pos.pieceBitboards_[coloredPiece<US, Piece::KING>()]);
     features[43] = orient<US>(threats.badForTheir[Piece::KING] & pos.pieceBitboards_[coloredPiece<THEM, Piece::KING>()]);
-    capturable[Piece::PAWN].contribute(features[32], &early, &late);
-    capturable[Piece::PAWN].contribute<-1>(features[33], &early, &late);
-    capturable[Piece::KNIGHT].contribute(features[34], &early, &late);
-    capturable[Piece::KNIGHT].contribute<-1>(features[35], &early, &late);
-    capturable[Piece::BISHOP].contribute(features[36], &early, &late);
-    capturable[Piece::BISHOP].contribute<-1>(features[37], &early, &late);
-    capturable[Piece::ROOK].contribute(features[38], &early, &late);
-    capturable[Piece::ROOK].contribute<-1>(features[39], &early, &late);
-    capturable[Piece::QUEEN].contribute(features[40], &early, &late);
-    capturable[Piece::QUEEN].contribute<-1>(features[41], &early, &late);
-    capturable[Piece::KING].contribute(features[42], &early, &late);
-    capturable[Piece::KING].contribute<-1>(features[43], &early, &late);
+    capturable[0].contribute(features[32], &early, &late);
+    capturable[0].contribute<-1>(features[33], &early, &late);
+    capturable[1].contribute(features[34], &early, &late);
+    capturable[1].contribute<-1>(features[35], &early, &late);
+    capturable[2].contribute(features[36], &early, &late);
+    capturable[2].contribute<-1>(features[37], &early, &late);
+    capturable[3].contribute(features[38], &early, &late);
+    capturable[3].contribute<-1>(features[39], &early, &late);
+    capturable[4].contribute(features[40], &early, &late);
+    capturable[4].contribute<-1>(features[41], &early, &late);
+    capturable[5].contribute(features[42], &early, &late);
+    capturable[5].contribute<-1>(features[43], &early, &late);
 
     static_assert(NUM_FEATURES == 44, "features size mismatch");
 
     int32_t eval = int32_t(early) * stage + int32_t(late) * (16 - stage);
-    return ColoredEvaluation<US>(-eval / 16);
+    return ColoredEvaluation<US>(eval / 16);
   }
 
   ColoredEvaluation<Color::WHITE> evaluate_white(const Position& pos) override {
