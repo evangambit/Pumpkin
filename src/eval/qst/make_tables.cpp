@@ -18,38 +18,44 @@
  * This tool converts a text file of chess positions into sharded binary matrices
  * for training the QstEvaluator.
  * 
- * Usage: ./make_tables_qst <input_file> <output_prefix>
+ * Usage: ./make_tables_qst <input_file> <output_prefix> [limit]
  */
 
 using namespace ChessEngine;
 using WriterI16 = ShardedMatrix::Writer<int16_t>;
 using WriterI8 = ShardedMatrix::Writer<int8_t>;
 using WriterB = ShardedMatrix::Writer<bool>;
-constexpr size_t NUM_BITBOARDS = 54;
+constexpr size_t NUM_BITBOARDS = 44;
+
+float sigmoid(float x) {
+  return 1.0f / (1.0f + std::exp(-x));
+}
 
 void process(
   const std::vector<std::string>& line,
   WriterB& qstInputWriter,
   WriterI16& evalWriter,
   WriterI8& turnWriter,
-  WriterI8& pieceCountWriter
+  WriterI8& pieceCountWriter,
+  QstEvaluator& qstEvaluator
   ) {
-  if (line.size() != 4) {
+  if (line.size() != 4 && line.size() != 2) {
     std::cout << "error: line has " << line.size() << " elements" << std::endl;
     return;
   }
 
   Position pos(line[0]);
   std::vector<Bitboard> features;
+  features.reserve(NUM_BITBOARDS);
   if (pos.turn_ == Color::WHITE) {
-    QstEvaluator::get_features<Color::WHITE>(pos, &features);
+    qstEvaluator.get_features<Color::WHITE>(pos, &features);
   } else {
-    QstEvaluator::get_features<Color::BLACK>(pos, &features);
+    qstEvaluator.get_features<Color::BLACK>(pos, &features);
   }
   
   if (features.size() != NUM_BITBOARDS) {
-      std::cerr << "Error: Expected " << NUM_BITBOARDS << " features, got " << features.size() << std::endl;
-      return;
+    std::cerr << "Error: Expected " << NUM_BITBOARDS << " features, got " << features.size() << std::endl;
+    return;
   }
 
   bool qstFeatures[NUM_BITBOARDS * 64];
@@ -60,11 +66,30 @@ void process(
   }
   qstInputWriter.write_row(qstFeatures);
 
-  int16_t wdl[3] = {
-    int16_t(std::stoi(line[1])),
-    int16_t(std::stoi(line[2])),
-    int16_t(std::stoi(line[3])),
-  };
+  int16_t wdl[3];
+  if (line.size() == 4) {
+    wdl[0] = int16_t(std::stoi(line[1]));
+    wdl[1] = int16_t(std::stoi(line[2]));
+    wdl[2] = int16_t(std::stoi(line[3]));
+  } else {
+    float score = std::stof(line[1]);
+    /*
+    Quick and dirty conversion from score to WDL.
+
+    Assume
+    p( win | score = 1.0) = 0.48
+    p( win | score = 0.0) = 0.21
+    (From some past analysis)
+
+    Then the logistic function parameters are:
+    p(win) = sigmoid(1.25 x - 1.33)
+    */
+    float winRate = sigmoid(1.25f * score - 1.33f);
+    float loseRate = sigmoid(-1.25f * score - 1.33f);
+    wdl[0] = int16_t(std::round(winRate * 1000.0f));
+    wdl[2] = int16_t(std::round(loseRate * 1000.0f));
+    wdl[1] = 1000 - wdl[0] - wdl[2];
+  }
   evalWriter.write_row(wdl);
 
   int8_t turn = pos.turn_ == Color::WHITE ? 1 : -1;
@@ -89,13 +114,17 @@ int main(int argc, char *argv[]) {
   initialize_zorbrist();
   initialize_movegen();
 
-  if (argc != 3) {
-    std::cerr << "Usage: " << argv[0] << " <input> <output>" << std::endl;
+  if (argc != 3 && argc != 4) {
+    std::cerr << "Usage: " << argv[0] << " <input> <output> [limit]" << std::endl;
     return 1;
   }
 
   const std::string inpath = argv[1];
   const std::string outpath = argv[2];
+  size_t limit = std::numeric_limits<size_t>::max();
+  if (argc == 4) {
+    limit = std::stoul(argv[3]);
+  }
 
   std::ifstream infile(inpath);
   if (!infile.is_open()) {
@@ -110,6 +139,8 @@ int main(int argc, char *argv[]) {
 
   std::chrono::time_point<std::chrono::system_clock> startTime = std::chrono::system_clock::now();
 
+  QstEvaluator qstEvaluator;
+
   size_t counter = 0;
   std::string line;
   while (std::getline(infile, line)) {
@@ -117,11 +148,14 @@ int main(int argc, char *argv[]) {
       continue;
     }
     std::vector<std::string> parts = split(line, '|');
-    process(parts, qstInputWriter, evalWriter, turnWriter, pieceCountWriter);
+    process(parts, qstInputWriter, evalWriter, turnWriter, pieceCountWriter, qstEvaluator);
 
     if ((++counter) % 100'000 == 0) {
       double ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime).count();
       std::cout << "Finished " << counter / 1000 << "k in " << ms / 1000 << " seconds" << std::endl;
+    }
+    if (counter >= limit) {
+      break;
     }
   }
 

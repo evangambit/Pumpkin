@@ -162,7 +162,9 @@ class SetEvaluatorTask : public Task {
       std::cout << "Error: evaluator command requires an argument." << std::endl;
       return;
     }
-    std::string evaluatorName = command.at(1);
+    command.pop_front();
+    std::string evaluatorName = command.at(0);
+    command.pop_front();
     if (evaluatorName == "simple") {
       state->evaluator = std::make_shared<SimpleEvaluator>();
       std::cout << "Evaluator set to simple." << std::endl;
@@ -177,7 +179,15 @@ class SetEvaluatorTask : public Task {
       state->evaluator = std::make_shared<NNUE::NnueEvaluator>(nnue_model);
       std::cout << "Evaluator set to nnue." << std::endl;
     } else if (evaluatorName == "qst") {
-      state->evaluator = std::make_shared<QstEvaluator>();
+      if (command.size() == 0) {
+        std::cout << "Error: qst evaluator requires a model filename argument." << std::endl;
+        return;
+      }
+      auto qst = std::make_shared<QstEvaluator>();
+      std::string modelFile = command.at(0);
+      command.pop_front();
+      qst->load(modelFile);
+      state->evaluator = qst;
       std::cout << "Evaluator set to qst." << std::endl;
     } else {
       std::cout << "Error: unrecognized evaluator name \"" << evaluatorName << "\"" << std::endl;

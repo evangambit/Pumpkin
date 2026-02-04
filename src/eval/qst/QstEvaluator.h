@@ -13,115 +13,14 @@
 
 namespace ChessEngine {
 
-template<size_t N>
-inline void load_flat(std::istream& in, float *out, const std::string& name) {
-  char nameBuf[16];
-  int32_t shapeLen;
-  int32_t shape[1];
-
-  in.read(nameBuf, 16);
-  if (std::string(nameBuf, 16).find(name) == std::string::npos) {
-    throw std::runtime_error("Expected name " + name + ", got " + std::string(nameBuf, 16));
-  }
-  in.read(reinterpret_cast<char*>(&shapeLen), sizeof(int32_t));
-  if (shapeLen != 1) {
-    throw std::runtime_error("Unexpected shape length " + std::to_string(shapeLen));
-  }
-  in.read(reinterpret_cast<char*>(shape), sizeof(int32_t) * shapeLen);
-  if (shape[0] != N) {
-    throw std::runtime_error("Unexpected shape " + std::to_string(shape[0]));
-  }
-  in.read(reinterpret_cast<char*>(out), sizeof(float) * N);
-}
-
-inline void load64(std::istream& in, float *out, const std::string& name) {
-  char nameBuf[16];
-  int32_t shapeLen;
-  int32_t shape[2];
-
-  in.read(nameBuf, 16);
-  if (std::string(nameBuf, 16).find(name) == std::string::npos) {
-    throw std::runtime_error("Expected name " + name + ", got " + std::string(nameBuf, 16));
-  }
-  in.read(reinterpret_cast<char*>(&shapeLen), sizeof(int32_t));
-  if (shapeLen != 2) {
-    throw std::runtime_error("Unexpected shape length " + std::to_string(shapeLen));
-  }
-  in.read(reinterpret_cast<char*>(shape), sizeof(int32_t) * shapeLen);
-  if (shape[0] != 8 || shape[1] != 8) {
-    throw std::runtime_error("Unexpected shape " + std::to_string(shape[0]) + "," + std::to_string(shape[1]));
-  }
-  in.read(reinterpret_cast<char*>(out), sizeof(float) * 64);
-}
-
 template<Color US>
-struct PawnAnalysis {
-  Bitboard ourPassedPawns, theirPassedPawns;
-  Bitboard ourIsolatedPawns, theirIsolatedPawns;
-  Bitboard ourDoubledPawns, theirDoubledPawns;
-
-  PawnAnalysis(const Position& pos) {
-    constexpr Color THEM = opposite_color<US>();
-    constexpr Direction kForward = US == Color::WHITE ? Direction::NORTH : Direction::SOUTH;
-    constexpr Direction kBackward = US == Color::WHITE ? Direction::SOUTH : Direction::NORTH;
-
-    Bitboard ourPawns = pos.pieceBitboards_[coloredPiece<US, Piece::PAWN>()];
-    Bitboard theirPawns = pos.pieceBitboards_[coloredPiece<THEM, Piece::PAWN>()];
-    
-    Bitboard aheadOfOurPawns = US == Color::WHITE ? northFill(ourPawns) : southFill(ourPawns);
-    Bitboard aheadOfTheirPawns = US == Color::WHITE ? southFill(theirPawns) : northFill(theirPawns);
-    Bitboard filesWithOurPawns = US == Color::WHITE ? southFill(aheadOfOurPawns) : northFill(aheadOfOurPawns);
-    Bitboard filesWithTheirPawns = US == Color::WHITE ? northFill(aheadOfTheirPawns) : southFill(aheadOfTheirPawns);
-    Bitboard filesWithoutOurPawns = ~filesWithOurPawns;
-    Bitboard filesWithoutTheirPawns = ~filesWithTheirPawns;
-    this->ourPassedPawns = ourPawns & ~shift<kBackward>(fatten(aheadOfTheirPawns));
-    this->theirPassedPawns = theirPawns & ~shift<kForward>(fatten(aheadOfOurPawns));
-    this->ourIsolatedPawns = ourPawns & ~shift<Direction::WEST>(filesWithOurPawns) & ~shift<Direction::EAST>(filesWithOurPawns);
-    this->theirIsolatedPawns = theirPawns & ~shift<Direction::WEST>(filesWithTheirPawns) & ~shift<Direction::EAST>(filesWithTheirPawns);
-    this->ourDoubledPawns = ourPawns & shift<kForward>(aheadOfOurPawns);
-    this->theirDoubledPawns = theirPawns & shift<kBackward>(aheadOfTheirPawns);
+Bitboard orient(Bitboard b) {
+  if constexpr (US == Color::BLACK) {
+    return flip_vertically(b);
+  } else {
+    return b;
   }
-};
-
-template<size_t QUANTIZATION>
-struct QuantizedSquareTable {
-  static_assert(QUANTIZATION > 0, "QUANTIZATION must be greater than 0");
-  Evaluation weights[QUANTIZATION];
-  Bitboard masks[QUANTIZATION];
-  QuantizedSquareTable() {
-    for (size_t i = 0; i < QUANTIZATION; ++i) {
-        weights[i] = 0;
-        masks[i] = 0;
-    }
-  }
-
-  template<Color US>
-  inline void contribute(Bitboard occupied, Evaluation *eval) const {
-    if constexpr (US == Color::BLACK) {
-      occupied = flip_vertically(occupied);
-    }
-    for (size_t i = 0; i < QUANTIZATION; ++i) {
-      *eval -= std::popcount(occupied & masks[i]) * weights[i];
-    }
-  }
-
-  friend std::ostream& operator<<(std::ostream& stream, const QuantizedSquareTable<QUANTIZATION>& qst) {
-    for (int y = 0; y < 8; ++y) {
-      for (int x = 0; x < 8; ++x) {
-        size_t idx = y * 8 + x;
-        float value = 0.0f;
-        for (size_t i = 0; i < QUANTIZATION; ++i) {
-          if ((qst.masks[i] >> idx) & 1) {
-            value += static_cast<float>(qst.weights[i]);
-          }
-        }
-        stream << rjust(std::to_string(int32_t(value)), 5) << " ";
-      }
-      stream << std::endl;
-    }
-    return stream;
-  }
-};
+}
 
 template<size_t N>
 float min(const float *arr) {
@@ -145,8 +44,75 @@ float max(const float *arr) {
   return m;
 }
 
+template<size_t N>
+inline void load_flat(std::istream& in, float *out, const std::string& name) {
+  char nameBuf[16];
+  int32_t shapeLen;
+  int32_t shape[1];
+
+  in.read(nameBuf, 16);
+  if (std::string(nameBuf, 16).find(name) == std::string::npos) {
+    throw std::runtime_error("Expected name " + name + ", got " + std::string(nameBuf, 16));
+  }
+  in.read(reinterpret_cast<char*>(&shapeLen), sizeof(int32_t));
+  if (shapeLen != 1) {
+    throw std::runtime_error("Unexpected shape length " + std::to_string(shapeLen));
+  }
+  in.read(reinterpret_cast<char*>(shape), sizeof(int32_t) * shapeLen);
+  if (shape[0] != N) {
+    throw std::runtime_error("Unexpected shape " + std::to_string(shape[0]));
+  }
+  in.read(reinterpret_cast<char*>(out), sizeof(float) * N);
+  for (size_t i = 0; i < N; ++i) {
+    out[i] *= 200.0f;
+  }
+}
+
+
+template<size_t QUANTIZATION>
+struct QuantizedSquareTable {
+  static_assert(QUANTIZATION > 0, "QUANTIZATION must be greater than 0");
+  Evaluation weights[QUANTIZATION];
+  Bitboard masks[QUANTIZATION];
+  QuantizedSquareTable() {
+    for (size_t i = 0; i < QUANTIZATION; ++i) {
+        weights[i] = 0;
+        masks[i] = 0;
+    }
+  }
+
+  template<int SCALE = 1>
+  inline void contribute(Bitboard occupied, Evaluation *eval) const {
+    static_assert(SCALE == 1 || SCALE == -1, "SCALE must be 1 or -1");
+    for (size_t i = 0; i < QUANTIZATION; ++i) {
+      if constexpr (SCALE == 1) {
+        *eval += std::popcount(occupied & masks[i]) * weights[i];
+      } else {
+        *eval -= std::popcount(occupied & masks[i]) * weights[i];
+      }
+    }
+  }
+
+  friend std::ostream& operator<<(std::ostream& stream, const QuantizedSquareTable<QUANTIZATION>& qst) {
+    for (int y = 0; y < 8; ++y) {
+      for (int x = 0; x < 8; ++x) {
+        size_t idx = y * 8 + x;
+        float value = 0.0f;
+        for (size_t i = 0; i < QUANTIZATION; ++i) {
+          if ((qst.masks[i] >> idx) & 1) {
+            value += static_cast<float>(qst.weights[i]);
+          }
+        }
+        stream << rjust(std::to_string(int32_t(value)), 5) << " ";
+      }
+      stream << std::endl;
+    }
+    return stream;
+  }
+};
+
 /**
- * Quantize a 64-element array of weights into a QuantizedSquareTable
+ * Represents a quantized square table.
  */
 template<size_t QUANTIZATION>
 QuantizedSquareTable<QUANTIZATION> quantize(const float *weights) {
@@ -228,83 +194,82 @@ QuantizedSquareTable<QUANTIZATION> quantize(const float *weights) {
 }
 
 template<size_t QUANTIZATION>
+QuantizedSquareTable<QUANTIZATION> load_quantized_square_table(std::istream& in, const std::string& name) {
+  float out[64];
+  char nameBuf[16];
+  int32_t shapeLen;
+  int32_t shape[2];
+
+  in.read(nameBuf, 16);
+  if (std::string(nameBuf, 16).find(name) == std::string::npos) {
+    throw std::runtime_error("Expected name " + name + ", got " + std::string(nameBuf, 16));
+  }
+  in.read(reinterpret_cast<char*>(&shapeLen), sizeof(int32_t));
+  if (shapeLen != 2) {
+    throw std::runtime_error("Unexpected shape length " + std::to_string(shapeLen));
+  }
+  in.read(reinterpret_cast<char*>(shape), sizeof(int32_t) * shapeLen);
+  if (shape[0] != 8 || shape[1] != 8) {
+    throw std::runtime_error("Unexpected shape " + std::to_string(shape[0]) + "," + std::to_string(shape[1]));
+  }
+  in.read(reinterpret_cast<char*>(out), sizeof(float) * 64);
+  for (size_t i = 0; i < 64; ++i) {
+    out[i] *= 200.0f;
+  }
+  return quantize<QUANTIZATION>(out);
+}
+
+template<Color US>
+struct PawnAnalysis {
+  Bitboard ourPassedPawns, theirPassedPawns;
+  Bitboard ourIsolatedPawns, theirIsolatedPawns;
+  Bitboard ourDoubledPawns, theirDoubledPawns;
+
+  PawnAnalysis(const Position& pos) {
+    constexpr Color THEM = opposite_color<US>();
+    constexpr Direction kForward = US == Color::WHITE ? Direction::NORTH : Direction::SOUTH;
+    constexpr Direction kBackward = US == Color::WHITE ? Direction::SOUTH : Direction::NORTH;
+
+    Bitboard ourPawns = pos.pieceBitboards_[coloredPiece<US, Piece::PAWN>()];
+    Bitboard theirPawns = pos.pieceBitboards_[coloredPiece<THEM, Piece::PAWN>()];
+    
+    Bitboard aheadOfOurPawns = US == Color::WHITE ? northFill(ourPawns) : southFill(ourPawns);
+    Bitboard aheadOfTheirPawns = US == Color::WHITE ? southFill(theirPawns) : northFill(theirPawns);
+    Bitboard filesWithOurPawns = US == Color::WHITE ? southFill(aheadOfOurPawns) : northFill(aheadOfOurPawns);
+    Bitboard filesWithTheirPawns = US == Color::WHITE ? northFill(aheadOfTheirPawns) : southFill(aheadOfTheirPawns);
+    Bitboard filesWithoutOurPawns = ~filesWithOurPawns;
+    Bitboard filesWithoutTheirPawns = ~filesWithTheirPawns;
+    this->ourPassedPawns = ourPawns & ~shift<kBackward>(fatten(aheadOfTheirPawns));
+    this->theirPassedPawns = theirPawns & ~shift<kForward>(fatten(aheadOfOurPawns));
+    this->ourIsolatedPawns = ourPawns & ~shift<Direction::WEST>(filesWithOurPawns) & ~shift<Direction::EAST>(filesWithOurPawns);
+    this->theirIsolatedPawns = theirPawns & ~shift<Direction::WEST>(filesWithTheirPawns) & ~shift<Direction::EAST>(filesWithTheirPawns);
+    this->ourDoubledPawns = ourPawns & shift<kForward>(aheadOfOurPawns);
+    this->theirDoubledPawns = theirPawns & shift<kBackward>(aheadOfTheirPawns);
+  }
+};
+
+/**
+  * Two quantized square tables, one for early game and one for late game.
+  */
+template<size_t QUANTIZATION>
 struct TaperedQuantizedSquareTable {
   QuantizedSquareTable<QUANTIZATION> earlyWeights;
   QuantizedSquareTable<QUANTIZATION> lateWeights;
 
-  void load(std::istream& in) {
-    float weights[128];
-    in.read(reinterpret_cast<char*>(weights), sizeof(float) * 128);
-    // Scale weights for better quantization.
-    for (size_t i = 0; i < 128; ++i) {
-      weights[i] *= 200.0f;
-    }
-    earlyWeights = quantize<QUANTIZATION>(weights);
-    lateWeights = quantize<QUANTIZATION>(weights + 64);
-  }
-
-  template<Color US>
+  template<int SCALE = 1>
   void contribute(Bitboard occupied, Evaluation *early, Evaluation *late) const {
     if (QUANTIZATION == 0) {
       return;
     }
-    earlyWeights.template contribute<US>(occupied, early);
-    lateWeights.template contribute<US>(occupied, late);
+    earlyWeights.template contribute<SCALE>(occupied, early);
+    lateWeights.template contribute<SCALE>(occupied, late);
   }
 
   static TaperedQuantizedSquareTable<QUANTIZATION> load_table(std::istream& in, const std::string& name) {
-    float weights[128];
-
-    TaperedQuantizedSquareTable<QUANTIZATION> out;
-
-    load64(in, weights, "e_" + name);
-    load64(in, weights + 64, "l_" + name);
-
-    // Scale weights for better quantization.
-    for (size_t i = 0; i < 128; ++i) {
-      weights[i] *= 200.0f;
-    }
-    out.earlyWeights = quantize<QUANTIZATION>(weights);
-    out.lateWeights = quantize<QUANTIZATION>(weights + 64);
+    TaperedQuantizedSquareTable<QUANTIZATION> out;    
+    out.earlyWeights = load_quantized_square_table<QUANTIZATION>(in, "e_" + name);
+    out.lateWeights = load_quantized_square_table<QUANTIZATION>(in, "l_" + name);
     return out;
-  }
-};
-
-template<size_t QUANTIZATION>
-struct ConditionedTaperedPieceSquareTables {
-  TaperedQuantizedSquareTable<QUANTIZATION> tables[12];
-  void load_table(std::istream& in, const std::string& base_name) {
-    tables[0] = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "our_p|" + base_name);
-    tables[1] = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "our_n|" + base_name);
-    tables[2] = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "our_b|" + base_name);
-    tables[3] = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "our_r|" + base_name);
-    tables[4] = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "our_q|" + base_name);
-    tables[5] = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "our_k|" + base_name);
-    tables[6] = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "tir_p|" + base_name);
-    tables[7] = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "tir_n|" + base_name);
-    tables[8] = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "tir_b|" + base_name);
-    tables[9] = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "tir_r|" + base_name);
-    tables[10] = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "tir_q|" + base_name);
-    tables[11] = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "tir_k|" + base_name);
-  }
-
-  template<Color US>
-  void contribute(const Position& pos, bool condition, Evaluation *early, Evaluation *late) const {
-    if (QUANTIZATION == 0 || !condition) {
-      return;
-    }
-    tables[0].template contribute<US>(pos.pieceBitboards_[coloredPiece<US, Piece::PAWN>()], early, late);
-    tables[1].template contribute<US>(pos.pieceBitboards_[coloredPiece<US, Piece::KNIGHT>()], early, late);
-    tables[2].template contribute<US>(pos.pieceBitboards_[coloredPiece<US, Piece::BISHOP>()], early, late);
-    tables[3].template contribute<US>(pos.pieceBitboards_[coloredPiece<US, Piece::ROOK>()], early, late);
-    tables[4].template contribute<US>(pos.pieceBitboards_[coloredPiece<US, Piece::QUEEN>()], early, late);
-    tables[5].template contribute<US>(pos.pieceBitboards_[coloredPiece<US, Piece::KING>()], early, late);
-    tables[6].template contribute<US>(pos.pieceBitboards_[coloredPiece<opposite_color<US>(), Piece::PAWN>()], early, late);
-    tables[7].template contribute<US>(pos.pieceBitboards_[coloredPiece<opposite_color<US>(), Piece::KNIGHT>()], early, late);
-    tables[8].template contribute<US>(pos.pieceBitboards_[coloredPiece<opposite_color<US>(), Piece::BISHOP>()], early, late);
-    tables[9].template contribute<US>(pos.pieceBitboards_[coloredPiece<opposite_color<US>(), Piece::ROOK>()], early, late);
-    tables[10].template contribute<US>(pos.pieceBitboards_[coloredPiece<opposite_color<US>(), Piece::QUEEN>()], early, late);
-    tables[11].template contribute<US>(pos.pieceBitboards_[coloredPiece<opposite_color<US>(), Piece::KING>()], early, late);
   }
 };
 
@@ -313,195 +278,206 @@ struct ConditionedTaperedPieceSquareTables {
  *
  * Uses an un-quantized piece-square table for evaluation, 
  * plus a host of quantized, conditional square tables for finer adjustments.
+ *
+ * Weights are flipped-and-negatived for the opponent, so we only need to store
+ * tables from one side's perspective.
+ *
+ * In contrast, features are bitmaps, so we need to produce two sets of features
+ * for each quantized square table: one for white and one for black. On the other
+ * hand, many of our tables are "tapered", meaning they have early-game and late-game
+ * weights.
  */
 struct QstEvaluator : public EvaluatorInterface {
   constexpr static size_t QUANTIZATION = 8;
-  // Normal piece-square tables.
-  ConditionedTaperedPieceSquareTables<QUANTIZATION> pieces;
-  
-  TaperedQuantizedSquareTable<QUANTIZATION> ourPassedPawns;
-  TaperedQuantizedSquareTable<QUANTIZATION> theirPassedPawns;
-  TaperedQuantizedSquareTable<QUANTIZATION> ourIsolatedPawns;
-  TaperedQuantizedSquareTable<QUANTIZATION> theirIsolatedPawns;
-  TaperedQuantizedSquareTable<QUANTIZATION> ourDoubledPawns;
-  TaperedQuantizedSquareTable<QUANTIZATION> theirDoubledPawns;
+  QstEvaluator() {}
 
-  TaperedQuantizedSquareTable<QUANTIZATION> badOurPawns;
-  TaperedQuantizedSquareTable<QUANTIZATION> badOurKnights;
-  TaperedQuantizedSquareTable<QUANTIZATION> badOurBishops;
-  TaperedQuantizedSquareTable<QUANTIZATION> badOurRooks;
-  TaperedQuantizedSquareTable<QUANTIZATION> badOurQueens;
-  TaperedQuantizedSquareTable<QUANTIZATION> badOurKings;
-  TaperedQuantizedSquareTable<QUANTIZATION> badTheirPawns;
-  TaperedQuantizedSquareTable<QUANTIZATION> badTheirKnights;
-  TaperedQuantizedSquareTable<QUANTIZATION> badTheirBishops;
-  TaperedQuantizedSquareTable<QUANTIZATION> badTheirRooks;
-  TaperedQuantizedSquareTable<QUANTIZATION> badTheirQueens;
-  TaperedQuantizedSquareTable<QUANTIZATION> badTheirKings;
-
-  ConditionedTaperedPieceSquareTables<QUANTIZATION> conditionalOnOurQueen;
-  ConditionedTaperedPieceSquareTables<QUANTIZATION> conditionalOnTheirQueen;
-  Evaluation bias[2];
-
-
-  QstEvaluator() {
-    std::string filename = "runs/20260201-171038/model.bin";
+  void load(std::string filename) {
     std::ifstream in(filename, std::ios::binary);
     this->load(in);
     in.close();
   }
 
   void load(std::istream& in) {
-    pieces.load_table(in, "base_psq");
-    ourPassedPawns = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "our_psd_pwns");
-    theirPassedPawns = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "tir_psd_pwns");
-    ourIsolatedPawns = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "our_iso_pwns");
-    theirIsolatedPawns = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "tir_iso_pwns");
-    ourDoubledPawns = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "our_dbl_pwns");
-    theirDoubledPawns = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "tir_dbl_pwns");
+    for (size_t i = 0; i < 6; ++i) {
+      pieces[i] = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, std::string(1, "pnbrqk"[i]) + "|base_psq");
+    }
+    kingAssumingNoCastling = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "k|no_castle");
+    passedPawns = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "passed_pawns");
+    isolatedPawns = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "isolated_pawns");
+    doubledPawns = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "doubled_pawns");
 
-    badOurPawns = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "bad_our_p");
-    badOurKnights = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "bad_our_n");
-    badOurBishops = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "bad_our_b");
-    badOurRooks = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "bad_our_r");
-    badOurQueens = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "bad_our_q");
-    badOurKings = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "bad_our_k");
-    badTheirPawns = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "bad_tir_p");
-    badTheirKnights = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "bad_tir_n");
-    badTheirBishops = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "bad_tir_b");
-    badTheirRooks = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "bad_tir_r");
-    badTheirQueens = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "bad_tir_q");
-    badTheirKings = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "bad_tir_k");
-
-    conditionalOnTheirQueen.load_table(in, "tir_q");
-    conditionalOnOurQueen.load_table(in, "our_q");
+    for (size_t i = 0; i < 6; ++i) {
+      control[i] = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "bad_for_" + std::string(1, "pnbrqk"[i]));
+    }
+    for (size_t i = 0; i < 6; ++i) {
+      capturable[i] = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "hanging_" + std::string(1, "pnbrqk"[i]));
+    }
 
     float biasWeights[2];
-    load_flat<2>(in, biasWeights, "bias");
-    bias[0] = static_cast<Evaluation>(std::round(biasWeights[0] * 200.0f));
-    bias[1] = static_cast<Evaluation>(std::round(biasWeights[1] * 200.0f));
+    load_flat<2>(in, biasWeights, "biases");
+    biases[0] = static_cast<Evaluation>(std::round(biasWeights[0]));
+    biases[1] = static_cast<Evaluation>(std::round(biasWeights[1]));
   }
+
+  // Normal piece-square tables.
+  TaperedQuantizedSquareTable<8> pieces[6];
+  
+  TaperedQuantizedSquareTable<QUANTIZATION> kingAssumingNoCastling;
+
+  TaperedQuantizedSquareTable<QUANTIZATION> passedPawns;
+  TaperedQuantizedSquareTable<QUANTIZATION> isolatedPawns;
+  TaperedQuantizedSquareTable<QUANTIZATION> doubledPawns;
+
+  // Whether a square is "bad" for a type of piece to be sitting.
+  // Maybe more intuitively: a square where a pawn cannot safely exist is strongly
+  // under the influence of enemy pieces, so it's bad for that piece to be there.
+  // A square where a rook cannot safely exist is moderately under the influence of enemy pieces.
+  // Etc.
+  // control[0-5] = bad for our PNBRQK, control[6-11] = bad for their PNBRQK
+  TaperedQuantizedSquareTable<QUANTIZATION> control[12];
+
+  // Bitboard for each piece type, indicating whether they're in danger of being captured.
+  TaperedQuantizedSquareTable<QUANTIZATION> capturable[6];
+
+  Evaluation biases[2];
 
   // Extract features from the position from mover's perspective.
+  // This means the mover's pawns are always moving NORTH. This is
+  // accomplished by flipping all bitboards vertically if the mover is black
+  // (see the end of this function).
   template<Color US>
-  static void get_features(const Position& pos, std::vector<Bitboard> *out) {
-    constexpr Color THEM = opposite_color<US>();
-    constexpr Direction kForward = US == Color::WHITE ? Direction::NORTH : Direction::SOUTH;
-    constexpr Direction kBackward = US == Color::WHITE ? Direction::SOUTH : Direction::NORTH;
-
-    const size_t startingLen = out->size();
-
-    out->push_back(pos.pieceBitboards_[coloredPiece<US, Piece::PAWN>()]);
-    out->push_back(pos.pieceBitboards_[coloredPiece<US, Piece::KNIGHT>()]);
-    out->push_back(pos.pieceBitboards_[coloredPiece<US, Piece::BISHOP>()]);
-    out->push_back(pos.pieceBitboards_[coloredPiece<US, Piece::ROOK>()]);
-    out->push_back(pos.pieceBitboards_[coloredPiece<US, Piece::QUEEN>()]);
-    out->push_back(pos.pieceBitboards_[coloredPiece<US, Piece::KING>()]);
-    out->push_back(pos.pieceBitboards_[coloredPiece<THEM, Piece::PAWN>()]);
-    out->push_back(pos.pieceBitboards_[coloredPiece<THEM, Piece::KNIGHT>()]);
-    out->push_back(pos.pieceBitboards_[coloredPiece<THEM, Piece::BISHOP>()]);
-    out->push_back(pos.pieceBitboards_[coloredPiece<THEM, Piece::ROOK>()]);
-    out->push_back(pos.pieceBitboards_[coloredPiece<THEM, Piece::QUEEN>()]);
-    out->push_back(pos.pieceBitboards_[coloredPiece<THEM, Piece::KING>()]);
-
-    PawnAnalysis<US> pawnAnalysis(pos);
-
-    out->push_back(pawnAnalysis.ourPassedPawns);
-    out->push_back(pawnAnalysis.theirPassedPawns);
-    out->push_back(pawnAnalysis.ourIsolatedPawns);
-    out->push_back(pawnAnalysis.theirIsolatedPawns);
-    out->push_back(pawnAnalysis.ourDoubledPawns);
-    out->push_back(pawnAnalysis.theirDoubledPawns);
-
-    Threats<US> threats(pos);
-    out->push_back(threats.badForOur[Piece::PAWN]);
-    out->push_back(threats.badForOur[Piece::KNIGHT]);
-    out->push_back(threats.badForOur[Piece::BISHOP]);
-    out->push_back(threats.badForOur[Piece::ROOK]);
-    out->push_back(threats.badForOur[Piece::QUEEN]);
-    out->push_back(threats.badForOur[Piece::KING]);
-    out->push_back(threats.badForTheir[Piece::PAWN]);
-    out->push_back(threats.badForTheir[Piece::KNIGHT]);
-    out->push_back(threats.badForTheir[Piece::BISHOP]);
-    out->push_back(threats.badForTheir[Piece::ROOK]);
-    out->push_back(threats.badForTheir[Piece::QUEEN]);
-    out->push_back(threats.badForTheir[Piece::KING]);
-
-    // Conditional on them having a queen.
-    const bool themHasQueen = pos.pieceBitboards_[coloredPiece<THEM, Piece::QUEEN>()] > 0;
-    out->push_back(pos.pieceBitboards_[coloredPiece<US, Piece::PAWN>()] * themHasQueen);
-    out->push_back(pos.pieceBitboards_[coloredPiece<US, Piece::KNIGHT>()] * themHasQueen);
-    out->push_back(pos.pieceBitboards_[coloredPiece<US, Piece::BISHOP>()] * themHasQueen);
-    out->push_back(pos.pieceBitboards_[coloredPiece<US, Piece::ROOK>()] * themHasQueen);
-    out->push_back(pos.pieceBitboards_[coloredPiece<US, Piece::QUEEN>()] * themHasQueen);
-    out->push_back(pos.pieceBitboards_[coloredPiece<US, Piece::KING>()] * themHasQueen);
-    out->push_back(pos.pieceBitboards_[coloredPiece<THEM, Piece::PAWN>()] * themHasQueen);
-    out->push_back(pos.pieceBitboards_[coloredPiece<THEM, Piece::KNIGHT>()] * themHasQueen);
-    out->push_back(pos.pieceBitboards_[coloredPiece<THEM, Piece::BISHOP>()] * themHasQueen);
-    out->push_back(pos.pieceBitboards_[coloredPiece<THEM, Piece::ROOK>()] * themHasQueen);
-    out->push_back(pos.pieceBitboards_[coloredPiece<THEM, Piece::QUEEN>()] * themHasQueen);
-    out->push_back(pos.pieceBitboards_[coloredPiece<THEM, Piece::KING>()] * themHasQueen);
-
-    // Conditional on us having a queen.
-    const bool usHasQueen = pos.pieceBitboards_[coloredPiece<US, Piece::QUEEN>()] > 0;
-    out->push_back(pos.pieceBitboards_[coloredPiece<US, Piece::PAWN>()] * usHasQueen);
-    out->push_back(pos.pieceBitboards_[coloredPiece<US, Piece::KNIGHT>()] * usHasQueen);
-    out->push_back(pos.pieceBitboards_[coloredPiece<US, Piece::BISHOP>()] * usHasQueen);
-    out->push_back(pos.pieceBitboards_[coloredPiece<US, Piece::ROOK>()] * usHasQueen);
-    out->push_back(pos.pieceBitboards_[coloredPiece<US, Piece::QUEEN>()] * usHasQueen);
-    out->push_back(pos.pieceBitboards_[coloredPiece<US, Piece::KING>()] * usHasQueen);
-    out->push_back(pos.pieceBitboards_[coloredPiece<THEM, Piece::PAWN>()] * usHasQueen);
-    out->push_back(pos.pieceBitboards_[coloredPiece<THEM, Piece::KNIGHT>()] * usHasQueen);
-    out->push_back(pos.pieceBitboards_[coloredPiece<THEM, Piece::BISHOP>()] * usHasQueen);
-    out->push_back(pos.pieceBitboards_[coloredPiece<THEM, Piece::ROOK>()] * usHasQueen);
-    out->push_back(pos.pieceBitboards_[coloredPiece<THEM, Piece::QUEEN>()] * usHasQueen);
-    out->push_back(pos.pieceBitboards_[coloredPiece<THEM, Piece::KING>()] * usHasQueen);
-
-    // Flip all bitboards if black to move. This helps us encode
-    // symmetry and reduce the number of features.
-    for (size_t i = startingLen; i < out->size(); ++i) {
-      if constexpr (US == Color::BLACK) {
-        (*out)[i] = flip_vertically((*out)[i]);
-      }
+  void get_features(const Position& pos, std::vector<Bitboard> *out) {
+    this->evaluate<US>(pos);
+    for (size_t i = 0; i < NUM_FEATURES; ++i) {
+      out->push_back(features[i]);
     }
   }
+
+  // It's a little hacky to store features as a member variable, but it helps
+  // ensure that get_features and evaluate are consistent with each other.
+  static constexpr size_t NUM_FEATURES = 44;
+  Bitboard features[NUM_FEATURES];
 
   template<Color US>
   ColoredEvaluation<US> evaluate(const Position& pos) {
     constexpr Color THEM = opposite_color<US>();
     int32_t stage = earliness(pos);
-    Evaluation early = bias[0];
-    Evaluation late = bias[1];
+    Evaluation early = biases[0];
+    Evaluation late = biases[1];
 
     PawnAnalysis<US> pawnAnalysis(pos);
 
-    pieces.template contribute<US>(pos, true, &early, &late);
+    features[0] = orient<US>(pos.pieceBitboards_[coloredPiece<US, Piece::PAWN>()]);
+    features[1] = orient<US>(pos.pieceBitboards_[coloredPiece<THEM, Piece::PAWN>()]);
+    pieces[Piece::PAWN].contribute(features[0], &early, &late);
+    pieces[Piece::PAWN].contribute<-1>(features[1], &early, &late);
 
-    ourPassedPawns.contribute<US>(pawnAnalysis.ourPassedPawns, &early, &late);
-    theirPassedPawns.contribute<US>(pawnAnalysis.theirPassedPawns, &early, &late);
-    ourIsolatedPawns.contribute<US>(pawnAnalysis.ourIsolatedPawns, &early, &late);
-    theirIsolatedPawns.contribute<US>(pawnAnalysis.theirIsolatedPawns, &early, &late);
-    ourDoubledPawns.contribute<US>(pawnAnalysis.ourDoubledPawns, &early, &late);
-    theirDoubledPawns.contribute<US>(pawnAnalysis.theirDoubledPawns, &early, &late);
+    features[2] = orient<US>(pos.pieceBitboards_[coloredPiece<US, Piece::KNIGHT>()]);
+    features[3] = orient<US>(pos.pieceBitboards_[coloredPiece<THEM, Piece::KNIGHT>()]);
+    pieces[Piece::KNIGHT].contribute(features[2], &early, &late);
+    pieces[Piece::KNIGHT].contribute<-1>(features[3], &early, &late);
+
+    features[4] = orient<US>(pos.pieceBitboards_[coloredPiece<US, Piece::BISHOP>()]);
+    features[5] = orient<US>(pos.pieceBitboards_[coloredPiece<THEM, Piece::BISHOP>()]);
+    pieces[Piece::BISHOP].contribute(features[4], &early, &late);
+    pieces[Piece::BISHOP].contribute<-1>(features[5], &early, &late);
+
+    features[6] = orient<US>(pos.pieceBitboards_[coloredPiece<US, Piece::ROOK>()]);
+    features[7] = orient<US>(pos.pieceBitboards_[coloredPiece<THEM, Piece::ROOK>()]);
+    pieces[Piece::ROOK].contribute(features[6], &early, &late);
+    pieces[Piece::ROOK].contribute<-1>(features[7], &early, &late);
+
+    features[8] = orient<US>(pos.pieceBitboards_[coloredPiece<US, Piece::QUEEN>()]);
+    features[9] = orient<US>(pos.pieceBitboards_[coloredPiece<THEM, Piece::QUEEN>()]);
+    pieces[Piece::QUEEN].contribute(features[8], &early, &late);
+    pieces[Piece::QUEEN].contribute<-1>(features[9], &early, &late);
+
+    features[10] = orient<US>(pos.pieceBitboards_[coloredPiece<US, Piece::KING>()]);
+    features[11] = orient<US>(pos.pieceBitboards_[coloredPiece<THEM, Piece::KING>()]);
+    pieces[Piece::KING].contribute(features[10], &early, &late);
+    pieces[Piece::KING].contribute<-1>(features[11], &early, &late);
+
+    // kingAssumingNoCastling contributions
+    constexpr uint8_t ourKingsideCastling = US == Color::WHITE ? kCastlingRights_WhiteKing : kCastlingRights_BlackKing;
+    constexpr uint8_t ourQueensideCastling = US == Color::WHITE ? kCastlingRights_WhiteQueen : kCastlingRights_BlackQueen;
+    constexpr uint8_t theirKingsideCastling = US == Color::WHITE ? kCastlingRights_BlackKing : kCastlingRights_WhiteKing;
+    constexpr uint8_t theirQueensideCastling = US == Color::WHITE ? kCastlingRights_BlackQueen : kCastlingRights_WhiteQueen;
+    const bool weCannotCastle = (pos.currentState_.castlingRights & (ourKingsideCastling | ourQueensideCastling)) == 0;
+    const bool theyCannotCastle = (pos.currentState_.castlingRights & (theirKingsideCastling | theirQueensideCastling)) == 0;
+    features[12] = orient<US>(pos.pieceBitboards_[coloredPiece<US, Piece::KING>()]) * weCannotCastle;
+    features[13] = orient<US>(pos.pieceBitboards_[coloredPiece<THEM, Piece::KING>()]) * theyCannotCastle;
+    kingAssumingNoCastling.contribute(features[12], &early, &late);
+    kingAssumingNoCastling.contribute<-1>(features[13], &early, &late);
+
+    features[14] = orient<US>(pawnAnalysis.ourPassedPawns);
+    features[15] = orient<US>(pawnAnalysis.theirPassedPawns);
+    passedPawns.contribute(features[14], &early, &late);
+    passedPawns.contribute<-1>(features[15], &early, &late);
+
+    features[16] = orient<US>(pawnAnalysis.ourIsolatedPawns);
+    features[17] = orient<US>(pawnAnalysis.theirIsolatedPawns);
+    isolatedPawns.contribute(features[16], &early, &late);
+    isolatedPawns.contribute<-1>(features[17], &early, &late);
+
+
+    features[18] = orient<US>(pawnAnalysis.ourDoubledPawns);
+    features[19] = orient<US>(pawnAnalysis.theirDoubledPawns);
+    doubledPawns.contribute(features[18], &early, &late);
+    doubledPawns.contribute<-1>(features[19], &early, &late);
 
     Threats<US> threats(pos);
-    badOurPawns.contribute<US>(threats.badForOur[Piece::PAWN], &early, &late);
-    badOurKnights.contribute<US>(threats.badForOur[Piece::KNIGHT], &early, &late);
-    badOurBishops.contribute<US>(threats.badForOur[Piece::BISHOP], &early, &late);
-    badOurRooks.contribute<US>(threats.badForOur[Piece::ROOK], &early, &late);
-    badOurQueens.contribute<US>(threats.badForOur[Piece::QUEEN], &early, &late);
-    badOurKings.contribute<US>(threats.badForOur[Piece::KING], &early, &late);
-    badTheirPawns.contribute<US>(threats.badForTheir[Piece::PAWN], &early, &late);
-    badTheirKnights.contribute<US>(threats.badForTheir[Piece::KNIGHT], &early, &late);
-    badTheirBishops.contribute<US>(threats.badForTheir[Piece::BISHOP], &early, &late);
-    badTheirRooks.contribute<US>(threats.badForTheir[Piece::ROOK], &early, &late);
-    badTheirQueens.contribute<US>(threats.badForTheir[Piece::QUEEN], &early, &late);
-    badTheirKings.contribute<US>(threats.badForTheir[Piece::KING], &early, &late);
+    features[20] = orient<US>(threats.badForOur[Piece::PAWN]);
+    features[21] = orient<US>(threats.badForTheir[Piece::PAWN]);
+    features[22] = orient<US>(threats.badForOur[Piece::KNIGHT]);
+    features[23] = orient<US>(threats.badForTheir[Piece::KNIGHT]);
+    features[24] = orient<US>(threats.badForOur[Piece::BISHOP]);
+    features[25] = orient<US>(threats.badForTheir[Piece::BISHOP]);
+    features[26] = orient<US>(threats.badForOur[Piece::ROOK]);
+    features[27] = orient<US>(threats.badForTheir[Piece::ROOK]);
+    features[28] = orient<US>(threats.badForOur[Piece::QUEEN]);
+    features[29] = orient<US>(threats.badForTheir[Piece::QUEEN]);
+    features[30] = orient<US>(threats.badForOur[Piece::KING]);
+    features[31] = orient<US>(threats.badForTheir[Piece::KING]);
+    control[0].contribute(features[20], &early, &late);
+    control[0].contribute<-1>(features[21], &early, &late);
+    control[1].contribute(features[22], &early, &late);
+    control[1].contribute<-1>(features[23], &early, &late);
+    control[2].contribute(features[24], &early, &late);
+    control[2].contribute<-1>(features[25], &early, &late);
+    control[3].contribute(features[26], &early, &late);
+    control[3].contribute<-1>(features[27], &early, &late);
+    control[4].contribute(features[28], &early, &late);
+    control[4].contribute<-1>(features[29], &early, &late);
+    control[5].contribute(features[30], &early, &late);
+    control[5].contribute<-1>(features[31], &early, &late);
 
-    const bool themHasQueen = pos.pieceBitboards_[coloredPiece<THEM, Piece::QUEEN>()] > 0;
-    conditionalOnTheirQueen.template contribute<US>(pos, themHasQueen, &early, &late);
-    const bool usHasQueen = pos.pieceBitboards_[coloredPiece<US, Piece::QUEEN>()] > 0;
-    conditionalOnOurQueen.template contribute<US>(pos, usHasQueen, &early, &late);
+    // capturable contributions (pieces that are in danger of being captured)
+    features[32] = orient<US>(threats.badForOur[Piece::PAWN] & pos.pieceBitboards_[coloredPiece<US, Piece::PAWN>()]);
+    features[33] = orient<US>(threats.badForTheir[Piece::PAWN] & pos.pieceBitboards_[coloredPiece<THEM, Piece::PAWN>()]);
+    features[34] = orient<US>(threats.badForOur[Piece::KNIGHT] & pos.pieceBitboards_[coloredPiece<US, Piece::KNIGHT>()]);
+    features[35] = orient<US>(threats.badForTheir[Piece::KNIGHT] & pos.pieceBitboards_[coloredPiece<THEM, Piece::KNIGHT>()]);
+    features[36] = orient<US>(threats.badForOur[Piece::BISHOP] & pos.pieceBitboards_[coloredPiece<US, Piece::BISHOP>()]);
+    features[37] = orient<US>(threats.badForTheir[Piece::BISHOP] & pos.pieceBitboards_[coloredPiece<THEM, Piece::BISHOP>()]);
+    features[38] = orient<US>(threats.badForOur[Piece::ROOK] & pos.pieceBitboards_[coloredPiece<US, Piece::ROOK>()]);
+    features[39] = orient<US>(threats.badForTheir[Piece::ROOK] & pos.pieceBitboards_[coloredPiece<THEM, Piece::ROOK>()]);
+    features[40] = orient<US>(threats.badForOur[Piece::QUEEN] & pos.pieceBitboards_[coloredPiece<US, Piece::QUEEN>()]);
+    features[41] = orient<US>(threats.badForTheir[Piece::QUEEN] & pos.pieceBitboards_[coloredPiece<THEM, Piece::QUEEN>()]);
+    features[42] = orient<US>(threats.badForOur[Piece::KING] & pos.pieceBitboards_[coloredPiece<US, Piece::KING>()]);
+    features[43] = orient<US>(threats.badForTheir[Piece::KING] & pos.pieceBitboards_[coloredPiece<THEM, Piece::KING>()]);
+    capturable[Piece::PAWN].contribute(features[32], &early, &late);
+    capturable[Piece::PAWN].contribute<-1>(features[33], &early, &late);
+    capturable[Piece::KNIGHT].contribute(features[34], &early, &late);
+    capturable[Piece::KNIGHT].contribute<-1>(features[35], &early, &late);
+    capturable[Piece::BISHOP].contribute(features[36], &early, &late);
+    capturable[Piece::BISHOP].contribute<-1>(features[37], &early, &late);
+    capturable[Piece::ROOK].contribute(features[38], &early, &late);
+    capturable[Piece::ROOK].contribute<-1>(features[39], &early, &late);
+    capturable[Piece::QUEEN].contribute(features[40], &early, &late);
+    capturable[Piece::QUEEN].contribute<-1>(features[41], &early, &late);
+    capturable[Piece::KING].contribute(features[42], &early, &late);
+    capturable[Piece::KING].contribute<-1>(features[43], &early, &late);
+
+    static_assert(NUM_FEATURES == 44, "features size mismatch");
 
     int32_t eval = int32_t(early) * stage + int32_t(late) * (16 - stage);
     return ColoredEvaluation<US>(-eval / 16);
