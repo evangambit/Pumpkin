@@ -7,26 +7,26 @@ sudo apt-get install -y libgflags-dev libgtest-dev
 g++ -std=c++20 -o test_runner $(find src/ -name "*.cpp" | grep -Ev '(main|uci|make_tables).cpp') -I/usr/local/include -L/usr/local/lib -lgtest -lgtest_main -pthread && ./test_runner
 
 # Run one test
-g++ -std=c++20 -o test_runner src/eval/nnue/tests/nnue-tests.cpp $(find src/ -name "*.cpp" | grep -Ev "([Tt]ests?|uci|main|make_tables)\\.cpp") -I/usr/local/include -L/usr/local/lib -lgtest -lgtest_main -pthread && ./test_runner
+g++ -std=c++20 -o test_runner src/eval/nnue/tests/nnue-tests.cpp $(find src/ -name "*.cpp" | grep -Ev "([Tt]ests?|uci|main|make_tables|pgns2fens)\\.cpp") -I/usr/local/include -L/usr/local/lib -lgtest -lgtest_main -pthread && ./test_runner
 
 # Update NNUE object file (model_bin.o) from a binary file
 
 ld -r -b binary -o model_bin.o model.bin
 
 # Build main
-g++ -std=c++20 -o main src/main.cpp model_bin.o $(find src/ -name "*.cpp" | grep -Ev "([Tt]ests?|uci|main|make_tables)\\.cpp") -pthread -L/usr/local/lib -lgflags
+g++ -std=c++20 -o main src/main.cpp model_bin.o $(find src/ -name "*.cpp" | grep -Ev "([Tt]ests?|uci|main|make_tables|pgns2fens)\\.cpp") -pthread -L/usr/local/lib -lgflags
 
 ./main rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2
 
 # Build uci
 
-g++ -std=c++20 -o uci src/uci.cpp model_bin.o $(find src/ -name "*.cpp" | grep -Ev "([Tt]ests?|uci|main|make_tables)\\.cpp") -pthread -L/usr/local/lib -lgflags -DNDEBUG -O3
+g++ -std=c++20 -o uci src/uci.cpp model_bin.o $(find src/ -name "*.cpp" | grep -Ev "([Tt]ests?|uci|main|make_tables)\\.|pgns2fenscpp") -pthread -L/usr/local/lib -lgflags -DNDEBUG -O3
 
 # Make tables
 
-g++ -std=c++20 -o make_tables src/eval/nnue/make_tables.cpp $(find src/ -name "*.cpp" | grep -Ev "([Tt]ests?|uci|main|make_tables)\\.cpp") -pthread -L/usr/local/lib -lgflags -DNDEBUG -O3
+g++ -std=c++20 -o make_tables src/eval/nnue/make_tables.cpp $(find src/ -name "*.cpp" | grep -Ev "([Tt]ests?|uci|main|make_tables|pgns2fens)\\.cpp") -pthread -L/usr/local/lib -lgflags -DNDEBUG -O3
 
-g++ -std=c++20 -o nnue_main src/eval/nnue/main.cpp $(find src/ -name "*.cpp" | grep -Ev "([Tt]ests?|uci|main|make_tables)\\.cpp") -pthread -L/usr/local/lib -lgflags && ./nnue_main
+g++ -std=c++20 -o nnue_main src/eval/nnue/main.cpp $(find src/ -name "*.cpp" | grep -Ev "([Tt]ests?|uci|main|make_tables|pgns2fens)\\.cpp") -pthread -L/usr/local/lib -lgflags && ./nnue_main
 
 # cutechess
 
@@ -34,11 +34,21 @@ cutechess/build/cutechess-cli -engine cmd=uci arg="evaluator nnue" -engine cmd=o
 
 ```
 
+# pgn2fen
+
+g++ -std=c++20 -o p2f src/pgn2fens.cpp model_bin.o $(find src/ -name "*.cpp" | grep -Ev "([Tt]ests?|uci|main|make_tables|pgns2fens)\\.cpp") -pthread -L/usr/local/lib -lgflags -lz -O3 -DNDEBUG
+
+Randomly drop 90% of lines (better position diversity).
+
+$ ./p2f pgns/ | awk 'BEGIN {srand()} rand() <= 0.10' > data/stock/pos.txt
+
+Data comes from https://huggingface.co/datasets/official-stockfish/fishtest_pgns
+
 ## Perf Analysis
 
 /usr/local/go/bin/go install github.com/google/pprof@latest
 
-g++ -std=c++20 -o uci src/uci.cpp $(find src/ -name "*.cpp" | grep -Ev "([Tt]ests?|uci|main|make_tables)\\.cpp") -pthread -lgflags -DNDEBUG -O3 $(pkg-config --cflags --libs libprofiler)
+g++ -std=c++20 -o uci src/uci.cpp $(find src/ -name "*.cpp" | grep -Ev "([Tt]ests?|uci|main|make_tables|pgns2fens)\\.cpp") -pthread -lgflags -DNDEBUG -O3 $(pkg-config --cflags --libs libprofiler)
 
 CPUPROFILE=/tmp/prof.out ./uci "move e2e4 c7c5 g1f3 d7d6" "go depth 8" "lazyquit"
 

@@ -371,12 +371,13 @@ void make_move(Position *pos, Move move) {
     (kZorbristEnpassant[oldEpSquare % 8] * (oldEpSquare != UnsafeSquare::UNO_SQUARE))
   );
 
-  // Remove castling rights if a king moves. both lines are equivalent but the
-  // second removes a multiplication.
+  // Remove castling rights if a king moves from its starting square.
+  // Only check the current player's king starting square, not both.
+  constexpr Bitboard ourKingStart = (TURN == Color::WHITE) ? bb(SafeSquare::SE1) : bb(SafeSquare::SE8);
   newCastlingRights &= ~(((
-    (f & kKingStartingPosition) > 0)
+    (f & ourKingStart) > 0)
     |
-    (((f & kKingStartingPosition) > 0) << 1)
+    (((f & ourKingStart) > 0) << 1)
   ) << ((2 - TURN) * 2));
   pos->currentState_.hash ^= kZorbristCastling[pos->currentState_.castlingRights] ^ kZorbristCastling[newCastlingRights];
   pos->currentState_.castlingRights = newCastlingRights;
