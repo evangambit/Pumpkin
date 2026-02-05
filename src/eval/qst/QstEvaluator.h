@@ -267,11 +267,9 @@ struct TaperedQuantizedSquareTable {
     lateWeights.template contribute<SCALE>(occupied, late);
   }
 
-  static TaperedQuantizedSquareTable<QUANTIZATION> load_table(std::istream& in, const std::string& name) {
-    TaperedQuantizedSquareTable<QUANTIZATION> out;    
-    out.earlyWeights = load_quantized_square_table<QUANTIZATION>(in, "e_" + name);
-    out.lateWeights = load_quantized_square_table<QUANTIZATION>(in, "l_" + name);
-    return out;
+  void load_table(std::istream& in, const std::string& name) {
+    earlyWeights = load_quantized_square_table<QUANTIZATION>(in, "e_" + name);
+    lateWeights = load_quantized_square_table<QUANTIZATION>(in, "l_" + name);
   }
 };
 
@@ -290,7 +288,6 @@ struct TaperedQuantizedSquareTable {
  * weights.
  */
 struct QstEvaluator : public EvaluatorInterface {
-  constexpr static size_t QUANTIZATION = 64;
   QstEvaluator() {}
 
   void load(std::string filename) {
@@ -301,18 +298,18 @@ struct QstEvaluator : public EvaluatorInterface {
 
   void load(std::istream& in) {
     for (size_t i = 0; i < 6; ++i) {
-      pieces[i] = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, std::string(1, "pnbrqk"[i]) + "|base_psq");
+      pieces[i].load_table(in, std::string(1, "pnbrqk"[i]) + "|base_psq");
     }
-    kingAssumingNoCastling = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "k|no_castle");
-    passedPawns = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "passed_pawns");
-    isolatedPawns = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "isolated_pawns");
-    doubledPawns = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "doubled_pawns");
+    kingAssumingNoCastling.load_table(in, "k|no_castle");
+    passedPawns.load_table(in, "passed_pawns");
+    isolatedPawns.load_table(in, "isolated_pawns");
+    doubledPawns.load_table(in, "doubled_pawns");
 
     for (size_t i = 0; i < 6; ++i) {
-      control[i] = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "bad_for_" + std::string(1, "pnbrqk"[i]));
+      control[i].load_table(in, "bad_for_" + std::string(1, "pnbrqk"[i]));
     }
     for (size_t i = 0; i < 6; ++i) {
-      capturable[i] = TaperedQuantizedSquareTable<QUANTIZATION>::load_table(in, "hanging_" + std::string(1, "pnbrqk"[i]));
+      capturable[i].load_table(in, "hanging_" + std::string(1, "pnbrqk"[i]));
     }
 
     float biasWeights[2];
@@ -322,13 +319,13 @@ struct QstEvaluator : public EvaluatorInterface {
   }
 
   // Normal piece-square tables.
-  TaperedQuantizedSquareTable<QUANTIZATION> pieces[6];
+  TaperedQuantizedSquareTable<8> pieces[6];
   
-  TaperedQuantizedSquareTable<QUANTIZATION> kingAssumingNoCastling;
+  TaperedQuantizedSquareTable<8> kingAssumingNoCastling;
 
-  TaperedQuantizedSquareTable<QUANTIZATION> passedPawns;
-  TaperedQuantizedSquareTable<QUANTIZATION> isolatedPawns;
-  TaperedQuantizedSquareTable<QUANTIZATION> doubledPawns;
+  TaperedQuantizedSquareTable<2> passedPawns;
+  TaperedQuantizedSquareTable<2> isolatedPawns;
+  TaperedQuantizedSquareTable<2> doubledPawns;
 
   // Whether a square is "bad" for a type of piece to be sitting.
   // Maybe more intuitively: a square where a pawn cannot safely exist is strongly
@@ -336,10 +333,10 @@ struct QstEvaluator : public EvaluatorInterface {
   // A square where a rook cannot safely exist is moderately under the influence of enemy pieces.
   // Etc.
   // control[0-5] = bad for our PNBRQK, control[6-11] = bad for their PNBRQK
-  TaperedQuantizedSquareTable<QUANTIZATION> control[12];
+  TaperedQuantizedSquareTable<4> control[12];
 
   // Bitboard for each piece type, indicating whether they're in danger of being captured.
-  TaperedQuantizedSquareTable<QUANTIZATION> capturable[6];
+  TaperedQuantizedSquareTable<2> capturable[6];
 
   Evaluation biases[2];
 
@@ -364,8 +361,8 @@ struct QstEvaluator : public EvaluatorInterface {
   ColoredEvaluation<US> evaluate(const Position& pos) {
     constexpr Color THEM = opposite_color<US>();
     int32_t stage = earliness(pos);
-    Evaluation early = 0;  // biases[0];
-    Evaluation late = 0;  // biases[1];
+    Evaluation early = biases[0];
+    Evaluation late = biases[1];
 
     PawnAnalysis<US> pawnAnalysis(pos);
 
@@ -414,18 +411,18 @@ struct QstEvaluator : public EvaluatorInterface {
     features[14] = orient<US>(pawnAnalysis.ourPassedPawns);
     features[15] = orient<US>(pawnAnalysis.theirPassedPawns);
     passedPawns.contribute(features[14], &early, &late);
-    passedPawns.contribute<-1>(features[15], &early, &late);
+    passedPawns.contribute<-1>(flip_vertically(features[15]), &early, &late);
 
     features[16] = orient<US>(pawnAnalysis.ourIsolatedPawns);
     features[17] = orient<US>(pawnAnalysis.theirIsolatedPawns);
     isolatedPawns.contribute(features[16], &early, &late);
-    isolatedPawns.contribute<-1>(features[17], &early, &late);
+    isolatedPawns.contribute<-1>(flip_vertically(features[17]), &early, &late);
 
 
     features[18] = orient<US>(pawnAnalysis.ourDoubledPawns);
     features[19] = orient<US>(pawnAnalysis.theirDoubledPawns);
     doubledPawns.contribute(features[18], &early, &late);
-    doubledPawns.contribute<-1>(features[19], &early, &late);
+    doubledPawns.contribute<-1>(flip_vertically(features[19]), &early, &late);
 
     Threats<US> threats(pos);
     features[20] = orient<US>(threats.badForOur[Piece::PAWN]);
@@ -441,17 +438,17 @@ struct QstEvaluator : public EvaluatorInterface {
     features[30] = orient<US>(threats.badForOur[Piece::KING]);
     features[31] = orient<US>(threats.badForTheir[Piece::KING]);
     control[0].contribute(features[20], &early, &late);
-    control[0].contribute<-1>(features[21], &early, &late);
+    control[0].contribute<-1>(flip_vertically(features[21]), &early, &late);
     control[1].contribute(features[22], &early, &late);
-    control[1].contribute<-1>(features[23], &early, &late);
+    control[1].contribute<-1>(flip_vertically(features[23]), &early, &late);
     control[2].contribute(features[24], &early, &late);
-    control[2].contribute<-1>(features[25], &early, &late);
+    control[2].contribute<-1>(flip_vertically(features[25]), &early, &late);
     control[3].contribute(features[26], &early, &late);
-    control[3].contribute<-1>(features[27], &early, &late);
+    control[3].contribute<-1>(flip_vertically(features[27]), &early, &late);
     control[4].contribute(features[28], &early, &late);
-    control[4].contribute<-1>(features[29], &early, &late);
+    control[4].contribute<-1>(flip_vertically(features[29]), &early, &late);
     control[5].contribute(features[30], &early, &late);
-    control[5].contribute<-1>(features[31], &early, &late);
+    control[5].contribute<-1>(flip_vertically(features[31]), &early, &late);
 
     // capturable contributions (pieces that are in danger of being captured)
     features[32] = orient<US>(threats.badForOur[Piece::PAWN] & pos.pieceBitboards_[coloredPiece<US, Piece::PAWN>()]);
@@ -467,22 +464,22 @@ struct QstEvaluator : public EvaluatorInterface {
     features[42] = orient<US>(threats.badForOur[Piece::KING] & pos.pieceBitboards_[coloredPiece<US, Piece::KING>()]);
     features[43] = orient<US>(threats.badForTheir[Piece::KING] & pos.pieceBitboards_[coloredPiece<THEM, Piece::KING>()]);
     capturable[0].contribute(features[32], &early, &late);
-    capturable[0].contribute<-1>(features[33], &early, &late);
+    capturable[0].contribute<-1>(flip_vertically(features[33]), &early, &late);
     capturable[1].contribute(features[34], &early, &late);
-    capturable[1].contribute<-1>(features[35], &early, &late);
+    capturable[1].contribute<-1>(flip_vertically(features[35]), &early, &late);
     capturable[2].contribute(features[36], &early, &late);
-    capturable[2].contribute<-1>(features[37], &early, &late);
+    capturable[2].contribute<-1>(flip_vertically(features[37]), &early, &late);
     capturable[3].contribute(features[38], &early, &late);
-    capturable[3].contribute<-1>(features[39], &early, &late);
+    capturable[3].contribute<-1>(flip_vertically(features[39]), &early, &late);
     capturable[4].contribute(features[40], &early, &late);
-    capturable[4].contribute<-1>(features[41], &early, &late);
+    capturable[4].contribute<-1>(flip_vertically(features[41]), &early, &late);
     capturable[5].contribute(features[42], &early, &late);
-    capturable[5].contribute<-1>(features[43], &early, &late);
+    capturable[5].contribute<-1>(flip_vertically(features[43]), &early, &late);
 
     static_assert(NUM_FEATURES == 44, "features size mismatch");
 
-    int32_t eval = int32_t(early) * stage + int32_t(late) * (16 - stage);
-    return ColoredEvaluation<US>(eval / 16);
+    int32_t eval = int32_t(early) * stage + int32_t(late) * (18 - stage);
+    return ColoredEvaluation<US>(eval / 18);
   }
 
   ColoredEvaluation<Color::WHITE> evaluate_white(const Position& pos) override {
