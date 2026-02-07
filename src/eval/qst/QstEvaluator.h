@@ -278,12 +278,19 @@ struct TaperedQuantizedSquareTable {
  */
 template<SafeSquare DESTINATION>
 inline Bitboard shiftToDestination(SafeSquare source, Bitboard bb) {
-  // TODO: fix wrapping effect?
-   if (source > DESTINATION) {
-    return bb >> (source - DESTINATION);
-  } else {
-    return bb << (DESTINATION - source);
+  const int dx = DESTINATION % 8 - source % 8;
+  const int dy = DESTINATION / 8 - source / 8;
+  if (dx > 0) {
+    bb = shift_ew<Direction::EAST>(bb, dx);
+  } else if (dx < 0) {
+    bb = shift_ew<Direction::WEST>(bb, -dx);
   }
+  if (dy > 0) {
+    bb <<= dy * 8;
+  } else if (dy < 0) {
+    bb >>= -dy * 8;
+  }
+  return bb;
 }
 
 
@@ -349,6 +356,69 @@ enum QstFeatures {
   Q_NUM_FEATURES
 };
 
+inline std::string feature_name(QstFeatures f) {
+  switch (f) {
+    case Q_PAWNS_US: return "Q_PAWNS_US";
+    case Q_PAWNS_THEM: return "Q_PAWNS_THEM";
+    case Q_KNIGHTS_US: return "Q_KNIGHTS_US";
+    case Q_KNIGHTS_THEM: return "Q_KNIGHTS_THEM";
+    case Q_BISHOPS_US: return "Q_BISHOPS_US";
+    case Q_BISHOPS_THEM: return "Q_BISHOPS_THEM";
+    case Q_ROOKS_US: return "Q_ROOKS_US";
+    case Q_ROOKS_THEM: return "Q_ROOKS_THEM";
+    case Q_QUEENS_US: return "Q_QUEENS_US";
+    case Q_QUEENS_THEM: return "Q_QUEENS_THEM";
+    case Q_KINGS_US: return "Q_KINGS_US";
+    case Q_KINGS_THEM: return "Q_KINGS_THEM";
+    case Q_KING_NO_CASTLE_US: return "Q_KING_NO_CASTLE_US";
+    case Q_KING_NO_CASTLE_THEM: return "Q_KING_NO_CASTLE_THEM";
+    case Q_PASSED_PAWNS_US: return "Q_PASSED_PAWNS_US";
+    case Q_PASSED_PAWNS_THEM: return "Q_PASSED_PAWNS_THEM";
+    case Q_ISOLATED_PAWNS_US: return "Q_ISOLATED_PAWNS_US";
+    case Q_ISOLATED_PAWNS_THEM: return "Q_ISOLATED_PAWNS_THEM";
+    case Q_DOUBLED_PAWNS_US: return "Q_DOUBLED_PAWNS_US";
+    case Q_DOUBLED_PAWNS_THEM: return "Q_DOUBLED_PAWNS_THEM";
+    case Q_BAD_FOR_PAWN_US: return "Q_BAD_FOR_PAWN_US";
+    case Q_BAD_FOR_PAWN_THEM: return "Q_BAD_FOR_PAWN_THEM";
+    case Q_BAD_FOR_KNIGHT_US: return "Q_BAD_FOR_KNIGHT_US";
+    case Q_BAD_FOR_KNIGHT_THEM: return "Q_BAD_FOR_KNIGHT_THEM";
+    case Q_BAD_FOR_BISHOP_US: return "Q_BAD_FOR_BISHOP_US";
+    case Q_BAD_FOR_BISHOP_THEM: return "Q_BAD_FOR_BISHOP_THEM";
+    case Q_BAD_FOR_ROOK_US: return "Q_BAD_FOR_ROOK_US";
+    case Q_BAD_FOR_ROOK_THEM: return "Q_BAD_FOR_ROOK_THEM";
+    case Q_BAD_FOR_QUEEN_US: return "Q_BAD_FOR_QUEEN_US";
+    case Q_BAD_FOR_QUEEN_THEM: return "Q_BAD_FOR_QUEEN_THEM";
+    case Q_BAD_FOR_KING_US: return "Q_BAD_FOR_KING_US";
+    case Q_BAD_FOR_KING_THEM: return "Q_BAD_FOR_KING_THEM";
+    case Q_HANGING_PAWN_US: return "Q_HANGING_PAWN_US";
+    case Q_HANGING_PAWN_THEM: return "Q_HANGING_PAWN_THEM";
+    case Q_HANGING_KNIGHT_US: return "Q_HANGING_KNIGHT_US";
+    case Q_HANGING_KNIGHT_THEM: return "Q_HANGING_KNIGHT_THEM";
+    case Q_HANGING_BISHOP_US: return "Q_HANGING_BISHOP_US";
+    case Q_HANGING_BISHOP_THEM: return "Q_HANGING_BISHOP_THEM";
+    case Q_HANGING_ROOK_US: return "Q_HANGING_ROOK_US";
+    case Q_HANGING_ROOK_THEM: return "Q_HANGING_ROOK_THEM";
+    case Q_HANGING_QUEEN_US: return "Q_HANGING_QUEEN_US";
+    case Q_HANGING_QUEEN_THEM: return "Q_HANGING_QUEEN_THEM";
+    case Q_HANGING_KING_US: return "Q_HANGING_KING_US";
+    case Q_HANGING_KING_THEM: return "Q_HANGING_KING_THEM";
+    case Q_BAD_FOR_PAWN_NEAR_KING_US: return "Q_BAD_FOR_PAWN_NEAR_KING_US";
+    case Q_BAD_FOR_PAWN_NEAR_KING_THEM: return "Q_BAD_FOR_PAWN_NEAR_KING_THEM";
+    case Q_BAD_FOR_BISHOP_NEAR_KING_US: return "Q_BAD_FOR_BISHOP_NEAR_KING_US";
+    case Q_BAD_FOR_BISHOP_NEAR_KING_THEM: return "Q_BAD_FOR_BISHOP_NEAR_KING_THEM";
+    case Q_BAD_FOR_KING_NEAR_KING_US: return "Q_BAD_FOR_KING_NEAR_KING_US";
+    case Q_BAD_FOR_KING_NEAR_KING_THEM: return "Q_BAD_FOR_KING_NEAR_KING_THEM";
+    case Q_PAWN_IN_FRONT_OF_KING_US: return "Q_PAWN_IN_FRONT_OF_KING_US";
+    case Q_PAWN_IN_FRONT_OF_KING_THEM: return "Q_PAWN_IN_FRONT_OF_KING_THEM";
+    case Q_PAWN_STORM_US: return "Q_PAWN_STORM_US";
+    case Q_PAWN_STORM_THEM: return "Q_PAWN_STORM_THEM";
+    case Q_ADJACENT_PAWNS_US: return "Q_ADJACENT_PAWNS_US";
+    case Q_ADJACENT_PAWNS_THEM: return "Q_ADJACENT_PAWNS_THEM";
+    case Q_DIAGONAL_PAWNS_US: return "Q_DIAGONAL_PAWNS_US";
+    case Q_DIAGONAL_PAWNS_THEM: return "Q_DIAGONAL_PAWNS_THEM";
+    default: return "UNKNOWN_FEATURE";
+  }
+}
 
 /**
  * Quantized Square Table Evaluator
@@ -578,13 +648,16 @@ struct QstEvaluator : public EvaluatorInterface {
     //
 
     // How well do we control the squares around our king?
-    const Bitboard nearKingMask = kKingDist[2][SafeSquare::SE4];
-    features[Q_BAD_FOR_PAWN_NEAR_KING_US] = shiftToDestination<SafeSquare::SE4>( ourKingSq, orient<US>(threats.badForOur[Piece::PAWN])) & nearKingMask;
-    features[Q_BAD_FOR_PAWN_NEAR_KING_THEM] = shiftToDestination<SafeSquare::SE4>(theirKingSq, orient<US>(threats.badForTheir[Piece::PAWN])) & nearKingMask;
-    features[Q_BAD_FOR_BISHOP_NEAR_KING_US] = shiftToDestination<SafeSquare::SE4>( ourKingSq, orient<US>(threats.badForOur[Piece::BISHOP])) & nearKingMask;
-    features[Q_BAD_FOR_BISHOP_NEAR_KING_THEM] = shiftToDestination<SafeSquare::SE4>(theirKingSq, orient<US>(threats.badForTheir[Piece::BISHOP])) & nearKingMask;
-    features[Q_BAD_FOR_KING_NEAR_KING_US] = shiftToDestination<SafeSquare::SE4>( ourKingSq, orient<US>(threats.badForOur[Piece::KING])) & nearKingMask;
-    features[Q_BAD_FOR_KING_NEAR_KING_THEM] = shiftToDestination<SafeSquare::SE4>(theirKingSq, orient<US>(threats.badForTheir[Piece::KING])) & nearKingMask;
+
+    const Bitboard nearOurKingMask = kKingDist[2][SafeSquare::SE4];
+    const Bitboard nearTheirKingMask = kKingDist[2][SafeSquare::SE5];
+
+    features[Q_BAD_FOR_PAWN_NEAR_KING_US] = shiftToDestination<SafeSquare::SE4>( ourKingSq, orient<US>(threats.badForOur[Piece::PAWN])) & nearOurKingMask;
+    features[Q_BAD_FOR_PAWN_NEAR_KING_THEM] = shiftToDestination<SafeSquare::SE5>(theirKingSq, orient<US>(threats.badForTheir[Piece::PAWN])) & nearTheirKingMask;
+    features[Q_BAD_FOR_BISHOP_NEAR_KING_US] = shiftToDestination<SafeSquare::SE4>( ourKingSq, orient<US>(threats.badForOur[Piece::BISHOP])) & nearOurKingMask;
+    features[Q_BAD_FOR_BISHOP_NEAR_KING_THEM] = shiftToDestination<SafeSquare::SE5>(theirKingSq, orient<US>(threats.badForTheir[Piece::BISHOP])) & nearTheirKingMask;
+    features[Q_BAD_FOR_KING_NEAR_KING_US] = shiftToDestination<SafeSquare::SE4>( ourKingSq, orient<US>(threats.badForOur[Piece::KING])) & nearOurKingMask;
+    features[Q_BAD_FOR_KING_NEAR_KING_THEM] = shiftToDestination<SafeSquare::SE5>(theirKingSq, orient<US>(threats.badForTheir[Piece::KING])) & nearTheirKingMask;
     badSqNearKing[0].contribute(features[Q_BAD_FOR_PAWN_NEAR_KING_US], &early, &late);
     badSqNearKing[0].contribute<-1>(flip_vertically(features[Q_BAD_FOR_PAWN_NEAR_KING_THEM]), &early, &late);
     badSqNearKing[1].contribute(features[Q_BAD_FOR_BISHOP_NEAR_KING_US], &early, &late);
@@ -593,14 +666,14 @@ struct QstEvaluator : public EvaluatorInterface {
     badSqNearKing[2].contribute<-1>(flip_vertically(features[Q_BAD_FOR_KING_NEAR_KING_THEM]), &early, &late);
 
     // Pawns in front of the king.
-    features[Q_PAWN_IN_FRONT_OF_KING_US] = shiftToDestination<SafeSquare::SE4>( ourKingSq, orient<US>(pos.pieceBitboards_[coloredPiece<US, Piece::PAWN>()])) & nearKingMask;
-    features[Q_PAWN_IN_FRONT_OF_KING_THEM] = shiftToDestination<SafeSquare::SE4>(theirKingSq, orient<US>(pos.pieceBitboards_[coloredPiece<THEM, Piece::PAWN>()])) & nearKingMask;
+    features[Q_PAWN_IN_FRONT_OF_KING_US] = shiftToDestination<SafeSquare::SE4>( ourKingSq, orient<US>(pos.pieceBitboards_[coloredPiece<US, Piece::PAWN>()])) & nearOurKingMask;
+    features[Q_PAWN_IN_FRONT_OF_KING_THEM] = shiftToDestination<SafeSquare::SE5>(theirKingSq, orient<US>(pos.pieceBitboards_[coloredPiece<THEM, Piece::PAWN>()])) & nearTheirKingMask;
     pInFrontOfK.contribute(features[Q_PAWN_IN_FRONT_OF_KING_US], &early, &late);
     pInFrontOfK.contribute<-1>(flip_vertically(features[Q_PAWN_IN_FRONT_OF_KING_THEM]), &early, &late);
 
     // Pawn storms.
     features[Q_PAWN_STORM_US] = shiftToDestination<SafeSquare::SE4>( ourKingSq, theirPawns);
-    features[Q_PAWN_STORM_THEM] = shiftToDestination<SafeSquare::SE4>(theirKingSq, ourPawns);
+    features[Q_PAWN_STORM_THEM] = shiftToDestination<SafeSquare::SE5>(theirKingSq, ourPawns);
     pawnStorm.contribute(features[Q_PAWN_STORM_US], &early, &late);
     pawnStorm.contribute<-1>(flip_vertically(features[Q_PAWN_STORM_THEM]), &early, &late);
 
@@ -612,7 +685,7 @@ struct QstEvaluator : public EvaluatorInterface {
 
     // diagonalPawns
     features[Q_DIAGONAL_PAWNS_US] = shift<Direction::NORTH_EAST>(ourPawns) & ourPawns;
-    features[Q_DIAGONAL_PAWNS_THEM] = shift<Direction::NORTH_EAST>(theirPawns) & theirPawns;
+    features[Q_DIAGONAL_PAWNS_THEM] = shift<Direction::SOUTH_EAST>(theirPawns) & theirPawns;
     diagonalPawns.contribute(features[Q_DIAGONAL_PAWNS_US], &early, &late);
     diagonalPawns.contribute<-1>(flip_vertically(features[Q_DIAGONAL_PAWNS_THEM]), &early, &late);
 
