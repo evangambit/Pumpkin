@@ -276,19 +276,6 @@ inline Bitboard compute_bishoplike_targets(Bitboard bishopLikePieces, const Bitb
   while (bishopLikePieces) {
     const SafeSquare from = pop_lsb_i_promise_board_is_not_empty(bishopLikePieces);
     r |= compute_one_bishops_targets(from, occupied);
-    // Location fromLoc = square2location(from);
-
-    // {  // Southeast/Northwest diagonal.
-    //   uint8_t enemiesByte = diag::southeast_diag_to_byte(from, occupied);
-    //   uint8_t fromByte = diag::southeast_diag_to_byte(from, fromLoc);
-    //   r |= diag::byte_to_southeast_diag(from, sliding_moves(fromByte, enemiesByte));
-    // }
-    // {  // Southwest/Northeast diagonal.
-    //   uint8_t enemiesByte = diag::southwest_diag_to_byte(from, occupied);
-    //   uint8_t fromByte = diag::southwest_diag_to_byte(from, fromLoc);
-    //   r |= diag::byte_to_southwest_diag(from, sliding_moves(fromByte, enemiesByte));
-    // }
-
   }
   return r;
 }

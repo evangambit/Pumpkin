@@ -112,10 +112,20 @@ inline SafeSquare vertical_mirror(SafeSquare sq) {
 }
 
 inline Bitboard flip_vertically(Bitboard x) {
-    x = ((x >> 8) & 0x00FF00FF00FF00FF) | ((x << 8) & 0xFF00FF00FF00FF00);
-    x = ((x >> 16) & 0x0000FFFF0000FFFF) | ((x << 16) & 0xFFFF0000FFFF0000);
-    x = (x >> 32) | (x << 32);
-    return x;
+  x = ((x >> 8) & 0x00FF00FF00FF00FF) | ((x << 8) & 0xFF00FF00FF00FF00);
+  x = ((x >> 16) & 0x0000FFFF0000FFFF) | ((x << 16) & 0xFFFF0000FFFF0000);
+  x = (x >> 32) | (x << 32);
+  return x;
+}
+
+// Useful for debugging, since no chess UI lets you merely flip the board vertically.
+// So if we want to compare a flip_vertically(bb) to the UI, we need to also flip horizontally.
+// Probably this method has no legitimate use in the engine itself.
+inline Bitboard flip_horizontally(Bitboard x) {
+  x = ((x >> 1) & 0x5555555555555555) | ((x << 1) & 0xAAAAAAAAAAAAAAAA);
+  x = ((x >> 2) & 0x3333333333333333) | ((x << 2) & 0xCCCCCCCCCCCCCCCC);
+  x = ((x >> 4) & 0x0F0F0F0F0F0F0F0F) | ((x << 4) & 0xF0F0F0F0F0F0F0F0);
+  return x;
 }
 
 constexpr Bitboard kMainWhiteDiagonal = 0x8040201008040201;
@@ -225,6 +235,28 @@ extern Bitboard kSquareRuleTheirTurn[Color::NUM_COLORS][64];
 
 extern Bitboard kKingHome[64];
 
+constexpr Bitboard kMaskFromWest[8] = {
+  kFiles[0],
+  kFiles[0] | kFiles[1],
+  kFiles[0] | kFiles[1] | kFiles[2],
+  kFiles[0] | kFiles[1] | kFiles[2] | kFiles[3],
+  kFiles[0] | kFiles[1] | kFiles[2] | kFiles[3] | kFiles[4],
+  kFiles[0] | kFiles[1] | kFiles[2] | kFiles[3] | kFiles[4] | kFiles[5],
+  kFiles[0] | kFiles[1] | kFiles[2] | kFiles[3] | kFiles[4] | kFiles[5] | kFiles[6],
+  kFiles[0] | kFiles[1] | kFiles[2] | kFiles[3] | kFiles[4] | kFiles[5] | kFiles[6] | kFiles[7],
+};
+
+constexpr Bitboard kMaskFromEast[8] = {
+  kFiles[7],
+  kFiles[7] | kFiles[6],
+  kFiles[7] | kFiles[6] | kFiles[5],
+  kFiles[7] | kFiles[6] | kFiles[5] | kFiles[4],
+  kFiles[7] | kFiles[6] | kFiles[5] | kFiles[4] | kFiles[3],
+  kFiles[7] | kFiles[6] | kFiles[5] | kFiles[4] | kFiles[3] | kFiles[2],
+  kFiles[7] | kFiles[6] | kFiles[5] | kFiles[4] | kFiles[3] | kFiles[2] | kFiles[1],
+  kFiles[7] | kFiles[6] | kFiles[5] | kFiles[4] | kFiles[3] | kFiles[2] | kFiles[1] | kFiles[0],
+};
+
 void initialize_geometry();
 
 void assert_valid_square(unsigned sq);
@@ -253,6 +285,17 @@ Bitboard shift(Bitboard b) {
   }
   if ((dir + 16) % 8 == 6) {
     b &= ~(kFiles[7] | kFiles[6]);
+  }
+  return b;
+}
+
+template<Direction dir>
+Bitboard shift_ew(Bitboard b, unsigned n) {
+  static_assert(dir == Direction::EAST || dir == Direction::WEST, "dir must be EAST or WEST");
+  if (dir == Direction::EAST) {
+    b = (b << n) & ~kMaskFromWest[n - 1];
+  } else {
+    b = (b >> n) & ~kMaskFromEast[n - 1];
   }
   return b;
 }
