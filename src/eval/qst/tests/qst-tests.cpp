@@ -32,7 +32,7 @@ TEST_F(QstEvaluatorTest, FeatureCountMatchesExpected) {
   QstEvaluator qstEvaluator;
   std::vector<Bitboard> features;
   qstEvaluator.get_features<Color::WHITE>(pos, &features);
-  EXPECT_EQ(features.size(), 44);
+  EXPECT_EQ(features.size(), Q_NUM_FEATURES);
 }
 
 constexpr Bitboard WHITE_PAWNS_AFTER_E4 = bb(SA2) | bb(SB2) | bb(SC2) | bb(SD2) | bb(SE4) | bb(SF2) | bb(SG2) | bb(SH2);
@@ -44,8 +44,8 @@ TEST_F(QstEvaluatorTest, PieceFeatures) {
   QstEvaluator qstEvaluator;
   std::vector<Bitboard> features;
   qstEvaluator.get_features<Color::WHITE>(pos, &features);
-  EXPECT_BB_EQ(features[0], WHITE_PAWNS_AFTER_E4);
-  EXPECT_BB_EQ(features[1], BLACK_PAWNS_START);
+  EXPECT_BB_EQ(features[Q_PAWNS_US], WHITE_PAWNS_AFTER_E4);
+  EXPECT_BB_EQ(features[Q_PAWNS_THEM], BLACK_PAWNS_START);
 }
 
 TEST_F(QstEvaluatorTest, PieceFeaturesBlackToMove) {
@@ -55,6 +55,6 @@ TEST_F(QstEvaluatorTest, PieceFeaturesBlackToMove) {
   QstEvaluator qstEvaluator;
   std::vector<Bitboard> features;
   qstEvaluator.get_features<Color::BLACK>(pos, &features);
-  EXPECT_BB_EQ(features[0], flip_vertically(BLACK_PAWNS_START));
-  EXPECT_BB_EQ(features[1], flip_vertically(WHITE_PAWNS_AFTER_E4));
+  EXPECT_BB_EQ(features[Q_PAWNS_US], flip_vertically(BLACK_PAWNS_START));
+  EXPECT_BB_EQ(features[Q_PAWNS_THEM], flip_vertically(WHITE_PAWNS_AFTER_E4));
 }

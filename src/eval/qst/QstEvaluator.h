@@ -286,6 +286,70 @@ inline Bitboard shiftToDestination(SafeSquare source, Bitboard bb) {
   }
 }
 
+
+enum QstFeatures {
+  Q_PAWNS_US = 0,
+  Q_PAWNS_THEM = 1,
+  Q_KNIGHTS_US,
+  Q_KNIGHTS_THEM,
+  Q_BISHOPS_US,
+  Q_BISHOPS_THEM,
+  Q_ROOKS_US,
+  Q_ROOKS_THEM,
+  Q_QUEENS_US,
+  Q_QUEENS_THEM,
+  Q_KINGS_US,
+  Q_KINGS_THEM,
+  Q_KING_NO_CASTLE_US,  // 12
+  Q_KING_NO_CASTLE_THEM,
+  Q_PASSED_PAWNS_US,
+  Q_PASSED_PAWNS_THEM,
+  Q_ISOLATED_PAWNS_US,
+  Q_ISOLATED_PAWNS_THEM,
+  Q_DOUBLED_PAWNS_US,
+  Q_DOUBLED_PAWNS_THEM,
+  Q_BAD_FOR_PAWN_US,
+  Q_BAD_FOR_PAWN_THEM,
+  Q_BAD_FOR_KNIGHT_US,
+  Q_BAD_FOR_KNIGHT_THEM,
+  Q_BAD_FOR_BISHOP_US,
+  Q_BAD_FOR_BISHOP_THEM,
+  Q_BAD_FOR_ROOK_US,
+  Q_BAD_FOR_ROOK_THEM,
+  Q_BAD_FOR_QUEEN_US,
+  Q_BAD_FOR_QUEEN_THEM,
+  Q_BAD_FOR_KING_US,
+  Q_BAD_FOR_KING_THEM,
+  Q_HANGING_PAWN_US,
+  Q_HANGING_PAWN_THEM,
+  Q_HANGING_KNIGHT_US,
+  Q_HANGING_KNIGHT_THEM,
+  Q_HANGING_BISHOP_US,
+  Q_HANGING_BISHOP_THEM,
+  Q_HANGING_ROOK_US,
+  Q_HANGING_ROOK_THEM,
+  Q_HANGING_QUEEN_US,
+  Q_HANGING_QUEEN_THEM,
+  Q_HANGING_KING_US,
+  Q_HANGING_KING_THEM,
+  Q_BAD_FOR_PAWN_NEAR_KING_US,
+  Q_BAD_FOR_PAWN_NEAR_KING_THEM,
+  Q_BAD_FOR_BISHOP_NEAR_KING_US,
+  Q_BAD_FOR_BISHOP_NEAR_KING_THEM,
+  Q_BAD_FOR_KING_NEAR_KING_US,
+  Q_BAD_FOR_KING_NEAR_KING_THEM,
+  Q_PAWN_IN_FRONT_OF_KING_US,
+  Q_PAWN_IN_FRONT_OF_KING_THEM,
+  Q_PAWN_STORM_US,
+  Q_PAWN_STORM_THEM,
+  Q_ADJACENT_PAWNS_US,
+  Q_ADJACENT_PAWNS_THEM,
+  Q_DIAGONAL_PAWNS_US,
+  Q_DIAGONAL_PAWNS_THEM,
+  Q_NUM_FEATURES
+};
+
+
 /**
  * Quantized Square Table Evaluator
  *
@@ -348,18 +412,20 @@ struct QstEvaluator : public EvaluatorInterface {
 
   // Whether a square is "bad" for a type of piece to be sitting.
   // Maybe more intuitively: a square where a pawn cannot safely exist is strongly
-  // under the influence of enemy pieces, so it's bad for that piece to be there.
-  // A square where a rook cannot safely exist is moderately under the influence of enemy pieces.
-  // Etc.
-  // control[0-5] = bad for our PNBRQK, control[6-11] = bad for their PNBRQK
-  TaperedQuantizedSquareTable<2> control[12];
+  // under the influence of enemy pieces. A square where a rook cannot safely exist
+  // is moderately under the influence of enemy pieces. etc.
+  TaperedQuantizedSquareTable<2> control[6];
 
   // Bitboard for each piece type, indicating whether they're in danger of being captured.
   TaperedQuantizedSquareTable<2> capturable[6];
 
+  // King safety features.
   TaperedQuantizedSquareTable<2> badSqNearKing[3];
   TaperedQuantizedSquareTable<2> pInFrontOfK;
   TaperedQuantizedSquareTable<2> pawnStorm;
+
+  TaperedQuantizedSquareTable<2> adjacentPawns;
+  TaperedQuantizedSquareTable<2> diagonalPawns;
 
   Evaluation biases[2];
 
@@ -370,15 +436,14 @@ struct QstEvaluator : public EvaluatorInterface {
   template<Color US>
   void get_features(const Position& pos, std::vector<Bitboard> *out) {
     this->evaluate<US>(pos);
-    for (size_t i = 0; i < NUM_FEATURES; ++i) {
+    for (size_t i = 0; i < Q_NUM_FEATURES; ++i) {
       out->push_back(features[i]);
     }
   }
 
   // It's a little hacky to store features as a member variable, but it helps
   // ensure that get_features and evaluate are consistent with each other.
-  static constexpr size_t NUM_FEATURES = 54;
-  Bitboard features[NUM_FEATURES];
+  Bitboard features[Q_NUM_FEATURES];
 
   template<Color US>
   ColoredEvaluation<US> evaluate(const Position& pos) {
@@ -386,8 +451,8 @@ struct QstEvaluator : public EvaluatorInterface {
     constexpr Direction kForward = US == Color::WHITE ? Direction::NORTH : Direction::SOUTH;
     constexpr Direction kBackward = US == Color::WHITE ? Direction::SOUTH : Direction::NORTH;
 
-    const Bitboard ourPawns = pos.pieceBitboards_[coloredPiece<US, Piece::PAWN>()];
-    const Bitboard theirPawns = pos.pieceBitboards_[coloredPiece<THEM, Piece::PAWN>()];
+    const Bitboard ourPawns = orient<US>(pos.pieceBitboards_[coloredPiece<US, Piece::PAWN>()]);
+    const Bitboard theirPawns = orient<US>(pos.pieceBitboards_[coloredPiece<THEM, Piece::PAWN>()]);
 
     int32_t stage = earliness(pos);
     Evaluation early = biases[0];
@@ -395,35 +460,35 @@ struct QstEvaluator : public EvaluatorInterface {
 
     PawnAnalysis<US> pawnAnalysis(pos);
 
-    features[0] = orient<US>(pos.pieceBitboards_[coloredPiece<US, Piece::PAWN>()]);
-    features[1] = orient<US>(pos.pieceBitboards_[coloredPiece<THEM, Piece::PAWN>()]);
-    pieces[0].contribute(features[0], &early, &late);
-    pieces[0].contribute<-1>(flip_vertically(features[1]), &early, &late);
+    features[Q_PAWNS_US] = orient<US>(pos.pieceBitboards_[coloredPiece<US, Piece::PAWN>()]);
+    features[Q_PAWNS_THEM] = orient<US>(pos.pieceBitboards_[coloredPiece<THEM, Piece::PAWN>()]);
+    pieces[0].contribute(features[Q_PAWNS_US], &early, &late);
+    pieces[0].contribute<-1>(flip_vertically(features[Q_PAWNS_THEM]), &early, &late);
 
-    features[2] = orient<US>(pos.pieceBitboards_[coloredPiece<US, Piece::KNIGHT>()]);
-    features[3] = orient<US>(pos.pieceBitboards_[coloredPiece<THEM, Piece::KNIGHT>()]);
-    pieces[1].contribute(features[2], &early, &late);
-    pieces[1].contribute<-1>(flip_vertically(features[3]), &early, &late);
+    features[Q_KNIGHTS_US] = orient<US>(pos.pieceBitboards_[coloredPiece<US, Piece::KNIGHT>()]);
+    features[Q_KNIGHTS_THEM] = orient<US>(pos.pieceBitboards_[coloredPiece<THEM, Piece::KNIGHT>()]);
+    pieces[1].contribute(features[Q_KNIGHTS_US], &early, &late);
+    pieces[1].contribute<-1>(flip_vertically(features[Q_KNIGHTS_THEM]), &early, &late);
 
-    features[4] = orient<US>(pos.pieceBitboards_[coloredPiece<US, Piece::BISHOP>()]);
-    features[5] = orient<US>(pos.pieceBitboards_[coloredPiece<THEM, Piece::BISHOP>()]);
-    pieces[2].contribute(features[4], &early, &late);
-    pieces[2].contribute<-1>(flip_vertically(features[5]), &early, &late);
+    features[Q_BISHOPS_US] = orient<US>(pos.pieceBitboards_[coloredPiece<US, Piece::BISHOP>()]);
+    features[Q_BISHOPS_THEM] = orient<US>(pos.pieceBitboards_[coloredPiece<THEM, Piece::BISHOP>()]);
+    pieces[2].contribute(features[Q_BISHOPS_US], &early, &late);
+    pieces[2].contribute<-1>(flip_vertically(features[Q_BISHOPS_THEM]), &early, &late);
 
-    features[6] = orient<US>(pos.pieceBitboards_[coloredPiece<US, Piece::ROOK>()]);
-    features[7] = orient<US>(pos.pieceBitboards_[coloredPiece<THEM, Piece::ROOK>()]);
-    pieces[3].contribute(features[6], &early, &late);
-    pieces[3].contribute<-1>(flip_vertically(features[7]), &early, &late);
+    features[Q_ROOKS_US] = orient<US>(pos.pieceBitboards_[coloredPiece<US, Piece::ROOK>()]);
+    features[Q_ROOKS_THEM] = orient<US>(pos.pieceBitboards_[coloredPiece<THEM, Piece::ROOK>()]);
+    pieces[3].contribute(features[Q_ROOKS_US], &early, &late);
+    pieces[3].contribute<-1>(flip_vertically(features[Q_ROOKS_THEM]), &early, &late);
 
-    features[8] = orient<US>(pos.pieceBitboards_[coloredPiece<US, Piece::QUEEN>()]);
-    features[9] = orient<US>(pos.pieceBitboards_[coloredPiece<THEM, Piece::QUEEN>()]);
-    pieces[4].contribute(features[8], &early, &late);
-    pieces[4].contribute<-1>(flip_vertically(features[9]), &early, &late);
+    features[Q_QUEENS_US] = orient<US>(pos.pieceBitboards_[coloredPiece<US, Piece::QUEEN>()]);
+    features[Q_QUEENS_THEM] = orient<US>(pos.pieceBitboards_[coloredPiece<THEM, Piece::QUEEN>()]);
+    pieces[4].contribute(features[Q_QUEENS_US], &early, &late);
+    pieces[4].contribute<-1>(flip_vertically(features[Q_QUEENS_THEM]), &early, &late);
 
-    features[10] = orient<US>(pos.pieceBitboards_[coloredPiece<US, Piece::KING>()]);
-    features[11] = orient<US>(pos.pieceBitboards_[coloredPiece<THEM, Piece::KING>()]);
-    pieces[5].contribute(features[10], &early, &late);
-    pieces[5].contribute<-1>(flip_vertically(features[11]), &early, &late);
+    features[Q_KINGS_US] = orient<US>(pos.pieceBitboards_[coloredPiece<US, Piece::KING>()]);
+    features[Q_KINGS_THEM] = orient<US>(pos.pieceBitboards_[coloredPiece<THEM, Piece::KING>()]);
+    pieces[5].contribute(features[Q_KINGS_US], &early, &late);
+    pieces[5].contribute<-1>(flip_vertically(features[Q_KINGS_THEM]), &early, &late);
 
     // kingAssumingNoCastling contributions
     constexpr uint8_t ourKingsideCastling = US == Color::WHITE ? kCastlingRights_WhiteKing : kCastlingRights_BlackKing;
@@ -432,81 +497,81 @@ struct QstEvaluator : public EvaluatorInterface {
     constexpr uint8_t theirQueensideCastling = US == Color::WHITE ? kCastlingRights_BlackQueen : kCastlingRights_WhiteQueen;
     const bool weCannotCastle = (pos.currentState_.castlingRights & (ourKingsideCastling | ourQueensideCastling)) == 0;
     const bool theyCannotCastle = (pos.currentState_.castlingRights & (theirKingsideCastling | theirQueensideCastling)) == 0;
-    features[12] = orient<US>(pos.pieceBitboards_[coloredPiece<US, Piece::KING>()]) * weCannotCastle;
-    features[13] = orient<US>(pos.pieceBitboards_[coloredPiece<THEM, Piece::KING>()]) * theyCannotCastle;
-    kingAssumingNoCastling.contribute(features[12], &early, &late);
-    kingAssumingNoCastling.contribute<-1>(flip_vertically(features[13]), &early, &late);
+    features[Q_KING_NO_CASTLE_US] = orient<US>(pos.pieceBitboards_[coloredPiece<US, Piece::KING>()]) * weCannotCastle;
+    features[Q_KING_NO_CASTLE_THEM] = orient<US>(pos.pieceBitboards_[coloredPiece<THEM, Piece::KING>()]) * theyCannotCastle;
+    kingAssumingNoCastling.contribute(features[Q_KING_NO_CASTLE_US], &early, &late);
+    kingAssumingNoCastling.contribute<-1>(flip_vertically(features[Q_KING_NO_CASTLE_THEM]), &early, &late);
 
-    features[14] = orient<US>(pawnAnalysis.ourPassedPawns);
-    features[15] = orient<US>(pawnAnalysis.theirPassedPawns);
-    passedPawns.contribute(features[14], &early, &late);
-    passedPawns.contribute<-1>(flip_vertically(features[15]), &early, &late);
+    features[Q_PASSED_PAWNS_US] = orient<US>(pawnAnalysis.ourPassedPawns);
+    features[Q_PASSED_PAWNS_THEM] = orient<US>(pawnAnalysis.theirPassedPawns);
+    passedPawns.contribute(features[Q_PASSED_PAWNS_US], &early, &late);
+    passedPawns.contribute<-1>(flip_vertically(features[Q_PASSED_PAWNS_THEM]), &early, &late);
 
-    features[16] = orient<US>(pawnAnalysis.ourIsolatedPawns);
-    features[17] = orient<US>(pawnAnalysis.theirIsolatedPawns);
-    isolatedPawns.contribute(features[16], &early, &late);
-    isolatedPawns.contribute<-1>(flip_vertically(features[17]), &early, &late);
+    features[Q_ISOLATED_PAWNS_US] = orient<US>(pawnAnalysis.ourIsolatedPawns);
+    features[Q_ISOLATED_PAWNS_THEM] = orient<US>(pawnAnalysis.theirIsolatedPawns);
+    isolatedPawns.contribute(features[Q_ISOLATED_PAWNS_US], &early, &late);
+    isolatedPawns.contribute<-1>(flip_vertically(features[Q_ISOLATED_PAWNS_THEM]), &early, &late);
 
 
-    features[18] = orient<US>(pawnAnalysis.ourDoubledPawns);
-    features[19] = orient<US>(pawnAnalysis.theirDoubledPawns);
-    doubledPawns.contribute(features[18], &early, &late);
-    doubledPawns.contribute<-1>(flip_vertically(features[19]), &early, &late);
+    features[Q_DOUBLED_PAWNS_US] = orient<US>(pawnAnalysis.ourDoubledPawns);
+    features[Q_DOUBLED_PAWNS_THEM] = orient<US>(pawnAnalysis.theirDoubledPawns);
+    doubledPawns.contribute(features[Q_DOUBLED_PAWNS_US], &early, &late);
+    doubledPawns.contribute<-1>(flip_vertically(features[Q_DOUBLED_PAWNS_THEM]), &early, &late);
 
     Threats<US> threats(pos);
-    features[20] = orient<US>(threats.badForOur[Piece::PAWN]);
-    features[21] = orient<US>(threats.badForTheir[Piece::PAWN]);
-    features[22] = orient<US>(threats.badForOur[Piece::KNIGHT]);
-    features[23] = orient<US>(threats.badForTheir[Piece::KNIGHT]);
-    features[24] = orient<US>(threats.badForOur[Piece::BISHOP]);
-    features[25] = orient<US>(threats.badForTheir[Piece::BISHOP]);
-    features[26] = orient<US>(threats.badForOur[Piece::ROOK]);
-    features[27] = orient<US>(threats.badForTheir[Piece::ROOK]);
-    features[28] = orient<US>(threats.badForOur[Piece::QUEEN]);
-    features[29] = orient<US>(threats.badForTheir[Piece::QUEEN]);
-    features[30] = orient<US>(threats.badForOur[Piece::KING]);
-    features[31] = orient<US>(threats.badForTheir[Piece::KING]);
-    control[0].contribute(features[20], &early, &late);
-    control[0].contribute<-1>(flip_vertically(features[21]), &early, &late);
-    control[1].contribute(features[22], &early, &late);
-    control[1].contribute<-1>(flip_vertically(features[23]), &early, &late);
-    control[2].contribute(features[24], &early, &late);
-    control[2].contribute<-1>(flip_vertically(features[25]), &early, &late);
-    control[3].contribute(features[26], &early, &late);
-    control[3].contribute<-1>(flip_vertically(features[27]), &early, &late);
-    control[4].contribute(features[28], &early, &late);
-    control[4].contribute<-1>(flip_vertically(features[29]), &early, &late);
-    control[5].contribute(features[30], &early, &late);
-    control[5].contribute<-1>(flip_vertically(features[31]), &early, &late);
+    features[Q_BAD_FOR_PAWN_US] = orient<US>(threats.badForOur[Piece::PAWN]);
+    features[Q_BAD_FOR_PAWN_THEM] = orient<US>(threats.badForTheir[Piece::PAWN]);
+    features[Q_BAD_FOR_KNIGHT_US] = orient<US>(threats.badForOur[Piece::KNIGHT]);
+    features[Q_BAD_FOR_KNIGHT_THEM] = orient<US>(threats.badForTheir[Piece::KNIGHT]);
+    features[Q_BAD_FOR_BISHOP_US] = orient<US>(threats.badForOur[Piece::BISHOP]);
+    features[Q_BAD_FOR_BISHOP_THEM] = orient<US>(threats.badForTheir[Piece::BISHOP]);
+    features[Q_BAD_FOR_ROOK_US] = orient<US>(threats.badForOur[Piece::ROOK]);
+    features[Q_BAD_FOR_ROOK_THEM] = orient<US>(threats.badForTheir[Piece::ROOK]);
+    features[Q_BAD_FOR_QUEEN_US] = orient<US>(threats.badForOur[Piece::QUEEN]);
+    features[Q_BAD_FOR_QUEEN_THEM] = orient<US>(threats.badForTheir[Piece::QUEEN]);
+    features[Q_BAD_FOR_KING_US] = orient<US>(threats.badForOur[Piece::KING]);
+    features[Q_BAD_FOR_KING_THEM] = orient<US>(threats.badForTheir[Piece::KING]);
+    control[0].contribute(features[Q_BAD_FOR_PAWN_US], &early, &late);
+    control[0].contribute<-1>(flip_vertically(features[Q_BAD_FOR_PAWN_THEM]), &early, &late);
+    control[1].contribute(features[Q_BAD_FOR_KNIGHT_US], &early, &late);
+    control[1].contribute<-1>(flip_vertically(features[Q_BAD_FOR_KNIGHT_THEM]), &early, &late);
+    control[2].contribute(features[Q_BAD_FOR_BISHOP_US], &early, &late);
+    control[2].contribute<-1>(flip_vertically(features[Q_BAD_FOR_BISHOP_THEM]), &early, &late);
+    control[3].contribute(features[Q_BAD_FOR_ROOK_US], &early, &late);
+    control[3].contribute<-1>(flip_vertically(features[Q_BAD_FOR_ROOK_THEM]), &early, &late);
+    control[4].contribute(features[Q_BAD_FOR_QUEEN_US], &early, &late);
+    control[4].contribute<-1>(flip_vertically(features[Q_BAD_FOR_QUEEN_THEM]), &early, &late);
+    control[5].contribute(features[Q_BAD_FOR_KING_US], &early, &late);
+    control[5].contribute<-1>(flip_vertically(features[Q_BAD_FOR_KING_THEM]), &early, &late);
 
     // capturable contributions (pieces that are in danger of being captured)
-    features[32] = orient<US>(threats.badForOur[Piece::PAWN] & pos.pieceBitboards_[coloredPiece<US, Piece::PAWN>()]);
-    features[33] = orient<US>(threats.badForTheir[Piece::PAWN] & pos.pieceBitboards_[coloredPiece<THEM, Piece::PAWN>()]);
-    features[34] = orient<US>(threats.badForOur[Piece::KNIGHT] & pos.pieceBitboards_[coloredPiece<US, Piece::KNIGHT>()]);
-    features[35] = orient<US>(threats.badForTheir[Piece::KNIGHT] & pos.pieceBitboards_[coloredPiece<THEM, Piece::KNIGHT>()]);
-    features[36] = orient<US>(threats.badForOur[Piece::BISHOP] & pos.pieceBitboards_[coloredPiece<US, Piece::BISHOP>()]);
-    features[37] = orient<US>(threats.badForTheir[Piece::BISHOP] & pos.pieceBitboards_[coloredPiece<THEM, Piece::BISHOP>()]);
-    features[38] = orient<US>(threats.badForOur[Piece::ROOK] & pos.pieceBitboards_[coloredPiece<US, Piece::ROOK>()]);
-    features[39] = orient<US>(threats.badForTheir[Piece::ROOK] & pos.pieceBitboards_[coloredPiece<THEM, Piece::ROOK>()]);
-    features[40] = orient<US>(threats.badForOur[Piece::QUEEN] & pos.pieceBitboards_[coloredPiece<US, Piece::QUEEN>()]);
-    features[41] = orient<US>(threats.badForTheir[Piece::QUEEN] & pos.pieceBitboards_[coloredPiece<THEM, Piece::QUEEN>()]);
-    features[42] = orient<US>(threats.badForOur[Piece::KING] & pos.pieceBitboards_[coloredPiece<US, Piece::KING>()]);
-    features[43] = orient<US>(threats.badForTheir[Piece::KING] & pos.pieceBitboards_[coloredPiece<THEM, Piece::KING>()]);
-    capturable[0].contribute(features[32], &early, &late);
-    capturable[0].contribute<-1>(flip_vertically(features[33]), &early, &late);
-    capturable[1].contribute(features[34], &early, &late);
-    capturable[1].contribute<-1>(flip_vertically(features[35]), &early, &late);
-    capturable[2].contribute(features[36], &early, &late);
-    capturable[2].contribute<-1>(flip_vertically(features[37]), &early, &late);
-    capturable[3].contribute(features[38], &early, &late);
-    capturable[3].contribute<-1>(flip_vertically(features[39]), &early, &late);
-    capturable[4].contribute(features[40], &early, &late);
-    capturable[4].contribute<-1>(flip_vertically(features[41]), &early, &late);
-    capturable[5].contribute(features[42], &early, &late);
-    capturable[5].contribute<-1>(flip_vertically(features[43]), &early, &late);
+    features[Q_HANGING_PAWN_US] = orient<US>(threats.badForOur[Piece::PAWN] & pos.pieceBitboards_[coloredPiece<US, Piece::PAWN>()]);
+    features[Q_HANGING_PAWN_THEM] = orient<US>(threats.badForTheir[Piece::PAWN] & pos.pieceBitboards_[coloredPiece<THEM, Piece::PAWN>()]);
+    features[Q_HANGING_KNIGHT_US] = orient<US>(threats.badForOur[Piece::KNIGHT] & pos.pieceBitboards_[coloredPiece<US, Piece::KNIGHT>()]);
+    features[Q_HANGING_KNIGHT_THEM] = orient<US>(threats.badForTheir[Piece::KNIGHT] & pos.pieceBitboards_[coloredPiece<THEM, Piece::KNIGHT>()]);
+    features[Q_HANGING_BISHOP_US] = orient<US>(threats.badForOur[Piece::BISHOP] & pos.pieceBitboards_[coloredPiece<US, Piece::BISHOP>()]);
+    features[Q_HANGING_BISHOP_THEM] = orient<US>(threats.badForTheir[Piece::BISHOP] & pos.pieceBitboards_[coloredPiece<THEM, Piece::BISHOP>()]);
+    features[Q_HANGING_ROOK_US] = orient<US>(threats.badForOur[Piece::ROOK] & pos.pieceBitboards_[coloredPiece<US, Piece::ROOK>()]);
+    features[Q_HANGING_ROOK_THEM] = orient<US>(threats.badForTheir[Piece::ROOK] & pos.pieceBitboards_[coloredPiece<THEM, Piece::ROOK>()]);
+    features[Q_HANGING_QUEEN_US] = orient<US>(threats.badForOur[Piece::QUEEN] & pos.pieceBitboards_[coloredPiece<US, Piece::QUEEN>()]);
+    features[Q_HANGING_QUEEN_THEM] = orient<US>(threats.badForTheir[Piece::QUEEN] & pos.pieceBitboards_[coloredPiece<THEM, Piece::QUEEN>()]);
+    features[Q_HANGING_KING_US] = orient<US>(threats.badForOur[Piece::KING] & pos.pieceBitboards_[coloredPiece<US, Piece::KING>()]);
+    features[Q_HANGING_KING_THEM] = orient<US>(threats.badForTheir[Piece::KING] & pos.pieceBitboards_[coloredPiece<THEM, Piece::KING>()]);
+    capturable[0].contribute(features[Q_HANGING_PAWN_US], &early, &late);
+    capturable[0].contribute<-1>(flip_vertically(features[Q_HANGING_PAWN_THEM]), &early, &late);
+    capturable[1].contribute(features[Q_HANGING_KNIGHT_US], &early, &late);
+    capturable[1].contribute<-1>(flip_vertically(features[Q_HANGING_KNIGHT_THEM]), &early, &late);
+    capturable[2].contribute(features[Q_HANGING_BISHOP_US], &early, &late);
+    capturable[2].contribute<-1>(flip_vertically(features[Q_HANGING_BISHOP_THEM]), &early, &late);
+    capturable[3].contribute(features[Q_HANGING_ROOK_US], &early, &late);
+    capturable[3].contribute<-1>(flip_vertically(features[Q_HANGING_ROOK_THEM]), &early, &late);
+    capturable[4].contribute(features[Q_HANGING_QUEEN_US], &early, &late);
+    capturable[4].contribute<-1>(flip_vertically(features[Q_HANGING_QUEEN_THEM]), &early, &late);
+    capturable[5].contribute(features[Q_HANGING_KING_US], &early, &late);
+    capturable[5].contribute<-1>(flip_vertically(features[Q_HANGING_KING_THEM]), &early, &late);
 
-    SafeSquare ourKingSq = lsb_i_promise_board_is_not_empty(pos.pieceBitboards_[coloredPiece<US, Piece::KING>()]);
-    SafeSquare theirKingSq = lsb_i_promise_board_is_not_empty(pos.pieceBitboards_[coloredPiece<THEM, Piece::KING>()]);
+    SafeSquare ourKingSq = lsb_i_promise_board_is_not_empty(orient<US>(pos.pieceBitboards_[coloredPiece<US, Piece::KING>()]));
+    SafeSquare theirKingSq = lsb_i_promise_board_is_not_empty(orient<US>(pos.pieceBitboards_[coloredPiece<THEM, Piece::KING>()]));
 
     //
     // King safety. For king-specific features we shift all bitboards s.t. our king is on e4, so that the features are king-relative.
@@ -514,32 +579,42 @@ struct QstEvaluator : public EvaluatorInterface {
 
     // How well do we control the squares around our king?
     const Bitboard nearKingMask = kKingDist[2][SafeSquare::SE4];
-    features[44] = shiftToDestination<SafeSquare::SE4>( ourKingSq, orient<US>(threats.badForOur[Piece::PAWN])) & nearKingMask;
-    features[45] = shiftToDestination<SafeSquare::SE4>(theirKingSq, orient<US>(threats.badForTheir[Piece::PAWN])) & nearKingMask;
-    features[46] = shiftToDestination<SafeSquare::SE4>( ourKingSq, orient<US>(threats.badForOur[Piece::BISHOP])) & nearKingMask;
-    features[47] = shiftToDestination<SafeSquare::SE4>(theirKingSq, orient<US>(threats.badForTheir[Piece::BISHOP])) & nearKingMask;
-    features[48] = shiftToDestination<SafeSquare::SE4>( ourKingSq, orient<US>(threats.badForOur[Piece::KING])) & nearKingMask;
-    features[49] = shiftToDestination<SafeSquare::SE4>(theirKingSq, orient<US>(threats.badForTheir[Piece::KING])) & nearKingMask;
-    badSqNearKing[0].contribute(features[44], &early, &late);
-    badSqNearKing[0].contribute<-1>(flip_vertically(features[45]), &early, &late);
-    badSqNearKing[1].contribute(features[46], &early, &late);
-    badSqNearKing[1].contribute<-1>(flip_vertically(features[47]), &early, &late);
-    badSqNearKing[2].contribute(features[48], &early, &late);
-    badSqNearKing[2].contribute<-1>(flip_vertically(features[49]), &early, &late);
+    features[Q_BAD_FOR_PAWN_NEAR_KING_US] = shiftToDestination<SafeSquare::SE4>( ourKingSq, orient<US>(threats.badForOur[Piece::PAWN])) & nearKingMask;
+    features[Q_BAD_FOR_PAWN_NEAR_KING_THEM] = shiftToDestination<SafeSquare::SE4>(theirKingSq, orient<US>(threats.badForTheir[Piece::PAWN])) & nearKingMask;
+    features[Q_BAD_FOR_BISHOP_NEAR_KING_US] = shiftToDestination<SafeSquare::SE4>( ourKingSq, orient<US>(threats.badForOur[Piece::BISHOP])) & nearKingMask;
+    features[Q_BAD_FOR_BISHOP_NEAR_KING_THEM] = shiftToDestination<SafeSquare::SE4>(theirKingSq, orient<US>(threats.badForTheir[Piece::BISHOP])) & nearKingMask;
+    features[Q_BAD_FOR_KING_NEAR_KING_US] = shiftToDestination<SafeSquare::SE4>( ourKingSq, orient<US>(threats.badForOur[Piece::KING])) & nearKingMask;
+    features[Q_BAD_FOR_KING_NEAR_KING_THEM] = shiftToDestination<SafeSquare::SE4>(theirKingSq, orient<US>(threats.badForTheir[Piece::KING])) & nearKingMask;
+    badSqNearKing[0].contribute(features[Q_BAD_FOR_PAWN_NEAR_KING_US], &early, &late);
+    badSqNearKing[0].contribute<-1>(flip_vertically(features[Q_BAD_FOR_PAWN_NEAR_KING_THEM]), &early, &late);
+    badSqNearKing[1].contribute(features[Q_BAD_FOR_BISHOP_NEAR_KING_US], &early, &late);
+    badSqNearKing[1].contribute<-1>(flip_vertically(features[Q_BAD_FOR_BISHOP_NEAR_KING_THEM]), &early, &late);
+    badSqNearKing[2].contribute(features[Q_BAD_FOR_KING_NEAR_KING_US], &early, &late);
+    badSqNearKing[2].contribute<-1>(flip_vertically(features[Q_BAD_FOR_KING_NEAR_KING_THEM]), &early, &late);
 
     // Pawns in front of the king.
-    features[50] = shiftToDestination<SafeSquare::SE4>( ourKingSq, orient<US>(pos.pieceBitboards_[coloredPiece<US, Piece::PAWN>()])) & nearKingMask;
-    features[51] = shiftToDestination<SafeSquare::SE4>(theirKingSq, orient<US>(pos.pieceBitboards_[coloredPiece<THEM, Piece::PAWN>()])) & nearKingMask;
-    pInFrontOfK.contribute(features[50], &early, &late);
-    pInFrontOfK.contribute<-1>(flip_vertically(features[51]), &early, &late);
+    features[Q_PAWN_IN_FRONT_OF_KING_US] = shiftToDestination<SafeSquare::SE4>( ourKingSq, orient<US>(pos.pieceBitboards_[coloredPiece<US, Piece::PAWN>()])) & nearKingMask;
+    features[Q_PAWN_IN_FRONT_OF_KING_THEM] = shiftToDestination<SafeSquare::SE4>(theirKingSq, orient<US>(pos.pieceBitboards_[coloredPiece<THEM, Piece::PAWN>()])) & nearKingMask;
+    pInFrontOfK.contribute(features[Q_PAWN_IN_FRONT_OF_KING_US], &early, &late);
+    pInFrontOfK.contribute<-1>(flip_vertically(features[Q_PAWN_IN_FRONT_OF_KING_THEM]), &early, &late);
 
     // Pawn storms.
-    features[52] = shiftToDestination<SafeSquare::SE4>( ourKingSq, theirPawns);
-    features[53] = shiftToDestination<SafeSquare::SE4>(theirKingSq, ourPawns);
-    pawnStorm.contribute(features[52], &early, &late);
-    pawnStorm.contribute<-1>(flip_vertically(features[53]), &early, &late);
+    features[Q_PAWN_STORM_US] = shiftToDestination<SafeSquare::SE4>( ourKingSq, theirPawns);
+    features[Q_PAWN_STORM_THEM] = shiftToDestination<SafeSquare::SE4>(theirKingSq, ourPawns);
+    pawnStorm.contribute(features[Q_PAWN_STORM_US], &early, &late);
+    pawnStorm.contribute<-1>(flip_vertically(features[Q_PAWN_STORM_THEM]), &early, &late);
 
-    static_assert(NUM_FEATURES == 54, "features size mismatch");
+    // adjacentPawns
+    features[Q_ADJACENT_PAWNS_US] = shift<Direction::EAST>(ourPawns) & ourPawns;
+    features[Q_ADJACENT_PAWNS_THEM] = shift<Direction::EAST>(theirPawns) & theirPawns;
+    adjacentPawns.contribute(features[Q_ADJACENT_PAWNS_US], &early, &late);
+    adjacentPawns.contribute<-1>(flip_vertically(features[Q_ADJACENT_PAWNS_THEM]), &early, &late);
+
+    // diagonalPawns
+    features[Q_DIAGONAL_PAWNS_US] = shift<Direction::NORTH_EAST>(ourPawns) & ourPawns;
+    features[Q_DIAGONAL_PAWNS_THEM] = shift<Direction::NORTH_EAST>(theirPawns) & theirPawns;
+    diagonalPawns.contribute(features[Q_DIAGONAL_PAWNS_US], &early, &late);
+    diagonalPawns.contribute<-1>(flip_vertically(features[Q_DIAGONAL_PAWNS_THEM]), &early, &late);
 
     int32_t eval = int32_t(early) * stage + int32_t(late) * (18 - stage);
     return ColoredEvaluation<US>(eval / 18);
