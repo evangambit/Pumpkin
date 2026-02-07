@@ -465,6 +465,9 @@ struct QstEvaluator : public EvaluatorInterface {
     pInFrontOfK.load_table(in, "pInFrontOfK");
     pawnStorm.load_table(in, "pawnStorm");
 
+    adjacentPawns.load_table(in, "adjacentPawns");
+    diagonalPawns.load_table(in, "diagonalPawns");
+
     float biasWeights[2];
     load_flat<2>(in, biasWeights, "biases");
     biases[0] = static_cast<Evaluation>(std::round(biasWeights[0]));

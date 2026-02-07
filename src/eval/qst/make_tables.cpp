@@ -25,7 +25,6 @@ using namespace ChessEngine;
 using WriterI16 = ShardedMatrix::Writer<int16_t>;
 using WriterI8 = ShardedMatrix::Writer<int8_t>;
 using WriterB = ShardedMatrix::Writer<bool>;
-constexpr size_t NUM_BITBOARDS = 54;
 
 float sigmoid(float x) {
   return 1.0f / (1.0f + std::exp(-x));
@@ -46,20 +45,20 @@ void process(
 
   Position pos(line[0]);
   std::vector<Bitboard> features;
-  features.reserve(NUM_BITBOARDS);
+  features.reserve(Q_NUM_FEATURES);
   if (pos.turn_ == Color::WHITE) {
     qstEvaluator.get_features<Color::WHITE>(pos, &features);
   } else {
     qstEvaluator.get_features<Color::BLACK>(pos, &features);
   }
   
-  if (features.size() != NUM_BITBOARDS) {
-    std::cerr << "Error: Expected " << NUM_BITBOARDS << " features, got " << features.size() << std::endl;
+  if (features.size() != Q_NUM_FEATURES) {
+    std::cerr << "Error: Expected " << Q_NUM_FEATURES << " features, got " << features.size() << std::endl;
     return;
   }
 
-  bool qstFeatures[NUM_BITBOARDS * 64];
-  for (size_t i = 0; i < NUM_BITBOARDS; ++i) {
+  bool qstFeatures[Q_NUM_FEATURES * 64];
+  for (size_t i = 0; i < Q_NUM_FEATURES; ++i) {
     for (size_t j = 0; j < 64; ++j) {
       qstFeatures[i * 64 + j] = (features[i] >> j) & 1;
     }
@@ -132,7 +131,7 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  WriterB qstInputWriter(outpath + "-qst", { NUM_BITBOARDS * 64 });
+  WriterB qstInputWriter(outpath + "-qst", { Q_NUM_FEATURES * 64 });
   WriterI16 evalWriter(outpath + "-eval", { 3 });
   WriterI8 turnWriter(outpath + "-turn", { 1 });
   WriterI8 pieceCountWriter(outpath + "-piece-counts", { 10 });
