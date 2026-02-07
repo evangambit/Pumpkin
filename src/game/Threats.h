@@ -226,13 +226,14 @@ struct Threats {
     const Bitboard badForAllOfThem = this->ourTargets & ~this->theirTargets;
 
     this->badForOur[Piece::PAWN] = badForAllOfUs;
+    this->badForTheir[Piece::PAWN] = badForAllOfThem;
+
     // Not defended by a pawn and attacked more than once.
     this->badForOur[Piece::PAWN] |= (~(ourPawn1 | ourPawn2)) & (this->theirDoubleTargets & ~this->ourDoubleTargets);
+    this->badForTheir[Piece::PAWN] |= (~(theirPawn1 | theirPawn2)) & (this->ourDoubleTargets & ~this->theirDoubleTargets);
+
     // Defended by one pawn and attacked by a pawn and a piece.
     this->badForOur[Piece::PAWN] |= (ourPawn1 ^ ourPawn2) & (theirPawn1 | theirPawn2) & (this->theirDoubleTargets & ~this->ourDoubleTargets);
-
-    this->badForTheir[Piece::PAWN] = badForAllOfThem;
-    this->badForTheir[Piece::PAWN] |= (~(theirPawn1 & theirPawn2)) & (this->ourDoubleTargets & ~this->theirDoubleTargets);
     this->badForTheir[Piece::PAWN] |= (theirPawn1 ^ theirPawn2) & (ourPawn1 | ourPawn2) & (this->ourDoubleTargets & ~this->theirDoubleTargets);
 
     this->badForOur[Piece::PAWN] &= ~pos.colorBitboards_[THEM];
