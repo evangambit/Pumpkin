@@ -62,6 +62,8 @@ names = [
   'badSqNearK_k',
   'pInFrontOfK',
   'pawnStorm',
+  'adjacentPawns',
+  'diagonalPawns',
 ]
 
 def save_tensor(tensor: torch.Tensor, name: str, out: io.BufferedWriter):
@@ -155,7 +157,7 @@ def warmup_length(beta, c = 2.0):
 NUM_EPOCHS = 1
 BATCH_SIZE = 2048  # 2048
 maxlr = 3e-3
-BETAS = (0.9, 0.99)  # (0.9, 0.999)
+BETAS = (0.9, 0.9)  # (0.9, 0.999)
 WEIGHT_DECAY = 0.1
 
 if __name__ == '__main__':
