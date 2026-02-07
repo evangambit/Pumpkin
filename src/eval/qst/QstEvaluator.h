@@ -274,6 +274,19 @@ struct TaperedQuantizedSquareTable {
 };
 
 /**
+ * Shift a bitboard s.t. the source square maps to the destination square.
+ */
+template<SafeSquare DESTINATION>
+inline Bitboard shiftToDestination(SafeSquare source, Bitboard bb) {
+  // TODO: fix wrapping effect?
+   if (source > DESTINATION) {
+    return bb >> (source - DESTINATION);
+  } else {
+    return bb << (DESTINATION - source);
+  }
+}
+
+/**
  * Quantized Square Table Evaluator
  *
  * Uses an un-quantized piece-square table for evaluation, 
@@ -311,6 +324,12 @@ struct QstEvaluator : public EvaluatorInterface {
     for (size_t i = 0; i < 6; ++i) {
       capturable[i].load_table(in, "hanging_" + std::string(1, "pnbrqk"[i]));
     }
+    
+    badSqNearKing[0].load_table(in, "badSqNearK_p");
+    badSqNearKing[1].load_table(in, "badSqNearK_b");
+    badSqNearKing[2].load_table(in, "badSqNearK_k");
+    pInFrontOfK.load_table(in, "pInFrontOfK");
+    pawnStorm.load_table(in, "pawnStorm");
 
     float biasWeights[2];
     load_flat<2>(in, biasWeights, "biases");
@@ -333,10 +352,14 @@ struct QstEvaluator : public EvaluatorInterface {
   // A square where a rook cannot safely exist is moderately under the influence of enemy pieces.
   // Etc.
   // control[0-5] = bad for our PNBRQK, control[6-11] = bad for their PNBRQK
-  TaperedQuantizedSquareTable<4> control[12];
+  TaperedQuantizedSquareTable<2> control[12];
 
   // Bitboard for each piece type, indicating whether they're in danger of being captured.
   TaperedQuantizedSquareTable<2> capturable[6];
+
+  TaperedQuantizedSquareTable<2> badSqNearKing[3];
+  TaperedQuantizedSquareTable<2> pInFrontOfK;
+  TaperedQuantizedSquareTable<2> pawnStorm;
 
   Evaluation biases[2];
 
@@ -354,12 +377,18 @@ struct QstEvaluator : public EvaluatorInterface {
 
   // It's a little hacky to store features as a member variable, but it helps
   // ensure that get_features and evaluate are consistent with each other.
-  static constexpr size_t NUM_FEATURES = 44;
+  static constexpr size_t NUM_FEATURES = 54;
   Bitboard features[NUM_FEATURES];
 
   template<Color US>
   ColoredEvaluation<US> evaluate(const Position& pos) {
     constexpr Color THEM = opposite_color<US>();
+    constexpr Direction kForward = US == Color::WHITE ? Direction::NORTH : Direction::SOUTH;
+    constexpr Direction kBackward = US == Color::WHITE ? Direction::SOUTH : Direction::NORTH;
+
+    const Bitboard ourPawns = pos.pieceBitboards_[coloredPiece<US, Piece::PAWN>()];
+    const Bitboard theirPawns = pos.pieceBitboards_[coloredPiece<THEM, Piece::PAWN>()];
+
     int32_t stage = earliness(pos);
     Evaluation early = biases[0];
     Evaluation late = biases[1];
@@ -476,7 +505,41 @@ struct QstEvaluator : public EvaluatorInterface {
     capturable[5].contribute(features[42], &early, &late);
     capturable[5].contribute<-1>(flip_vertically(features[43]), &early, &late);
 
-    static_assert(NUM_FEATURES == 44, "features size mismatch");
+    SafeSquare ourKingSq = lsb_i_promise_board_is_not_empty(pos.pieceBitboards_[coloredPiece<US, Piece::KING>()]);
+    SafeSquare theirKingSq = lsb_i_promise_board_is_not_empty(pos.pieceBitboards_[coloredPiece<THEM, Piece::KING>()]);
+
+    //
+    // King safety. For king-specific features we shift all bitboards s.t. our king is on e4, so that the features are king-relative.
+    //
+
+    // How well do we control the squares around our king?
+    const Bitboard nearKingMask = kKingDist[2][SafeSquare::SE4];
+    features[44] = shiftToDestination<SafeSquare::SE4>( ourKingSq, orient<US>(threats.badForOur[Piece::PAWN])) & nearKingMask;
+    features[45] = shiftToDestination<SafeSquare::SE4>(theirKingSq, orient<US>(threats.badForTheir[Piece::PAWN])) & nearKingMask;
+    features[46] = shiftToDestination<SafeSquare::SE4>( ourKingSq, orient<US>(threats.badForOur[Piece::BISHOP])) & nearKingMask;
+    features[47] = shiftToDestination<SafeSquare::SE4>(theirKingSq, orient<US>(threats.badForTheir[Piece::BISHOP])) & nearKingMask;
+    features[48] = shiftToDestination<SafeSquare::SE4>( ourKingSq, orient<US>(threats.badForOur[Piece::KING])) & nearKingMask;
+    features[49] = shiftToDestination<SafeSquare::SE4>(theirKingSq, orient<US>(threats.badForTheir[Piece::KING])) & nearKingMask;
+    badSqNearKing[0].contribute(features[44], &early, &late);
+    badSqNearKing[0].contribute<-1>(flip_vertically(features[45]), &early, &late);
+    badSqNearKing[1].contribute(features[46], &early, &late);
+    badSqNearKing[1].contribute<-1>(flip_vertically(features[47]), &early, &late);
+    badSqNearKing[2].contribute(features[48], &early, &late);
+    badSqNearKing[2].contribute<-1>(flip_vertically(features[49]), &early, &late);
+
+    // Pawns in front of the king.
+    features[50] = shiftToDestination<SafeSquare::SE4>( ourKingSq, orient<US>(pos.pieceBitboards_[coloredPiece<US, Piece::PAWN>()])) & nearKingMask;
+    features[51] = shiftToDestination<SafeSquare::SE4>(theirKingSq, orient<US>(pos.pieceBitboards_[coloredPiece<THEM, Piece::PAWN>()])) & nearKingMask;
+    pInFrontOfK.contribute(features[50], &early, &late);
+    pInFrontOfK.contribute<-1>(flip_vertically(features[51]), &early, &late);
+
+    // Pawn storms.
+    features[52] = shiftToDestination<SafeSquare::SE4>( ourKingSq, theirPawns);
+    features[53] = shiftToDestination<SafeSquare::SE4>(theirKingSq, ourPawns);
+    pawnStorm.contribute(features[52], &early, &late);
+    pawnStorm.contribute<-1>(flip_vertically(features[53]), &early, &late);
+
+    static_assert(NUM_FEATURES == 54, "features size mismatch");
 
     int32_t eval = int32_t(early) * stage + int32_t(late) * (18 - stage);
     return ColoredEvaluation<US>(eval / 18);
