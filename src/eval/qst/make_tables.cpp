@@ -25,7 +25,7 @@ using namespace ChessEngine;
 using WriterI16 = ShardedMatrix::Writer<int16_t>;
 using WriterI8 = ShardedMatrix::Writer<int8_t>;
 using WriterB = ShardedMatrix::Writer<bool>;
-constexpr size_t NUM_BITBOARDS = 44;
+constexpr size_t NUM_BITBOARDS = 54;
 
 float sigmoid(float x) {
   return 1.0f / (1.0f + std::exp(-x));

@@ -56,6 +56,12 @@ names = [
   'hanging_r',
   'hanging_q',
   'hanging_k',
+
+  'badSqNearK_p',
+  'badSqNearK_b',
+  'badSqNearK_k',
+  'pInFrontOfK',
+  'pawnStorm',
 ]
 
 def save_tensor(tensor: torch.Tensor, name: str, out: io.BufferedWriter):
@@ -189,7 +195,7 @@ if __name__ == '__main__':
   print("Creating model...")
   # [512, 128]
   dim = next(iter(dataset))[0].shape[1]
-  assert dim // 64 == len(names) * 2, f"{dim // 64} vs {len(names)}"
+  assert dim // 64 == len(names) * 2, f"{dim // 64} vs {len(names) * 2}"
   model = MyModel(dim).to(device)
 
   print("Creating optimizer...")
