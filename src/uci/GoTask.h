@@ -69,7 +69,7 @@ GoCommand make_go_command(std::deque<std::string> *command, Position *pos) {
     } else if (part == "mm") {
       goCommand.makeBestMove = true;
     } else if (lastCommand == "depth") {
-      goCommand.depthLimit = std::min(stoull(part), (uint64_t)kMaxSearchDepth);
+      goCommand.depthLimit = std::min(stoull(part), (unsigned long long)kMaxSearchDepth);
     } else if (lastCommand == "nodes") {
       goCommand.nodeLimit = stoull(part);
     } else if (lastCommand == "movetime") {

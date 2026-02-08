@@ -12,6 +12,7 @@ g++ -std=c++20 -o test_runner src/eval/nnue/tests/nnue-tests.cpp $(find src/ -na
 # Update NNUE object file (model_bin.o) from a binary file
 
 xxd -i model.bin > model_data.c
+xxd -i qst.bin > qst_data.c
 
 # Build main
 sh build.sh uci src/uci.cpp -O3 -DNDEBUG model_data.c 
