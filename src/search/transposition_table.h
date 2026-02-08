@@ -19,11 +19,10 @@ std::string bound_type_to_string(BoundType bound);
 struct TTEntry {
   uint64_t key;
   Move bestMove;
-  int depth;
-  int value;
+  uint8_t depth;
+  Evaluation value;
   BoundType bound;
-  int ply;
-  uint32_t generation;
+  uint8_t generation;
 };
 
 class TranspositionTable {
@@ -31,7 +30,7 @@ class TranspositionTable {
   TranspositionTable(size_t kilobytes);
   void clear();
   void new_search();
-  void store(uint64_t key, Move bestMove, int depth, int value, BoundType bound, int ply);
+  void store(uint64_t key, Move bestMove, int depth, int value, BoundType bound);
   bool probe(uint64_t key, TTEntry& entry) const;
   size_t kb_size() const { return table_.size() * sizeof(TTEntry) / 1024; }
   void resize(size_t kilobytes) {
@@ -45,7 +44,7 @@ class TranspositionTable {
   }
 private:
   std::vector<TTEntry> table_;
-  uint32_t generation_ = 1;
+  uint8_t generation_ = 1;
 };
 
 } // namespace ChessEngine
