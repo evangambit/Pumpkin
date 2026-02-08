@@ -5,6 +5,9 @@
 extern const char model_bin[];
 extern unsigned int model_bin_len;
 
+extern const char qst_bin[];
+extern unsigned int qst_bin_len;
+
 #include <atomic>
 #include <condition_variable>
 #include <deque>
@@ -179,14 +182,15 @@ class SetEvaluatorTask : public Task {
       state->evaluator = std::make_shared<NNUE::NnueEvaluator>(nnue_model);
       std::cout << "Evaluator set to nnue." << std::endl;
     } else if (evaluatorName == "qst") {
-      if (command.size() == 0) {
-        std::cout << "Error: qst evaluator requires a model filename argument." << std::endl;
-        return;
-      }
       auto qst = std::make_shared<QstEvaluator>();
-      std::string modelFile = command.at(0);
-      command.pop_front();
-      qst->load(modelFile);
+      if (command.size() > 0) {
+        std::string modelFile = command.at(0);
+        command.pop_front();
+        qst->load(modelFile);
+      } else {
+        std::istringstream f(std::string(qst_bin, qst_bin_len));
+        qst->load(f);
+      }
       state->evaluator = qst;
       std::cout << "Evaluator set to qst." << std::endl;
     } else {
