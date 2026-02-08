@@ -447,6 +447,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
 
   NegamaxResult<TURN> bestResult(kNullMove, kMinEval);
   Move bestMoveTT = kNullMove;
+  uint8_t numQuietMovesSearched = 0;
   for (ExtMove* move = moves; move < end; ++move) {
     if (thread->position_.pieceBitboards_[enemyKing] & bb(move->move.to)) {
       // Don't capture the king. TODO: remove this check by fixing move generation.
@@ -478,12 +479,23 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     }
 
     if (move->move != moves[0].move && (SEARCH_TYPE != SearchType::ROOT || thread->multiPV_ == 1)) {
-      // Null window search.
-      eval = -negamax<opposite_color<TURN>(), SearchType::NORMAL_SEARCH>(thread, childDepth, -(alpha + 1), -alpha, plyFromRoot + 1, stopThinking).evaluation;
+      // Very conservative late move reduction (115.2 +/- 103.0, LOS: 99.0 %)
+      const int reduction = SEARCH_TYPE != SearchType::ROOT
+        && childDepth >= 3
+        && move->capture == ColoredPiece::NO_COLORED_PIECE
+        && move->piece != Piece::PAWN
+        && numQuietMovesSearched >= 10
+        && !inCheck;
+
+      // Null window search (possibly with reduced depth).
+      eval = -negamax<opposite_color<TURN>(), SearchType::NORMAL_SEARCH>(thread, std::max(childDepth - reduction, 0), -(alpha + 1), -alpha, plyFromRoot + 1, stopThinking).evaluation;
       if (eval.value > alpha.value) {
         eval = -negamax<opposite_color<TURN>(), SearchType::NORMAL_SEARCH>(thread, childDepth, -beta, -alpha, plyFromRoot + 1, stopThinking).evaluation;
       }
     } else {
+      // Simple, full-window, full-depth search. Used for the first move in non-root search.
+      // In the root node, we only use this when multiPV==1, since we don't care about
+      // the exact evaluation of moves that aren't the best move.
       eval = -negamax<opposite_color<TURN>(), SearchType::NORMAL_SEARCH>(thread, childDepth, -beta, -alpha, plyFromRoot + 1, stopThinking).evaluation;
     }
 
@@ -499,6 +511,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     }
 
     undo<TURN>(&thread->position_);
+    numQuietMovesSearched += (move->capture == ColoredPiece::NO_COLORED_PIECE) && (move->move.moveType != MoveType::PROMOTION);
     if (eval > bestResult.evaluation) {
       bestResult.bestMove = move->move;
       bestResult.evaluation = eval;
