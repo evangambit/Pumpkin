@@ -292,7 +292,7 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
   thread->tt_->store(
     thread->position_.currentState_.hash,
     bestResult.bestMove,
-    -1,
+    0,
     bestResult.evaluation.value,
     bound
   );
