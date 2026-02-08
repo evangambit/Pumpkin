@@ -5,7 +5,7 @@
  * for "quiet" positions. A position is quiet if the next move played
  * is not a check, capture, or promotion.
  *
- * Usage: pgns2fens <directory>
+ * Usage: pgns2fens --input_path=<directory>
  *
  * Output: One FEN string per line to stdout.
  * Errors/warnings are written to stderr.
@@ -20,14 +20,25 @@
 #include <cctype>
 #include <algorithm>
 #include <zlib.h>
+#include <gflags/gflags.h>
 
 #include "game/Position.h"
 #include "game/geometry.h"
 #include "game/movegen/movegen.h"
 #include "string_utils.h"
 
+// Command line flags
+DEFINE_string(input_path, "", "Directory or file path containing PGN files to process");
+DEFINE_int32(max_games, -1, "Maximum number of games to process (-1 for unlimited)");
+DEFINE_bool(verbose, false, "Enable verbose output");
+DEFINE_bool(include_eval, true, "Include evaluation comments in output");
+DEFINE_bool(include_best_move, false, "Include best move comments in output");
+
 namespace fs = std::filesystem;
 using namespace ChessEngine;
+
+// Global counter for tracking processed games
+static int g_totalGamesProcessed = 0;
 
 /**
  * Checks if a string looks like a move number (e.g., "1.", "12.", "1...")
@@ -477,8 +488,15 @@ void process_game(const std::string& movetext, const std::string& startFen, cons
     }
 
     // Check if the position is quiet (move is not capture/promotion/check)
-    if (is_quiet_move(pos, move, extMove) && !token.eval.empty()) {
-      std::cout << pos.fen() << "|" << token.eval << std::endl;
+    if (is_quiet_move(pos, move, extMove)) {
+      std::cout << pos.fen();
+      if (FLAGS_include_eval && !token.eval.empty()) {
+        std::cout << "|" << token.eval;
+      }
+      if (FLAGS_include_best_move) {
+        std::cout << "|" << move.uci();
+      }
+      std::cout << std::endl;
     }
 
     // Make the move
@@ -555,8 +573,11 @@ void process_pgn_file(const fs::path& filepath) {
       // If we were collecting movetext, process the previous game
       if (inMovetext) {
         if (!movetext.empty()) {
-          process_game(movetext, startFen, filepath.string());
-          gameCount++;
+          if (FLAGS_max_games == -1 || g_totalGamesProcessed < FLAGS_max_games) {
+            process_game(movetext, startFen, filepath.string());
+            gameCount++;
+            g_totalGamesProcessed++;
+          }
           movetext.clear();
         }
         // New game starting - clear FEN from previous game
@@ -587,8 +608,11 @@ void process_pgn_file(const fs::path& filepath) {
     if (line.empty()) {
       if (inMovetext && !movetext.empty()) {
         // End of game
-        process_game(movetext, startFen, filepath.string());
-        gameCount++;
+        if (FLAGS_max_games == -1 || g_totalGamesProcessed < FLAGS_max_games) {
+          process_game(movetext, startFen, filepath.string());
+          gameCount++;
+          g_totalGamesProcessed++;
+        }
         movetext.clear();
         startFen.clear();
         inMovetext = false;
@@ -603,11 +627,16 @@ void process_pgn_file(const fs::path& filepath) {
 
   // Process any remaining game
   if (!movetext.empty()) {
-    process_game(movetext, startFen, filepath.string());
-    gameCount++;
+    if (FLAGS_max_games == -1 || g_totalGamesProcessed < FLAGS_max_games) {
+      process_game(movetext, startFen, filepath.string());
+      gameCount++;
+      g_totalGamesProcessed++;
+    }
   }
 
-  std::cerr << "Processed " << gameCount << " games from " << filepath << std::endl;
+  if (FLAGS_verbose) {
+    std::cerr << "Processed " << gameCount << " games from " << filepath << std::endl;
+  }
 }
 
 /**
@@ -627,15 +656,28 @@ bool is_pgn_file(const fs::path& filepath) {
 void process_directory(const fs::path& dirpath) {
   for (const auto& entry : fs::recursive_directory_iterator(dirpath)) {
     if (entry.is_regular_file() && is_pgn_file(entry.path())) {
+      if (FLAGS_max_games != -1 && g_totalGamesProcessed >= FLAGS_max_games) {
+        if (FLAGS_verbose) {
+          std::cerr << "Reached maximum games limit (" << FLAGS_max_games << ")" << std::endl;
+        }
+        break;
+      }
+      if (FLAGS_verbose) {
+        std::cerr << "Processing file: " << entry.path() << std::endl;
+      }
       process_pgn_file(entry.path());
     }
   }
 }
 
 int main(int argc, char* argv[]) {
-  if (argc < 2) {
-    std::cerr << "Usage: " << argv[0] << " <directory>" << std::endl;
-    std::cerr << "Recursively processes PGN files and outputs FEN strings for quiet positions." << std::endl;
+  gflags::SetUsageMessage("Extract quiet positions from PGN files");
+  gflags::SetVersionString("1.0");
+  gflags::ParseCommandLineFlags(&argc, &argv, true);
+
+  if (FLAGS_input_path.empty()) {
+    std::cerr << "Error: --input_path is required" << std::endl;
+    gflags::ShowUsageWithFlags(argv[0]);
     return 1;
   }
 
@@ -644,11 +686,18 @@ int main(int argc, char* argv[]) {
   initialize_zorbrist();
   initialize_movegen();
 
-  fs::path inputPath(argv[1]);
+  fs::path inputPath(FLAGS_input_path);
 
   if (!fs::exists(inputPath)) {
     std::cerr << "Error: Path does not exist: " << inputPath << std::endl;
     return 1;
+  }
+
+  if (FLAGS_verbose) {
+    std::cerr << "Processing: " << inputPath << std::endl;
+    if (FLAGS_max_games > 0) {
+      std::cerr << "Max games: " << FLAGS_max_games << std::endl;
+    }
   }
 
   if (fs::is_directory(inputPath)) {

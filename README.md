@@ -36,11 +36,11 @@ cutechess/build/cutechess-cli -engine cmd=uci arg="evaluator nnue" -engine cmd=o
 
 # pgn2fen
 
-g++ -std=c++20 -o p2f src/pgn2fens.cpp model_bin.o $(find src/ -name "*.cpp" | grep -Ev "([Tt]ests?|uci|main|make_tables|pgns2fens)\\.cpp") -pthread -L/usr/local/lib -lgflags -lz -O3 -DNDEBUG
+sh build.sh p2f src/pgns2fens.cpp  -O3 -DNDEBUG
 
 Randomly drop 90% of lines (better position diversity).
 
-$ ./p2f pgns/ | awk 'BEGIN {srand()} rand() <= 0.10' > data/stock/pos.txt
+$ ./p2f --input_path pgns/ | awk 'BEGIN {srand()} rand() <= 0.10' > data/stock/pos.txt
 
 Data comes from https://huggingface.co/datasets/official-stockfish/fishtest_pgns
 
