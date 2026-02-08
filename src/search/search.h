@@ -46,6 +46,8 @@ struct Killers {
 
 struct Frame {
   Killers killers;
+  Move responseTo[64];
+  Move responseFrom[64];
 };
 
 struct Thread {
@@ -424,10 +426,13 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   }
 
   // Add score to each move.
+  const Move lastMove = SEARCH_TYPE == SearchType::ROOT ? kNullMove : thread->position_.history_.back().move;
   for (ExtMove* move = moves; move < end; ++move) {
     move->score = move->move == entry.bestMove ? 10000 : 0;
     move->score += kQMoveOrderingPieceValue[cp2p(thread->position_.tiles_[move->move.to])];
     move->score += thread->frames_[plyFromRoot].killers.contains(move->move) ? 50 : 0;
+    move->score += thread->frames_[plyFromRoot].responseTo[lastMove.to] == move->move ? 20 : 0;
+    move->score += thread->frames_[plyFromRoot].responseFrom[lastMove.from] == move->move ? 20 : 0;
   }
   std::sort(
     moves,
@@ -526,7 +531,10 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
         alpha = ColoredEvaluation<TURN>(eval.value);
       }
       if (alpha >= beta) {
+        // TODO: check if this move is quiet. Probably also check if we've already added it as a killer.
         thread->frames_[plyFromRoot].killers.add(move->move);
+        thread->frames_[plyFromRoot].responseTo[lastMove.to] = move->move;
+        thread->frames_[plyFromRoot].responseFrom[lastMove.from] = move->move;
         break;
       }
     }
