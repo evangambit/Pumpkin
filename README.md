@@ -15,7 +15,7 @@ xxd -i model.bin > model_data.c
 xxd -i qst.bin > qst_data.c
 
 # Build main
-sh build.sh uci src/uci.cpp -O3 -DNDEBUG model_data.c 
+./build.sh uci src/uci.cpp -O3 -DNDEBUG model_data.c qst_data.c
 
 ./main rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2
 
@@ -25,9 +25,7 @@ g++ -std=c++20 -o uci src/uci.cpp model_bin.o $(find src/ -name "*.cpp" | grep -
 
 # Make tables
 
-g++ -std=c++20 -o make_tables src/eval/nnue/make_tables.cpp $(find src/ -name "*.cpp" | grep -Ev "([Tt]ests?|uci|main|make_tables|pgns2fens)\\.cpp") -pthread -L/usr/local/lib -lgflags -DNDEBUG -O3
-
-g++ -std=c++20 -o nnue_main src/eval/nnue/main.cpp $(find src/ -name "*.cpp" | grep -Ev "([Tt]ests?|uci|main|make_tables|pgns2fens)\\.cpp") -pthread -L/usr/local/lib -lgflags && ./nnue_main
+./build.sh make_tables src/eval/nnue/make_tables.cpp -O3 -DNDEBUG model_data.c qst_data.c
 
 # cutechess
 

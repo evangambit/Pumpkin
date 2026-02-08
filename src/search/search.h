@@ -294,8 +294,7 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
     bestResult.bestMove,
     -1,
     bestResult.evaluation.value,
-    bound,
-    plyFromRoot
+    bound
   );
 
   if (IS_PRINT_QNODE) {
@@ -569,8 +568,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     bestMoveTT,
     depth,
     bestResult.evaluation.value,
-    bound,
-    plyFromRoot
+    bound
   );
 
   if (IS_PRINT_NODE) {

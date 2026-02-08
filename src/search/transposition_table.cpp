@@ -33,7 +33,7 @@ void TranspositionTable::clear() {
   std::memset(table_.data(), 0, sizeof(TTEntry) * table_.size());
 }
 
-void TranspositionTable::store(uint64_t key, Move bestMove, int depth, int value, BoundType bound, int ply) {
+void TranspositionTable::store(uint64_t key, Move bestMove, int depth, int value, BoundType bound) {
   size_t idx = key % table_.size();
   TTEntry& entry = table_[idx];
   bool replace = false;
@@ -55,7 +55,6 @@ void TranspositionTable::store(uint64_t key, Move bestMove, int depth, int value
     entry.depth = depth;
     entry.value = value;
     entry.bound = bound;
-    entry.ply = ply;
     entry.generation = generation_;
   }
 }
