@@ -29,6 +29,25 @@
 
 namespace ChessEngine {
 
+constexpr unsigned kMaxSearchDepth = 64;
+constexpr unsigned kMaxPlyFromRoot = kMaxSearchDepth + 32;  // Allow some extra ply since we extend depth sometimes.
+
+struct Killers {
+  Move moves[2];
+  uint8_t index;
+  void add(Move move) {
+    moves[index] = move;
+    index = (index + 1) % 2;
+  }
+  bool contains(Move move) const {
+    return moves[0] == move || moves[1] == move;
+  }
+};
+
+struct Frame {
+  Killers killers;
+};
+
 struct Thread {
   uint64_t id_;
   uint64_t multiPV_;
@@ -41,6 +60,7 @@ struct Thread {
   uint64_t nodeCount_{0};
   uint64_t qNodeCount_{0};
   uint64_t nodeLimit_{(uint64_t)-1};
+  Frame frames_[kMaxPlyFromRoot];
 
   // This pointer should be considered non-owning. The TranspositionTable should created and managed elsewhere.
   TranspositionTable* tt_;
@@ -406,7 +426,8 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   // Add score to each move.
   for (ExtMove* move = moves; move < end; ++move) {
     move->score = move->move == entry.bestMove ? 10000 : 0;
-    move->score += (move->capture != ColoredPiece::NO_COLORED_PIECE);
+    move->score += kQMoveOrderingPieceValue[cp2p(thread->position_.tiles_[move->move.to])];
+    move->score += thread->frames_[plyFromRoot].killers.contains(move->move) ? 50 : 0;
   }
   std::sort(
     moves,
@@ -505,6 +526,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
         alpha = ColoredEvaluation<TURN>(eval.value);
       }
       if (alpha >= beta) {
+        thread->frames_[plyFromRoot].killers.add(move->move);
         break;
       }
     }
@@ -641,7 +663,7 @@ SearchResult<TURN> search(Thread* thread, std::atomic<bool> *stopThinking, std::
   if (onDepthCompleted != nullptr) {
     onDepthCompleted(1, searchResult);
   }
-  for (int i = 2; i <= thread->depth_; ++i) {
+  for (int i = 2; i <= std::min(thread->depth_, kMaxSearchDepth); ++i) {
     if (stopThinking->load()) break;
     result = negamax<TURN, SearchType::ROOT>(
       thread,
