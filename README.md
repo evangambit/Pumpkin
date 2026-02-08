@@ -11,10 +11,10 @@ g++ -std=c++20 -o test_runner src/eval/nnue/tests/nnue-tests.cpp $(find src/ -na
 
 # Update NNUE object file (model_bin.o) from a binary file
 
-ld -r -b binary -o model_bin.o model.bin
+xxd -i model.bin > model_data.c
 
 # Build main
-g++ -std=c++20 -o main src/main.cpp model_bin.o $(find src/ -name "*.cpp" | grep -Ev "([Tt]ests?|uci|main|make_tables|pgns2fens)\\.cpp") -pthread -L/usr/local/lib -lgflags
+sh build.sh uci src/uci.cpp -O3 -DNDEBUG model_data.c 
 
 ./main rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2
 
