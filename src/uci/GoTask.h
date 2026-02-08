@@ -24,7 +24,7 @@ namespace ChessEngine {
 
 struct GoCommand {
   GoCommand()
-  : depthLimit(100), nodeLimit(-1), timeLimitMs(-1),
+  : depthLimit(kMaxSearchDepth), nodeLimit(-1), timeLimitMs(-1),
   wtimeMs(0), btimeMs(0), wIncrementMs(0), bIncrementMs(0), movesUntilTimeControl(-1), makeBestMove(false) {}
 
   Position pos;
@@ -69,7 +69,7 @@ GoCommand make_go_command(std::deque<std::string> *command, Position *pos) {
     } else if (part == "mm") {
       goCommand.makeBestMove = true;
     } else if (lastCommand == "depth") {
-      goCommand.depthLimit = stoull(part);
+      goCommand.depthLimit = std::min(stoull(part), (uint64_t)kMaxSearchDepth);
     } else if (lastCommand == "nodes") {
       goCommand.nodeLimit = stoull(part);
     } else if (lastCommand == "movetime") {
