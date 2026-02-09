@@ -9,6 +9,14 @@
  *
  * Output: One FEN string per line to stdout.
  * Errors/warnings are written to stderr.
+ *
+ * We typically drop 90% of lines to not include too many highly similar
+ * positions. An example command is
+ *
+ * ./p2f --input_path pgns/ | awk 'BEGIN {srand()} rand() <= .1' > data/pos.txt
+ * shuf data/pos.txt > data/pos.shuf.txt
+ * ./make_tables data/pos.shuf.txt data/nnue
+ * ./qst_make_tables data/pos.shuf.txt data/qst
  */
 
 #include <filesystem>
@@ -460,6 +468,10 @@ std::vector<PgnToken> tokenize_movetext(const std::string& text) {
 void process_game(const std::string& movetext, const std::string& startFen, const std::string& filename) {
   Position pos = startFen.empty() ? Position::init() : Position(startFen);
   std::vector<PgnToken> tokens = tokenize_movetext(movetext);
+  
+  // Track last two moves for output
+  Move secondToLastMove = kNullMove;
+  Move lastMove = kNullMove;
 
   for (const PgnToken& token : tokens) {
     // Skip move numbers, results, and NAGs
@@ -494,10 +506,16 @@ void process_game(const std::string& movetext, const std::string& startFen, cons
         std::cout << "|" << token.eval;
       }
       if (FLAGS_include_best_move) {
+        std::cout << "|" << secondToLastMove.uci();
+        std::cout << "|" << lastMove.uci();
         std::cout << "|" << move.uci();
       }
       std::cout << std::endl;
     }
+
+    // Update move history
+    secondToLastMove = lastMove;
+    lastMove = move;
 
     // Make the move
     if (pos.turn_ == Color::WHITE) {
