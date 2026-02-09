@@ -34,7 +34,6 @@ void process(
   const std::vector<std::string>& line,
   WriterB& qstInputWriter,
   WriterI16& evalWriter,
-  WriterI8& turnWriter,
   WriterI8& pieceCountWriter,
   QstEvaluator& qstEvaluator
   ) {
@@ -91,9 +90,6 @@ void process(
   }
   evalWriter.write_row(wdl);
 
-  int8_t turn = pos.turn_ == Color::WHITE ? 1 : -1;
-  turnWriter.write_row(&turn);
-
   int8_t pieceCounts[10];
   pieceCounts[0] = std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_PAWN]);
   pieceCounts[1] = std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_KNIGHT]);
@@ -133,7 +129,6 @@ int main(int argc, char *argv[]) {
 
   WriterB qstInputWriter(outpath + "-qst", { Q_NUM_FEATURES * 64 });
   WriterI16 evalWriter(outpath + "-eval", { 3 });
-  WriterI8 turnWriter(outpath + "-turn", { 1 });
   WriterI8 pieceCountWriter(outpath + "-piece-counts", { 10 });
 
   std::chrono::time_point<std::chrono::system_clock> startTime = std::chrono::system_clock::now();
@@ -147,7 +142,7 @@ int main(int argc, char *argv[]) {
       continue;
     }
     std::vector<std::string> parts = split(line, '|');
-    process(parts, qstInputWriter, evalWriter, turnWriter, pieceCountWriter, qstEvaluator);
+    process(parts, qstInputWriter, evalWriter, pieceCountWriter, qstEvaluator);
 
     if ((++counter) % 100'000 == 0) {
       double ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime).count();
