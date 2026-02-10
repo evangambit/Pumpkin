@@ -159,8 +159,8 @@ struct Killers {
 
 struct Frame {
   Killers killers;
-  Move responseTo[64];
-  Move responseFrom[64];
+  Move responseTo[Piece::NUM_PIECES][64];
+  Move responseFrom[Piece::NUM_PIECES][64];
 };
 
 struct Thread {
@@ -558,8 +558,8 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     // Next prioritize the killer move(s).
     move->score += thread->frames_[plyFromRoot].killers.contains(move->move) ? 50 : 0;
     // Prioritize moves that caused a beta cutoff in a similar position, in response to a similar move.
-    move->score += thread->frames_[plyFromRoot].responseTo[lastMove.to] == move->move ? 20 : 0;
-    move->score += thread->frames_[plyFromRoot].responseFrom[lastMove.from] == move->move ? 20 : 0;
+    move->score += thread->frames_[plyFromRoot].responseTo[move->piece][lastMove.to] == move->move ? 20 : 0;
+    move->score += thread->frames_[plyFromRoot].responseFrom[move->piece][lastMove.from] == move->move ? 20 : 0;
 
     // Penalize pawn moves.
     move->score -= move->piece == Piece::PAWN;
@@ -676,8 +676,8 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
       if (alpha >= beta) {
         // TODO: check if this move is quiet. Probably also check if we've already added it as a killer.
         thread->frames_[plyFromRoot].killers.add(move->move);
-        thread->frames_[plyFromRoot].responseTo[lastMove.to] = move->move;
-        thread->frames_[plyFromRoot].responseFrom[lastMove.from] = move->move;
+        thread->frames_[plyFromRoot].responseTo[move->piece][lastMove.to] = move->move;
+        thread->frames_[plyFromRoot].responseFrom[move->piece][lastMove.from] = move->move;
         break;
       }
     }
