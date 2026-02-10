@@ -560,8 +560,9 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     // Prioritize moves that caused a beta cutoff in a similar position, in response to a similar move.
     move->score += thread->frames_[plyFromRoot].responseTo[lastMove.to] == move->move ? 20 : 0;
     move->score += thread->frames_[plyFromRoot].responseFrom[lastMove.from] == move->move ? 20 : 0;
-    // move->score += kMoveOrderFromSquare[move->move.from + 64 * (move->piece - 1)] / 10;
-    // move->score += kMoveOrderToSquare[move->move.to + 64 * (move->piece - 1)] / 10;
+
+    // Penalize pawn moves.
+    move->score -= move->piece == Piece::PAWN;
   }
   std::sort(
     moves,
