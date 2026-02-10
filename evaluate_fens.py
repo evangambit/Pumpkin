@@ -8,6 +8,8 @@ and compares the number of nodes searched by each engine.
 Usage:
     python evaluate_fens.py --engine1 ./engine1 --engine2 ./engine2 --fens fens.txt --depth 8
     python evaluate_fens.py --engine1 ./engine1 --engine2 ./engine2 --fens fens.txt --depth 8 --limit 100
+
+It is primarily used to evaluate move ordering changes (as a (much) faster alternative to running full games).
 """
 
 import subprocess
@@ -106,26 +108,28 @@ class UCIEngine:
             self.process.wait()
 
 
-def load_fens_from_file(filename: str) -> List[str]:
+def load_fens_from_file(filename: str, limit: int) -> List[str]:
     """Load FEN positions from a file"""
     fens = []
     try:
-        with open(filename, 'r') as f:
-            for line in f:
-                line = line.strip()
-                if line:
-                    # Handle format with additional data (like in pos.txt)
-                    if '|' in line:
-                        fen = line.split('|')[0].strip()
-                    else:
-                        fen = line
-                    fens.append(fen)
-    except FileNotFoundError:
-        print(f"Error: File {filename} not found")
-        sys.exit(1)
-    except Exception as e:
-        print(f"Error reading file {filename}: {e}")
-        sys.exit(1)
+      with open(filename, 'r') as f:
+        for line in f:
+          line = line.strip()
+          if line:
+            # Handle format with additional data (like in pos.txt)
+            if '|' in line:
+              fen = line.split('|')[0].strip()
+            else:
+              fen = line
+            fens.append(fen)
+            if len(fens) >= limit:
+              break
+  except FileNotFoundError:
+    print(f"Error: File {filename} not found")
+    sys.exit(1)
+  except Exception as e:
+    print(f"Error reading file {filename}: {e}")
+    sys.exit(1)
     
     return fens
 
@@ -135,8 +139,8 @@ def main():
     parser.add_argument("--engine1", "-e1", required=True, help="Path to first UCI chess engine")
     parser.add_argument("--engine2", "-e2", required=True, help="Path to second UCI chess engine")
     parser.add_argument("--fens", "-f", help="File containing FEN positions (one per line)")
-    parser.add_argument("--depth", "-d", type=int, default=8, help="Search depth (default: 8)")
-    parser.add_argument("--limit", "-l", type=int, help="Limit analysis to first N positions")
+    parser.add_argument("--depth", "-d", type=int, help="Search depth (default: 8)", required=True)
+    parser.add_argument("--limit", "-l", type=int, help="Limit analysis to first N positions", required=True)
     parser.add_argument("--verbose", "-v", action="store_true", help="Show detailed engine output")
     parser.add_argument("--output", "-o", help="Output file to save results")
     
@@ -146,12 +150,7 @@ def main():
         print("Error: Must specify --fens")
         sys.exit(1)
     
-    fens = load_fens_from_file(args.fens)
-    
-    # Apply limit if specified
-    if args.limit and args.limit < len(fens):
-        fens = fens[:args.limit]
-        print(f"Limited to first {args.limit} positions")
+    fens = load_fens_from_file(args.fens, args.limit)
     
     print(f"Loaded {len(fens)} FEN position(s)")
     print(f"Engine 1: {args.engine1}")
