@@ -51,8 +51,8 @@ struct UciEngine {
   UciEngine() {
     this->state.position = Position("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
   }
-  static void print_preamble() {
-    std::cout << "id name Pumpkin 0.0" << std::endl;
+  static void print_preamble(UciEngineState *state) {
+    std::cout << "id name " << state->name << std::endl;
     std::cout << "id author Morgan Redding" << std::endl << std::endl;
 
     // Garbage boiler plate to make the GUI happy.
@@ -81,7 +81,7 @@ struct UciEngine {
     UciEngineState *state = &this->state;
 
     if (commands.size() == 0) {
-      UciEngine::print_preamble();
+      print_preamble(state);
     }
 
     for (std::string command : commands) {
@@ -182,7 +182,7 @@ struct UciEngine {
     #endif
     } else if (parts[0] == "uci") {
       // It is convenient to pretend this is successful so we can set stuff up before cutechess-cli does its thing.
-      UciEngine::print_preamble();
+      print_preamble(state);
     } else if (parts[0] == "ponderhit") {
       // Ignore. (TODO: handle pondering better).
     } else if (parts[0] == "probe") {
@@ -203,7 +203,8 @@ struct UciEngine {
 };
 
 int main(int argc, char *argv[]) {
-  std::cout << "Pumpkin 0.0" << std::endl;
+  std::string name = std::string("Pumpkin 0.0 (") + argv[0] + ")";
+  std::cout << name << std::endl;
 
   std::vector<std::string> commands;
   for (int i = 1; i < argc; ++i) {
@@ -228,5 +229,6 @@ int main(int argc, char *argv[]) {
   initialize_movegen();
 
   UciEngine engine;
+  engine.state.name = name;
   engine.start(std::cin, commands);
 }
