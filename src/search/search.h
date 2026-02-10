@@ -558,11 +558,12 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     move->score += kMoveOrderingPieceValue[cp2p(thread->position_.tiles_[move->move.to])];
     // Next prioritize the killer move(s).
     move->score += thread->frames_[plyFromRoot].killers.contains(move->move) ? 50 : 0;
+
     // Prioritize moves that caused a beta cutoff in a similar position, in response to a similar move.
+    // Elo difference: 117.2 +/- 49.7, LOS: 100.0 %, DrawRatio: 5.5 %
+    // 59 - 33 - 8
     move->score += thread->frames_[plyFromRoot].responseTo[move->piece][lastMove.to] == move->move ? 20 : 0;
     move->score += thread->frames_[plyFromRoot].responseFrom[move->piece][lastMove.from] == move->move ? 20 : 0;
-
-    // Prioritize moves that caused a beta cutoff on our previous move.
     move->score += thread->frames_[plyFromRoot - 2].responseTo[move->piece][lastMove.to] == move->move ? 10 : 0;
     move->score += thread->frames_[plyFromRoot - 2].responseFrom[move->piece][lastMove.from] == move->move ? 10 : 0;
 

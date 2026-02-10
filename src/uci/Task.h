@@ -65,6 +65,7 @@ struct UciEngineState {
   unsigned multiPV;
   Position position;
   std::shared_ptr<EvaluatorInterface> evaluator;
+  std::string name;
 };
 
 }  // namespace ChessEngine
