@@ -566,6 +566,8 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     move->score += thread->frames_[plyFromRoot].responseFrom[move->piece][lastMove.from] == move->move ? 20 : 0;
     move->score += thread->frames_[plyFromRoot - 2].responseTo[move->piece][lastMove.to] == move->move ? 10 : 0;
     move->score += thread->frames_[plyFromRoot - 2].responseFrom[move->piece][lastMove.from] == move->move ? 10 : 0;
+    move->score += thread->frames_[plyFromRoot - 4].responseTo[move->piece][lastMove.to] == move->move ? 5 : 0;
+    move->score += thread->frames_[plyFromRoot - 4].responseFrom[move->piece][lastMove.from] == move->move ? 5 : 0;
 
     // Penalize pawn moves.
     move->score -= move->piece == Piece::PAWN;
