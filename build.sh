@@ -23,4 +23,4 @@ else
 fi
 
 # Build command
-g++ $CXXFLAGS -o $1 $2 $(find src/ -name "*.cpp" | grep -Ev "([Tt]ests?|uci|main|make_tables|pgns2fens)\\.cpp") $INCLUDE_FLAGS $LDFLAGS ${@:3}
+g++ $CXXFLAGS -o $1 $2 $(find src/ -name "*.cpp" | grep -Ev "([Tt]ests?|uci|main|make_tables|pgns2fens|make_moveorder_tables)\\.cpp") $INCLUDE_FLAGS $LDFLAGS ${@:3}
