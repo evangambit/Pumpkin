@@ -175,7 +175,7 @@ struct Thread {
   uint64_t nodeCount_{0};
   uint64_t qNodeCount_{0};
   uint64_t nodeLimit_{(uint64_t)-1};
-  Frame buffer[2];  // Empty buffer so that frames_[plyFromRoot - 2] is valid.
+  Frame buffer[4];  // Empty buffer so that frames_[plyFromRoot - 4] is valid.
   Frame frames_[kMaxPlyFromRoot];
 
   // This pointer should be considered non-owning. The TranspositionTable should created and managed elsewhere.
@@ -431,7 +431,7 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
 }
 
 template<Color TURN, SearchType SEARCH_TYPE>
-NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> alpha, ColoredEvaluation<TURN> beta, int plyFromRoot, std::atomic<bool> *stopThinking) {
+NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> alpha, ColoredEvaluation<TURN> beta, int plyFromRoot, Frame *frame, std::atomic<bool> *stopThinking) {
   assert(thread->position_.turn_ == TURN);
   if (IS_PRINT_NODE) {
     std::cout << repeat("  ", plyFromRoot) << "Negamax called: depth=" << depth << " alpha=" << alpha.value << " beta=" << beta.value << " plyFromRoot=" << plyFromRoot << " history " << thread->position_.history_ << std::endl;
@@ -545,7 +545,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
 
   // If we don't have a best move from the TT, we compute one with reduced depth.
   if (depth > 2 && (entry.key != key || entry.bestMove == kNullMove)) {
-    NegamaxResult<TURN> result = negamax<TURN, SEARCH_TYPE>(thread, depth - 2, alpha, beta, plyFromRoot, stopThinking);
+    NegamaxResult<TURN> result = negamax<TURN, SEARCH_TYPE>(thread, depth - 2, alpha, beta, plyFromRoot, frame, stopThinking);
     entry.bestMove = result.bestMove;
     entry.value = result.evaluation.value;
   }
@@ -562,12 +562,12 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     // Prioritize moves that caused a beta cutoff in a similar position, in response to a similar move.
     // Elo difference: 117.2 +/- 49.7, LOS: 100.0 %, DrawRatio: 5.5 %
     // 59 - 33 - 8
-    move->score += thread->frames_[plyFromRoot].responseTo[move->piece][lastMove.to] == move->move ? 20 : 0;
-    move->score += thread->frames_[plyFromRoot].responseFrom[move->piece][lastMove.from] == move->move ? 20 : 0;
-    move->score += thread->frames_[plyFromRoot - 2].responseTo[move->piece][lastMove.to] == move->move ? 10 : 0;
-    move->score += thread->frames_[plyFromRoot - 2].responseFrom[move->piece][lastMove.from] == move->move ? 10 : 0;
-    move->score += thread->frames_[plyFromRoot - 4].responseTo[move->piece][lastMove.to] == move->move ? 5 : 0;
-    move->score += thread->frames_[plyFromRoot - 4].responseFrom[move->piece][lastMove.from] == move->move ? 5 : 0;
+    move->score += frame->responseTo[move->piece][lastMove.to] == move->move ? 20 : 0;
+    move->score += frame->responseFrom[move->piece][lastMove.from] == move->move ? 20 : 0;
+    move->score += (frame - 2)->responseTo[move->piece][lastMove.to] == move->move ? 10 : 0;
+    move->score += (frame - 2)->responseFrom[move->piece][lastMove.from] == move->move ? 10 : 0;
+    move->score += (frame - 4)->responseTo[move->piece][lastMove.to] == move->move ? 5 : 0;
+    move->score += (frame - 4)->responseFrom[move->piece][lastMove.from] == move->move ? 5 : 0;
 
     // Penalize pawn moves.
     move->score -= move->piece == Piece::PAWN;
@@ -627,15 +627,15 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
         && !inCheck;
 
       // Null window search (possibly with reduced depth).
-      eval = -negamax<opposite_color<TURN>(), SearchType::NORMAL_SEARCH>(thread, std::max(childDepth - reduction, 0), -(alpha + 1), -alpha, plyFromRoot + 1, stopThinking).evaluation;
+      eval = -negamax<opposite_color<TURN>(), SearchType::NORMAL_SEARCH>(thread, std::max(childDepth - reduction, 0), -(alpha + 1), -alpha, plyFromRoot + 1, frame + 1, stopThinking).evaluation;
       if (eval.value > alpha.value) {
-        eval = -negamax<opposite_color<TURN>(), SearchType::NORMAL_SEARCH>(thread, childDepth, -beta, -alpha, plyFromRoot + 1, stopThinking).evaluation;
+        eval = -negamax<opposite_color<TURN>(), SearchType::NORMAL_SEARCH>(thread, childDepth, -beta, -alpha, plyFromRoot + 1, frame + 1, stopThinking).evaluation;
       }
     } else {
       // Simple, full-window, full-depth search. Used for the first move in non-root search.
       // In the root node, we only use this when multiPV==1, since we don't care about
       // the exact evaluation of moves that aren't the best move.
-      eval = -negamax<opposite_color<TURN>(), SearchType::NORMAL_SEARCH>(thread, childDepth, -beta, -alpha, plyFromRoot + 1, stopThinking).evaluation;
+      eval = -negamax<opposite_color<TURN>(), SearchType::NORMAL_SEARCH>(thread, childDepth, -beta, -alpha, plyFromRoot + 1, frame + 1, stopThinking).evaluation;
     }
 
     // We adjust mate scores to reflect the distance to mate here, rather than when we return kCheckmate. The
@@ -683,9 +683,9 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
       }
       if (alpha >= beta) {
         // TODO: check if this move is quiet. Probably also check if we've already added it as a killer.
-        thread->frames_[plyFromRoot].killers.add(move->move);
-        thread->frames_[plyFromRoot].responseTo[move->piece][lastMove.to] = move->move;
-        thread->frames_[plyFromRoot].responseFrom[move->piece][lastMove.from] = move->move;
+        frame->killers.add(move->move);
+        frame->responseTo[move->piece][lastMove.to] = move->move;
+        frame->responseFrom[move->piece][lastMove.from] = move->move;
         break;
       }
     }
@@ -815,6 +815,7 @@ SearchResult<TURN> search(Thread* thread, std::atomic<bool> *stopThinking, std::
     /*alpha=*/ColoredEvaluation<TURN>(kMinEval),
     /*beta=*/ColoredEvaluation<TURN>(kMaxEval),
     /*plyFromRoot=*/0,
+    &thread->frames_[0],
     &neverStopThinking  // Guarantee we always search at least depth 1 before stopping.
   );
   SearchResult<TURN> searchResult = negamax_result_to_search_result<TURN>(result, thread);
@@ -829,6 +830,7 @@ SearchResult<TURN> search(Thread* thread, std::atomic<bool> *stopThinking, std::
       /*alpha=*/ColoredEvaluation<TURN>(kMinEval),
       /*beta=*/ColoredEvaluation<TURN>(kMaxEval),
       /*plyFromRoot=*/0,
+      &thread->frames_[0],
       stopThinking
     );
     searchResult = negamax_result_to_search_result<TURN>(result, thread);
@@ -841,6 +843,7 @@ SearchResult<TURN> search(Thread* thread, std::atomic<bool> *stopThinking, std::
         /*alpha=*/ColoredEvaluation<TURN>(kMinEval),
         /*beta=*/ColoredEvaluation<TURN>(kMaxEval),
         /*plyFromRoot=*/0,
+        &thread->frames_[0],
         &neverStopThinking
       );
       searchResult = negamax_result_to_search_result<TURN>(result, thread);
