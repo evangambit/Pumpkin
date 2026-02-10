@@ -5,15 +5,18 @@
  * for "quiet" positions. A position is quiet if the next move played
  * is not a check, capture, or promotion.
  *
- * Usage: pgns2fens --input_path=<directory>
+ * Usage: pgns2fens --input_path=<directory> [--skip_percentage=0.9]
  *
  * Output: One FEN string per line to stdout.
  * Errors/warnings are written to stderr.
  *
- * We typically drop 90% of lines to not include too many highly similar
- * positions. An example command is
+ * By default, randomly skips 90% of positions to avoid including too many
+ * highly similar positions. The skip percentage can be controlled with
+ * --skip_percentage flag (0.0 = skip none, 1.0 = skip all).
  *
- * ./p2f --input_path pgns/ | awk 'BEGIN {srand()} rand() <= .1' > data/pos.txt
+ * Example commands:
+ * ./p2f --input_path pgns/ > data/pos.txt
+ * ./p2f --input_path pgns/ --skip_percentage 0.8 > data/pos.txt
  * shuf data/pos.txt > data/pos.shuf.txt
  * ./make_tables data/pos.shuf.txt data/nnue
  * ./qst_make_tables data/pos.shuf.txt data/qst
@@ -27,6 +30,7 @@
 #include <vector>
 #include <cctype>
 #include <algorithm>
+#include <random>
 #include <zlib.h>
 #include <gflags/gflags.h>
 
@@ -41,12 +45,30 @@ DEFINE_int32(max_games, -1, "Maximum number of games to process (-1 for unlimite
 DEFINE_bool(verbose, false, "Enable verbose output");
 DEFINE_bool(include_eval, true, "Include evaluation comments in output");
 DEFINE_bool(include_best_move, false, "Include best move comments in output");
+DEFINE_double(skip_percentage, 0.9, "Percentage of positions to skip randomly (0.0 = skip none, 0.9 = skip 90%)");
 
 namespace fs = std::filesystem;
 using namespace ChessEngine;
 
 // Global counter for tracking processed games
 static int g_totalGamesProcessed = 0;
+static int g_lastProgressUpdate = 0;
+static const int PROGRESS_INTERVAL = 100000; // Update every 100k games
+
+// Global random number generator for position sampling
+static std::random_device g_rd;
+static std::mt19937 g_gen(g_rd());
+static std::uniform_real_distribution<double> g_dist(0.0, 1.0);
+
+/**
+ * Print progress update if we've processed another 100k games
+ */
+void check_and_print_progress() {
+  if (g_totalGamesProcessed - g_lastProgressUpdate >= PROGRESS_INTERVAL) {
+    std::cerr << "Progress: Processed " << g_totalGamesProcessed << " games..." << std::endl;
+    g_lastProgressUpdate = g_totalGamesProcessed;
+  }
+}
 
 /**
  * Checks if a string looks like a move number (e.g., "1.", "12.", "1...")
@@ -350,14 +372,18 @@ std::string extract_eval_from_comment(const std::string& comment) {
   // Check for mate score (#N)
   if (comment[start] == '#') {
     size_t end = start + 1;
+    bool isNegative = false;
     if (end < comment.size() && (comment[end] == '+' || comment[end] == '-')) {
+      if (comment[end] == '-') {
+        isNegative = true;
+      }
       end++;
     }
     while (end < comment.size() && std::isdigit(comment[end])) {
       end++;
     }
     if (end > start + 1) {
-      return comment.substr(start, end - start);
+      return isNegative ? "-99" : "99";
     }
     return "";
   }
@@ -500,17 +526,68 @@ void process_game(const std::string& movetext, const std::string& startFen, cons
     }
 
     // Check if the position is quiet (move is not capture/promotion/check)
-    if (is_quiet_move(pos, move, extMove)) {
-      std::cout << pos.fen();
+    // Only output if we don't need eval or we have eval data
+    // Also randomly skip positions based on skip_percentage flag
+    if (is_quiet_move(pos, move, extMove) && (!FLAGS_include_eval || !token.eval.empty())) {
+      // Randomly skip positions based on skip_percentage
+      if (g_dist(g_gen) >= FLAGS_skip_percentage) {
+        // Output this position (only keep 1 - skip_percentage of positions)
+        std::cout << pos.fen();
       if (FLAGS_include_eval && !token.eval.empty()) {
         std::cout << "|" << token.eval;
       }
       if (FLAGS_include_best_move) {
-        std::cout << "|" << secondToLastMove.uci();
-        std::cout << "|" << lastMove.uci();
-        std::cout << "|" << move.uci();
+        ExtMove legalMoves[kMaxNumMoves];
+        ExtMove* end;
+        Position tempPos = pos;
+        if (tempPos.turn_ == Color::WHITE) {
+          end = compute_legal_moves<Color::WHITE>(&tempPos, legalMoves);
+        } else {
+          end = compute_legal_moves<Color::BLACK>(&tempPos, legalMoves);
+        }
+        int numLegalMoves = end - legalMoves;
+
+        // shuffle legal moves.
+        static std::random_device rd;
+        static std::mt19937 gen(rd());
+        std::shuffle(legalMoves, end, gen);
+
+        std::cout << "|" << int(move.from) << "|" << int(move.to);
+
+        bool moveFound = false;
+        constexpr size_t maxMovesToShow = 10;
+        size_t numMovesPrinted = 1;
+        for (ExtMove* m = legalMoves; m != end; ++m) {
+          if (m->move == move) {
+            moveFound = true;
+            continue;
+          }
+          if (numMovesPrinted < maxMovesToShow) {
+            int from = int(m->move.from);
+            int to = int(m->move.to);
+            if (pos.turn_ == Color::BLACK) {
+              // Flip the move coordinates for black.
+              from = (7 - from / 8) * 8 + (7 - from % 8);
+              to = (7 - to / 8) * 8 + (7 - to % 8);
+            }
+            from += (m->piece - 1) * 64;
+            to += (m->piece - 1) * 64;
+            std::cout << "|" << from << "|" << to;
+            numMovesPrinted++;
+          }
+        }
+        while (numMovesPrinted < maxMovesToShow) {
+          std::cout << "|384|384";  // padding for missing moves
+          numMovesPrinted++;
+        }
+        if (!moveFound) {
+          std::cerr << "Warning: Move not found in legal moves for '" << token.text
+                    << "' in " << filename << std::endl;
+          exit(1);
+        }
       }
       std::cout << std::endl;
+      }
     }
 
     // Update move history
@@ -595,6 +672,15 @@ void process_pgn_file(const fs::path& filepath) {
             process_game(movetext, startFen, filepath.string());
             gameCount++;
             g_totalGamesProcessed++;
+            check_and_print_progress();
+            
+            // Check if we've reached the limit after processing this game
+            if (FLAGS_max_games != -1 && g_totalGamesProcessed >= FLAGS_max_games) {
+              if (FLAGS_verbose) {
+                std::cerr << "Reached maximum games limit (" << FLAGS_max_games << ")" << std::endl;
+              }
+              return;
+            }
           }
           movetext.clear();
         }
@@ -630,6 +716,15 @@ void process_pgn_file(const fs::path& filepath) {
           process_game(movetext, startFen, filepath.string());
           gameCount++;
           g_totalGamesProcessed++;
+          check_and_print_progress();
+          
+          // Check if we've reached the limit after processing this game
+          if (FLAGS_max_games != -1 && g_totalGamesProcessed >= FLAGS_max_games) {
+            if (FLAGS_verbose) {
+              std::cerr << "Reached maximum games limit (" << FLAGS_max_games << ")" << std::endl;
+            }
+            return;
+          }
         }
         movetext.clear();
         startFen.clear();
@@ -649,6 +744,15 @@ void process_pgn_file(const fs::path& filepath) {
       process_game(movetext, startFen, filepath.string());
       gameCount++;
       g_totalGamesProcessed++;
+      check_and_print_progress();
+      
+      // Check if we've reached the limit after processing this game
+      if (FLAGS_max_games != -1 && g_totalGamesProcessed >= FLAGS_max_games) {
+        if (FLAGS_verbose) {
+          std::cerr << "Reached maximum games limit (" << FLAGS_max_games << ")" << std::endl;
+        }
+        return;
+      }
     }
   }
 
@@ -674,16 +778,18 @@ bool is_pgn_file(const fs::path& filepath) {
 void process_directory(const fs::path& dirpath) {
   for (const auto& entry : fs::recursive_directory_iterator(dirpath)) {
     if (entry.is_regular_file() && is_pgn_file(entry.path())) {
+      if (FLAGS_verbose) {
+        std::cerr << "Processing file: " << entry.path() << std::endl;
+      }
+      process_pgn_file(entry.path());
+      
+      // Check if we've reached the limit after processing this file
       if (FLAGS_max_games != -1 && g_totalGamesProcessed >= FLAGS_max_games) {
         if (FLAGS_verbose) {
           std::cerr << "Reached maximum games limit (" << FLAGS_max_games << ")" << std::endl;
         }
         break;
       }
-      if (FLAGS_verbose) {
-        std::cerr << "Processing file: " << entry.path() << std::endl;
-      }
-      process_pgn_file(entry.path());
     }
   }
 }
@@ -717,6 +823,8 @@ int main(int argc, char* argv[]) {
       std::cerr << "Max games: " << FLAGS_max_games << std::endl;
     }
   }
+  
+  std::cerr << "Starting PGN processing (progress updates every " << PROGRESS_INTERVAL << " games)..." << std::endl;
 
   if (fs::is_directory(inputPath)) {
     process_directory(inputPath);
@@ -727,6 +835,8 @@ int main(int argc, char* argv[]) {
     std::cerr << "Error: Path is neither a file nor a directory: " << inputPath << std::endl;
     return 1;
   }
+  
+  std::cerr << "Finished processing. Total games processed: " << g_totalGamesProcessed << std::endl;
 
   return 0;
 }
