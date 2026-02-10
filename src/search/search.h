@@ -175,6 +175,7 @@ struct Thread {
   uint64_t nodeCount_{0};
   uint64_t qNodeCount_{0};
   uint64_t nodeLimit_{(uint64_t)-1};
+  Frame buffer[2];  // Empty buffer so that frames_[plyFromRoot - 2] is valid.
   Frame frames_[kMaxPlyFromRoot];
 
   // This pointer should be considered non-owning. The TranspositionTable should created and managed elsewhere.
@@ -430,7 +431,7 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
 }
 
 template<Color TURN, SearchType SEARCH_TYPE>
-NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> alpha, ColoredEvaluation<TURN> beta, unsigned plyFromRoot, std::atomic<bool> *stopThinking) {
+NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> alpha, ColoredEvaluation<TURN> beta, int plyFromRoot, std::atomic<bool> *stopThinking) {
   assert(thread->position_.turn_ == TURN);
   if (IS_PRINT_NODE) {
     std::cout << repeat("  ", plyFromRoot) << "Negamax called: depth=" << depth << " alpha=" << alpha.value << " beta=" << beta.value << " plyFromRoot=" << plyFromRoot << " history " << thread->position_.history_ << std::endl;
@@ -560,6 +561,10 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     // Prioritize moves that caused a beta cutoff in a similar position, in response to a similar move.
     move->score += thread->frames_[plyFromRoot].responseTo[move->piece][lastMove.to] == move->move ? 20 : 0;
     move->score += thread->frames_[plyFromRoot].responseFrom[move->piece][lastMove.from] == move->move ? 20 : 0;
+
+    // Prioritize moves that caused a beta cutoff on our previous move.
+    move->score += thread->frames_[plyFromRoot - 2].responseTo[move->piece][lastMove.to] == move->move ? 10 : 0;
+    move->score += thread->frames_[plyFromRoot - 2].responseFrom[move->piece][lastMove.from] == move->move ? 10 : 0;
 
     // Penalize pawn moves.
     move->score -= move->piece == Piece::PAWN;
