@@ -413,6 +413,9 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
     if (eval > alpha) {
       alpha = ColoredEvaluation<TURN>(eval.value);
       if (alpha >= beta) {
+        frame->killers.add(move->move);
+        frame->responseTo[move->piece][lastMove.to] = move->move;
+        frame->responseFrom[move->piece][lastMove.from] = move->move;
         break;
       }
     }
