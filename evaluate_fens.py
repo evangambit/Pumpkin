@@ -109,21 +109,21 @@ class UCIEngine:
 
 
 def load_fens_from_file(filename: str, limit: int) -> List[str]:
-    """Load FEN positions from a file"""
-    fens = []
-    try:
-      with open(filename, 'r') as f:
-        for line in f:
-          line = line.strip()
-          if line:
-            # Handle format with additional data (like in pos.txt)
-            if '|' in line:
-              fen = line.split('|')[0].strip()
-            else:
-              fen = line
-            fens.append(fen)
-            if len(fens) >= limit:
-              break
+  """Load FEN positions from a file"""
+  fens = []
+  try:
+    with open(filename, 'r') as f:
+      for line in f:
+        line = line.strip()
+        if line:
+          # Handle format with additional data (like in pos.txt)
+          if '|' in line:
+            fen = line.split('|')[0].strip()
+          else:
+            fen = line
+          fens.append(fen)
+          if len(fens) >= limit:
+            break
   except FileNotFoundError:
     print(f"Error: File {filename} not found")
     sys.exit(1)
@@ -131,7 +131,7 @@ def load_fens_from_file(filename: str, limit: int) -> List[str]:
     print(f"Error reading file {filename}: {e}")
     sys.exit(1)
     
-    return fens
+  return fens
 
 
 def main():

@@ -144,10 +144,11 @@ if __name__ == '__main__':
   print("Creating model...")
   from_lin = nn.Embedding(64 * 6 + 1, 1)
   to_lin = nn.Embedding(64 * 6 + 1, 1)
+  piece_lin = nn.Embedding(6 + 1, 1)
 
   print("Creating optimizer...")
   opt = torch.optim.AdamW(list(
-    from_lin.parameters()) + list(to_lin.parameters()
+    from_lin.parameters()) + list(to_lin.parameters()) + list(piece_lin.parameters()
   ), lr=0.0, weight_decay=WEIGHT_DECAY, betas=BETAS)
 
   # Calculate total steps
@@ -185,15 +186,19 @@ if __name__ == '__main__':
 
       x, moves = batch
 
-      froms = moves[:,0::2]
-      tos = moves[:,1::2]
+      from_squares = moves[:,0::2]
+      to_squares = moves[:,1::2]
 
-      yhat = from_lin(froms.to(torch.int64)) + to_lin(tos.to(torch.int64))
+      yhat = from_lin(from_squares.to(torch.int64)) + to_lin(to_squares.to(torch.int64)) + piece_lin((from_squares // 64).to(torch.int64))
       yhat = yhat.squeeze()   # (BATCH_SIZE, 10)
-      num_moves = (froms != 64).sum(1, keepdim=True)  # (BATCH_SIZE, 1)
+      num_moves = (from_squares != 64).sum(1, keepdim=True)  # (BATCH_SIZE, 1)
 
       # The first move is always the correct move.
-      loss = -torch.log_softmax(yhat / (num_moves + 1), dim=1)[:,0].mean()
+      # loss = -torch.log_softmax(yhat / (num_moves + 1), dim=1)[:,0].mean()
+
+      loss = -torch.log_softmax(yhat, dim=1)[:,0]
+      loss = (loss / num_moves.squeeze()).mean()
+
       baseline = -torch.log(1 / num_moves.float()).mean().item()
 
       loss.backward()
