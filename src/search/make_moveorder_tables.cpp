@@ -44,9 +44,7 @@ void process(
   // Create piece presence table: 768 booleans (12 channels × 64 squares)
   // Channels: piece_type (0-5) + color*6, where piece types are pawn=0, knight=1, etc.
   bool piecePresence[768];
-  for (size_t i = 0; i < 768; ++i) {
-    piecePresence[i] = false;
-  }
+  std::fill_n(piecePresence, 768, false);
   
   for (size_t i = 0; i < kNumSquares; ++i) {
     SafeSquare square = SafeSquare(i);

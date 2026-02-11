@@ -44,7 +44,7 @@ DEFINE_string(input_path, "", "Directory or file path containing PGN files to pr
 DEFINE_int32(max_games, -1, "Maximum number of games to process (-1 for unlimited)");
 DEFINE_bool(verbose, false, "Enable verbose output");
 DEFINE_bool(include_eval, true, "Include evaluation comments in output");
-DEFINE_bool(include_best_move, false, "Include best move comments in output");
+DEFINE_bool(include_moves, false, "Include the best move (and up to 9 random other moves)");
 DEFINE_double(skip_percentage, 0.9, "Percentage of positions to skip randomly (0.0 = skip none, 0.9 = skip 90%)");
 
 namespace fs = std::filesystem;
@@ -536,7 +536,7 @@ void process_game(const std::string& movetext, const std::string& startFen, cons
       if (FLAGS_include_eval && !token.eval.empty()) {
         std::cout << "|" << token.eval;
       }
-      if (FLAGS_include_best_move) {
+      if (FLAGS_include_moves) {
         ExtMove legalMoves[kMaxNumMoves];
         ExtMove* end;
         Position tempPos = pos;
@@ -552,7 +552,18 @@ void process_game(const std::string& movetext, const std::string& startFen, cons
         static std::mt19937 gen(rd());
         std::shuffle(legalMoves, end, gen);
 
-        std::cout << "|" << int(move.from) << "|" << int(move.to);
+        {
+          int from = int(move.from);
+          int to = int(move.to);
+          if (pos.turn_ == Color::BLACK) {
+            // Flip the move coordinates for black.
+            from = (7 - from / 8) * 8 + (7 - from % 8);
+            to = (7 - to / 8) * 8 + (7 - to % 8);
+          }
+          from += (extMove.piece - 1) * 64;
+          to += (extMove.piece - 1) * 64;
+          std::cout << "|" << from << "|" << to;
+        }
 
         bool moveFound = false;
         constexpr size_t maxMovesToShow = 10;
