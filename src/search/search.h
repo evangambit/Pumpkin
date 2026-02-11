@@ -264,7 +264,7 @@ const Evaluation kMoveOrderingPieceValue[Piece::NUM_PIECES] = {
 };
 
 template<Color TURN>
-NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, ColoredEvaluation<TURN> beta, int plyFromRoot, int quiescenceDepth, std::atomic<bool> *stopThinking) {
+NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, ColoredEvaluation<TURN> beta, int plyFromRoot, int quiescenceDepth, Frame *frame, std::atomic<bool> *stopThinking) {
   if (IS_PRINT_QNODE) {
     std::cout << repeat("  ", plyFromRoot) << "Quiescence search called: alpha=" << alpha.value << " beta=" << beta.value << " plyFromRoot=" << plyFromRoot << " quiescenceDepth=" << quiescenceDepth << " history" << thread->position_.history_ << std::endl;
   }
@@ -328,6 +328,7 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
   }
 
   // Move ordering: captures that capture higher value pieces first.
+  const Move lastMove = thread->position_.history_.back().move;
   Threats<TURN> threats(thread->position_);
   for (ExtMove* move = moves; move < end; ++move) {
     if (move->move == entry.bestMove) {
@@ -344,6 +345,13 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
       ((threats.badForOur[move->piece] & bb(move->move.to)) > 0) && !((threats.badForOur[move->piece] & bb(move->move.from)) > 0),
       kQMoveOrderingPieceValue[move->piece]
     );
+
+    move->score += frame->responseTo[move->piece][lastMove.to] == move->move ? 20 : 0;
+    move->score += frame->responseFrom[move->piece][lastMove.from] == move->move ? 20 : 0;
+    move->score += (frame - 2)->responseTo[move->piece][lastMove.to] == move->move ? 10 : 0;
+    move->score += (frame - 2)->responseFrom[move->piece][lastMove.from] == move->move ? 10 : 0;
+    move->score += (frame - 4)->responseTo[move->piece][lastMove.to] == move->move ? 5 : 0;
+    move->score += (frame - 4)->responseFrom[move->piece][lastMove.from] == move->move ? 5 : 0;
   }
   std::sort(
     moves,
@@ -391,7 +399,7 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
       }
     }
 
-    ColoredEvaluation<TURN> eval = -qsearch<opposite_color<TURN>()>(thread, -beta, -alpha, plyFromRoot + 1, quiescenceDepth + 1, stopThinking).evaluation;
+    ColoredEvaluation<TURN> eval = -qsearch<opposite_color<TURN>()>(thread, -beta, -alpha, plyFromRoot + 1, quiescenceDepth + 1, frame + 1, stopThinking).evaluation;
     if (eval.value < kLongestForcedMate) {
       eval.value += 1;
     } else if (eval.value > -kLongestForcedMate) {
@@ -490,7 +498,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     if (IS_PRINT_NODE) {
     std::cout << repeat("  ", plyFromRoot) << "Entering quiescence search." << std::endl;
     }
-    return qsearch(thread, alpha, beta, plyFromRoot, 0, stopThinking);
+    return qsearch(thread, alpha, beta, plyFromRoot, 0, frame, stopThinking);
   }
 
   ExtMove moves[kMaxNumMoves];
