@@ -22,8 +22,8 @@ uint32_t product(const std::vector<uint32_t>& A) {
   return p;
 }
 
-/** Targeted shard size (25 MB). */
-const uint32_t kShardSizeBytes = 25'000'000;
+/** Targeted shard size (100 MB). */
+const uint32_t kShardSizeBytes = 100'000'000;
 
 /**
  * An internal class with a 1-to-1 relationship with a shard file.

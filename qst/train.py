@@ -13,7 +13,9 @@ import torch.utils.data as tdata
 from sharded_matrix import ShardedLoader
 from ShardedMatricesIterableDataset import ShardedMatricesIterableDataset
 
-# shuf data/stock/pos.txt > data/stock/pos.shuf.txt
+# shuf data/pos.txt > data/pos.shuf.txt
+# or
+# terashuf < data/pos.txt > data/pos.shuf.txt
 
 def x2board(x, turn):
   x = x.reshape(-1, 8, 8)
@@ -166,19 +168,15 @@ if __name__ == '__main__':
   CHUNK_SIZE = 128
   assert BATCH_SIZE % CHUNK_SIZE == 0
   print("Loading dataset...")
-  # dataset_name = 'de6-md2'  # Accuracy: 78%, MSE: 0.077179
-  # dataset_name = 'de7-md4'  # Data quality: Accuracy: 92%, MSE: 0.037526
-  dataset_name = 'stock'
   dataset = ShardedMatricesIterableDataset(
-    f'data/{dataset_name}/qst-qst',
-    f'data/{dataset_name}/qst-eval',
-    f'data/{dataset_name}/qst-turn',
-    f'data/{dataset_name}/qst-piece-counts',
+    f'data/qst-qst',
+    f'data/qst-eval',
+    f'data/qst-piece-counts',
     chunk_size=CHUNK_SIZE,
   )
   print(f'Dataset loaded with {len(dataset) * CHUNK_SIZE} rows.')
 
-  device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+  device = torch.device('cuda' if torch.cuda.is_available() else ('mps' if torch.backends.mps.is_available() else 'cpu'))
 
   dataloader = tdata.DataLoader(dataset, batch_size=BATCH_SIZE//CHUNK_SIZE, shuffle=False, num_workers=0, pin_memory=True, drop_last=True)
 
@@ -236,7 +234,7 @@ if __name__ == '__main__':
       
       batch = [v.reshape((BATCH_SIZE,) + v.shape[2:]).to(device) for v in batch]
 
-      x, wdl, turn, piece_counts = batch
+      x, wdl, piece_counts = batch
       wdl = wdl.float() / 1000.0
       label = wdl2score(wdl[:,0], wdl[:,1], wdl[:,2])
 

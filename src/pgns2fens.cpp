@@ -17,7 +17,7 @@
  * Example commands:
  * ./p2f --input_path pgns/ > data/pos.txt
  * ./p2f --input_path pgns/ --skip_percentage 0.8 > data/pos.txt
- * shuf data/pos.txt > data/pos.shuf.txt
+ * terashuf < data/pos.txt > data/pos.shuf.txt
  * ./make_tables data/pos.shuf.txt data/nnue
  * ./qst_make_tables data/pos.shuf.txt data/qst
  */
@@ -31,6 +31,11 @@
 #include <cctype>
 #include <algorithm>
 #include <random>
+#include <queue>
+#include <unordered_set>
+#include <thread>
+#include <atomic>
+#include <mutex>
 #include <zlib.h>
 #include <gflags/gflags.h>
 
@@ -46,27 +51,65 @@ DEFINE_bool(verbose, false, "Enable verbose output");
 DEFINE_bool(include_eval, true, "Include evaluation comments in output");
 DEFINE_bool(include_moves, false, "Include the best move (and up to 9 random other moves)");
 DEFINE_double(skip_percentage, 0.9, "Percentage of positions to skip randomly (0.0 = skip none, 0.9 = skip 90%)");
+DEFINE_uint64(dedup_cache_size, 10000, "Size of LRU cache for deduplicating positions (0 = disabled)");
+DEFINE_int32(num_threads, 0, "Number of threads to use (0 = auto-detect based on hardware)");
 
 namespace fs = std::filesystem;
 using namespace ChessEngine;
 
-// Global counter for tracking processed games
-static int g_totalGamesProcessed = 0;
-static int g_lastProgressUpdate = 0;
+// Global counter for tracking processed games (atomic for thread safety)
+static std::atomic<int> g_totalGamesProcessed{0};
+static std::atomic<int> g_lastProgressUpdate{0};
 static const int PROGRESS_INTERVAL = 100000; // Update every 100k games
 
-// Global random number generator for position sampling
-static std::random_device g_rd;
-static std::mt19937 g_gen(g_rd());
-static std::uniform_real_distribution<double> g_dist(0.0, 1.0);
+// Mutex for synchronized stdout output
+static std::mutex g_outputMutex;
+static std::mutex g_progressMutex;
+
+// Thread-local random number generator for position sampling
+static thread_local std::mt19937 t_gen{std::random_device{}()};
+static thread_local std::uniform_real_distribution<double> t_dist(0.0, 1.0);
+
+// Thread-local LRU deduplication cache
+static thread_local std::unordered_set<uint64_t> t_seenHashes;
+static thread_local std::queue<uint64_t> t_hashOrder;
+
+// Returns true if position is new (not a duplicate), and adds it to the cache
+static bool check_and_insert_position(uint64_t hash) {
+  if (FLAGS_dedup_cache_size == 0) {
+    return true;  // Deduplication disabled
+  }
+  
+  if (t_seenHashes.count(hash)) {
+    return false;  // Duplicate
+  }
+  
+  // Insert new hash
+  t_seenHashes.insert(hash);
+  t_hashOrder.push(hash);
+  
+  // Evict oldest if over capacity
+  while (t_hashOrder.size() > FLAGS_dedup_cache_size) {
+    uint64_t oldest = t_hashOrder.front();
+    t_hashOrder.pop();
+    t_seenHashes.erase(oldest);
+  }
+  
+  return true;
+}
 
 /**
  * Print progress update if we've processed another 100k games
  */
 void check_and_print_progress() {
-  if (g_totalGamesProcessed - g_lastProgressUpdate >= PROGRESS_INTERVAL) {
-    std::cerr << "Progress: Processed " << g_totalGamesProcessed << " games..." << std::endl;
-    g_lastProgressUpdate = g_totalGamesProcessed;
+  int current = g_totalGamesProcessed.load();
+  int lastUpdate = g_lastProgressUpdate.load();
+  if (current - lastUpdate >= PROGRESS_INTERVAL) {
+    // Try to claim the update
+    if (g_lastProgressUpdate.compare_exchange_strong(lastUpdate, current)) {
+      std::lock_guard<std::mutex> lock(g_progressMutex);
+      std::cerr << "Progress: Processed " << current << " games..." << std::endl;
+    }
   }
 }
 
@@ -490,10 +533,16 @@ std::vector<PgnToken> tokenize_movetext(const std::string& text) {
 /**
  * Processes a single PGN game's movetext and outputs quiet positions.
  * If startFen is empty, uses the standard starting position.
+ * Output is written to the provided stream (for thread-safe buffering).
  */
-void process_game(const std::string& movetext, const std::string& startFen, const std::string& filename) {
+void process_game(const std::string& movetext, const std::string& startFen, const std::string& filename, std::ostream& out) {
   Position pos = startFen.empty() ? Position::init() : Position(startFen);
   std::vector<PgnToken> tokens = tokenize_movetext(movetext);
+  if (tokens.size() < 10) {
+    // Typically something went wrong (e.g. "Internal Server Error", "The server encountered an unexpected internal server error", etc.).
+    std::cerr << "Warning: Game in " << filename << " has too few tokens (" << tokens.size() << "). Skipping." << std::endl;
+    return;
+  }
   
   // Track last two moves for output
   Move secondToLastMove = kNullMove;
@@ -530,11 +579,13 @@ void process_game(const std::string& movetext, const std::string& startFen, cons
     // Also randomly skip positions based on skip_percentage flag
     if (is_quiet_move(pos, move, extMove) && (!FLAGS_include_eval || !token.eval.empty())) {
       // Randomly skip positions based on skip_percentage
-      if (g_dist(g_gen) >= FLAGS_skip_percentage) {
+      if (t_dist(t_gen) >= FLAGS_skip_percentage) {
+        // Check for duplicate position before outputting
+        if (check_and_insert_position(pos.currentState_.hash)) {
         // Output this position (only keep 1 - skip_percentage of positions)
-        std::cout << pos.fen();
+        out << pos.fen();
       if (FLAGS_include_eval && !token.eval.empty()) {
-        std::cout << "|" << token.eval;
+        out << "|" << token.eval;
       }
       if (FLAGS_include_moves) {
         ExtMove legalMoves[kMaxNumMoves];
@@ -548,9 +599,7 @@ void process_game(const std::string& movetext, const std::string& startFen, cons
         int numLegalMoves = end - legalMoves;
 
         // shuffle legal moves.
-        static std::random_device rd;
-        static std::mt19937 gen(rd());
-        std::shuffle(legalMoves, end, gen);
+        std::shuffle(legalMoves, end, t_gen);
 
         {
           int from = int(move.from);
@@ -562,7 +611,7 @@ void process_game(const std::string& movetext, const std::string& startFen, cons
           }
           from += (extMove.piece - 1) * 64;
           to += (extMove.piece - 1) * 64;
-          std::cout << "|" << from << "|" << to;
+          out << "|" << from << "|" << to;
         }
 
         bool moveFound = false;
@@ -583,12 +632,12 @@ void process_game(const std::string& movetext, const std::string& startFen, cons
             }
             from += (m->piece - 1) * 64;
             to += (m->piece - 1) * 64;
-            std::cout << "|" << from << "|" << to;
+            out << "|" << from << "|" << to;
             numMovesPrinted++;
           }
         }
         while (numMovesPrinted < maxMovesToShow) {
-          std::cout << "|384|384";  // padding for missing moves
+          out << "|384|384";  // padding for missing moves
           numMovesPrinted++;
         }
         if (!moveFound) {
@@ -597,7 +646,8 @@ void process_game(const std::string& movetext, const std::string& startFen, cons
           exit(1);
         }
       }
-      std::cout << std::endl;
+      out << '\n';
+      }
       }
     }
 
@@ -643,7 +693,38 @@ std::string read_gzip_file(const fs::path& filepath) {
 }
 
 /**
+ * Helper to process a completed game and reset state.
+ * Returns true if we should stop processing (max games reached).
+ * Output is written to the provided stream.
+ */
+bool finish_game(std::string& movetext, std::string& startFen, const std::string& filepath, int& gameCount, std::ostream& out) {
+  if (movetext.empty()) {
+    return false;
+  }
+  
+  if (FLAGS_max_games == -1 || g_totalGamesProcessed.load() < FLAGS_max_games) {
+    process_game(movetext, startFen, filepath, out);
+    gameCount++;
+    g_totalGamesProcessed.fetch_add(1);
+    check_and_print_progress();
+  }
+  
+  movetext.clear();
+  startFen.clear();
+  
+  if (FLAGS_max_games != -1 && g_totalGamesProcessed.load() >= FLAGS_max_games) {
+    if (FLAGS_verbose) {
+      std::lock_guard<std::mutex> lock(g_progressMutex);
+      std::cerr << "Reached maximum games limit (" << FLAGS_max_games << ")" << std::endl;
+    }
+    return true;
+  }
+  return false;
+}
+
+/**
  * Processes a PGN file (possibly gzip-compressed).
+ * Uses a local buffer for thread-safe output.
  */
 void process_pgn_file(const fs::path& filepath) {
   std::string content;
@@ -658,6 +739,7 @@ void process_pgn_file(const fs::path& filepath) {
   } else {
     std::ifstream file(filepath);
     if (!file.is_open()) {
+      std::lock_guard<std::mutex> lock(g_progressMutex);
       std::cerr << "Error: Could not open " << filepath << std::endl;
       return;
     }
@@ -665,6 +747,9 @@ void process_pgn_file(const fs::path& filepath) {
     ss << file.rdbuf();
     content = ss.str();
   }
+
+  // Thread-local output buffer
+  std::ostringstream outputBuffer;
 
   std::istringstream stream(content);
   std::string line;
@@ -678,25 +763,9 @@ void process_pgn_file(const fs::path& filepath) {
     if (!line.empty() && line[0] == '[') {
       // If we were collecting movetext, process the previous game
       if (inMovetext) {
-        if (!movetext.empty()) {
-          if (FLAGS_max_games == -1 || g_totalGamesProcessed < FLAGS_max_games) {
-            process_game(movetext, startFen, filepath.string());
-            gameCount++;
-            g_totalGamesProcessed++;
-            check_and_print_progress();
-            
-            // Check if we've reached the limit after processing this game
-            if (FLAGS_max_games != -1 && g_totalGamesProcessed >= FLAGS_max_games) {
-              if (FLAGS_verbose) {
-                std::cerr << "Reached maximum games limit (" << FLAGS_max_games << ")" << std::endl;
-              }
-              return;
-            }
-          }
-          movetext.clear();
+        if (finish_game(movetext, startFen, filepath.string(), gameCount, outputBuffer)) {
+          break;
         }
-        // New game starting - clear FEN from previous game
-        startFen.clear();
         inMovetext = false;
       }
       
@@ -721,24 +790,10 @@ void process_pgn_file(const fs::path& filepath) {
     // Skip empty lines at the start
     ltrim(&line);
     if (line.empty()) {
-      if (inMovetext && !movetext.empty()) {
-        // End of game
-        if (FLAGS_max_games == -1 || g_totalGamesProcessed < FLAGS_max_games) {
-          process_game(movetext, startFen, filepath.string());
-          gameCount++;
-          g_totalGamesProcessed++;
-          check_and_print_progress();
-          
-          // Check if we've reached the limit after processing this game
-          if (FLAGS_max_games != -1 && g_totalGamesProcessed >= FLAGS_max_games) {
-            if (FLAGS_verbose) {
-              std::cerr << "Reached maximum games limit (" << FLAGS_max_games << ")" << std::endl;
-            }
-            return;
-          }
+      if (inMovetext) {
+        if (finish_game(movetext, startFen, filepath.string(), gameCount, outputBuffer)) {
+          break;
         }
-        movetext.clear();
-        startFen.clear();
         inMovetext = false;
       }
       continue;
@@ -750,31 +805,20 @@ void process_pgn_file(const fs::path& filepath) {
   }
 
   // Process any remaining game
-  if (!movetext.empty()) {
-    if (FLAGS_max_games == -1 || g_totalGamesProcessed < FLAGS_max_games) {
-      process_game(movetext, startFen, filepath.string());
-      gameCount++;
-      g_totalGamesProcessed++;
-      check_and_print_progress();
-      
-      // Check if we've reached the limit after processing this game
-      if (FLAGS_max_games != -1 && g_totalGamesProcessed >= FLAGS_max_games) {
-        if (FLAGS_verbose) {
-          std::cerr << "Reached maximum games limit (" << FLAGS_max_games << ")" << std::endl;
-        }
-        return;
-      }
-    }
+  finish_game(movetext, startFen, filepath.string(), gameCount, outputBuffer);
+
+  // Flush buffer to stdout under mutex
+  {
+    std::lock_guard<std::mutex> lock(g_outputMutex);
+    std::cout << outputBuffer.str();
   }
 
   if (FLAGS_verbose) {
+    std::lock_guard<std::mutex> lock(g_progressMutex);
     std::cerr << "Processed " << gameCount << " games from " << filepath << std::endl;
   }
 }
 
-/**
- * Recursively finds and processes all PGN files in a directory.
- */
 /**
  * Checks if a path is a PGN file (either .pgn or .pgn.gz).
  */
@@ -786,22 +830,75 @@ bool is_pgn_file(const fs::path& filepath) {
           (filename.size() > 7 && filename.substr(filename.size() - 7) == ".pgn.gz"));
 }
 
+/**
+ * Worker function for processing files from a shared queue.
+ */
+void worker_thread(std::vector<fs::path>& files, std::atomic<size_t>& fileIndex) {
+  while (true) {
+    // Check if max games reached
+    if (FLAGS_max_games != -1 && g_totalGamesProcessed.load() >= FLAGS_max_games) {
+      break;
+    }
+    
+    // Get next file index atomically
+    size_t idx = fileIndex.fetch_add(1);
+    if (idx >= files.size()) {
+      break;
+    }
+    
+    const fs::path& filepath = files[idx];
+    if (FLAGS_verbose) {
+      std::lock_guard<std::mutex> lock(g_progressMutex);
+      std::cerr << "Processing file: " << filepath << std::endl;
+    }
+    
+    process_pgn_file(filepath);
+  }
+}
+
+/**
+ * Recursively finds and processes all PGN files in a directory.
+ * Uses multiple threads for parallel processing.
+ */
 void process_directory(const fs::path& dirpath) {
+  // Collect all PGN files first
+  std::vector<fs::path> files;
   for (const auto& entry : fs::recursive_directory_iterator(dirpath)) {
     if (entry.is_regular_file() && is_pgn_file(entry.path())) {
-      if (FLAGS_verbose) {
-        std::cerr << "Processing file: " << entry.path() << std::endl;
-      }
-      process_pgn_file(entry.path());
-      
-      // Check if we've reached the limit after processing this file
-      if (FLAGS_max_games != -1 && g_totalGamesProcessed >= FLAGS_max_games) {
-        if (FLAGS_verbose) {
-          std::cerr << "Reached maximum games limit (" << FLAGS_max_games << ")" << std::endl;
-        }
-        break;
-      }
+      files.push_back(entry.path());
     }
+  }
+  
+  if (files.empty()) {
+    std::cerr << "No PGN files found in " << dirpath << std::endl;
+    return;
+  }
+  
+  // Determine number of threads
+  int numThreads = FLAGS_num_threads;
+  if (numThreads <= 0) {
+    numThreads = static_cast<int>(std::thread::hardware_concurrency());
+    if (numThreads <= 0) numThreads = 1;
+  }
+  // Don't use more threads than files
+  numThreads = std::min(numThreads, static_cast<int>(files.size()));
+  
+  std::cerr << "Found " << files.size() << " PGN files, processing with " 
+            << numThreads << " threads..." << std::endl;
+  
+  // Shared file index for work stealing
+  std::atomic<size_t> fileIndex{0};
+  
+  // Launch worker threads
+  std::vector<std::thread> threads;
+  threads.reserve(numThreads);
+  for (int i = 0; i < numThreads; ++i) {
+    threads.emplace_back(worker_thread, std::ref(files), std::ref(fileIndex));
+  }
+  
+  // Wait for all threads to complete
+  for (auto& t : threads) {
+    t.join();
   }
 }
 
@@ -847,7 +944,7 @@ int main(int argc, char* argv[]) {
     return 1;
   }
   
-  std::cerr << "Finished processing. Total games processed: " << g_totalGamesProcessed << std::endl;
+  std::cerr << "Finished processing. Total games processed: " << g_totalGamesProcessed.load() << std::endl;
 
   return 0;
 }

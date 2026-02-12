@@ -18,7 +18,7 @@
  * This tool converts a text file of chess positions into sharded binary matrices
  * for training the QstEvaluator.
  * 
- * Usage: ./make_tables_qst <input_file> <output_prefix> [limit]
+ * Usage: cat <input_file> | ./make_tables_qst <output_prefix>
  */
 
 using namespace ChessEngine;
@@ -41,6 +41,9 @@ void process(
     std::cout << "error: line has " << line.size() << " elements" << std::endl;
     return;
   }
+
+  // If line has 2 elements, it's in the format: fen | score
+  // If line has 4 elements, it's in the format: fen | win | draw | loss
 
   Position pos(line[0]);
   std::vector<Bitboard> features;
@@ -109,23 +112,12 @@ int main(int argc, char *argv[]) {
   initialize_zorbrist();
   initialize_movegen();
 
-  if (argc != 3 && argc != 4) {
-    std::cerr << "Usage: " << argv[0] << " <input> <output> [limit]" << std::endl;
+  if (argc != 2) {
+    std::cerr << "Usage: cat <input> | " << argv[0] << " <output>" << std::endl;
     return 1;
   }
 
-  const std::string inpath = argv[1];
-  const std::string outpath = argv[2];
-  size_t limit = std::numeric_limits<size_t>::max();
-  if (argc == 4) {
-    limit = std::stoul(argv[3]);
-  }
-
-  std::ifstream infile(inpath);
-  if (!infile.is_open()) {
-    std::cerr << "Could not open input file: " << inpath << std::endl;
-    return 1;
-  }
+  const std::string outpath = argv[1];
 
   WriterB qstInputWriter(outpath + "-qst", { Q_NUM_FEATURES * 64 });
   WriterI16 evalWriter(outpath + "-eval", { 3 });
@@ -137,7 +129,7 @@ int main(int argc, char *argv[]) {
 
   size_t counter = 0;
   std::string line;
-  while (std::getline(infile, line)) {
+  while (std::getline(std::cin, line)) {
     if (line == "") {
       continue;
     }
@@ -147,9 +139,6 @@ int main(int argc, char *argv[]) {
     if ((++counter) % 100'000 == 0) {
       double ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime).count();
       std::cout << "Finished " << counter / 1000 << "k in " << ms / 1000 << " seconds" << std::endl;
-    }
-    if (counter >= limit) {
-      break;
     }
   }
 
