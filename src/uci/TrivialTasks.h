@@ -18,9 +18,9 @@ extern unsigned int qst_bin_len;
 #include <fstream>
 
 #include "Task.h"
-#include "../eval/PieceSquareEvaluator.h"
 #include "../eval/evaluator.h"
 #include "../eval/nnue/NnueEvaluator.h"
+#include "../eval/pst/PieceSquareEvaluator.h"
 #include "../eval/qst/QstEvaluator.h"
 #include "../game/movegen/movegen.h"
 

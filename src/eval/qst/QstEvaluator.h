@@ -10,6 +10,7 @@
 #include "../evaluator.h"
 #include "../../game/utils.h"
 #include "../../game/Threats.h"
+#include "../PawnAnalysis.h"
 
 namespace ChessEngine {
 
@@ -220,35 +221,6 @@ QuantizedSquareTable<QUANTIZATION> load_quantized_square_table(std::istream& in,
   }
   return quantize<QUANTIZATION>(out);
 }
-
-template<Color US>
-struct PawnAnalysis {
-  Bitboard ourPassedPawns, theirPassedPawns;
-  Bitboard ourIsolatedPawns, theirIsolatedPawns;
-  Bitboard ourDoubledPawns, theirDoubledPawns;
-
-  PawnAnalysis(const Position& pos) {
-    constexpr Color THEM = opposite_color<US>();
-    constexpr Direction kForward = US == Color::WHITE ? Direction::NORTH : Direction::SOUTH;
-    constexpr Direction kBackward = US == Color::WHITE ? Direction::SOUTH : Direction::NORTH;
-
-    Bitboard ourPawns = pos.pieceBitboards_[coloredPiece<US, Piece::PAWN>()];
-    Bitboard theirPawns = pos.pieceBitboards_[coloredPiece<THEM, Piece::PAWN>()];
-    
-    Bitboard aheadOfOurPawns = US == Color::WHITE ? northFill(ourPawns) : southFill(ourPawns);
-    Bitboard aheadOfTheirPawns = US == Color::WHITE ? southFill(theirPawns) : northFill(theirPawns);
-    Bitboard filesWithOurPawns = US == Color::WHITE ? southFill(aheadOfOurPawns) : northFill(aheadOfOurPawns);
-    Bitboard filesWithTheirPawns = US == Color::WHITE ? northFill(aheadOfTheirPawns) : southFill(aheadOfTheirPawns);
-    Bitboard filesWithoutOurPawns = ~filesWithOurPawns;
-    Bitboard filesWithoutTheirPawns = ~filesWithTheirPawns;
-    this->ourPassedPawns = ourPawns & ~shift<kBackward>(fatten(aheadOfTheirPawns));
-    this->theirPassedPawns = theirPawns & ~shift<kForward>(fatten(aheadOfOurPawns));
-    this->ourIsolatedPawns = ourPawns & ~shift<Direction::WEST>(filesWithOurPawns) & ~shift<Direction::EAST>(filesWithOurPawns);
-    this->theirIsolatedPawns = theirPawns & ~shift<Direction::WEST>(filesWithTheirPawns) & ~shift<Direction::EAST>(filesWithTheirPawns);
-    this->ourDoubledPawns = ourPawns & shift<kForward>(aheadOfOurPawns);
-    this->theirDoubledPawns = theirPawns & shift<kBackward>(aheadOfTheirPawns);
-  }
-};
 
 /**
   * Two quantized square tables, one for early game and one for late game.
