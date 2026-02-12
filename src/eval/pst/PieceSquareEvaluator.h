@@ -2,11 +2,11 @@
 #define SRC_SEARCH_PIECE_SQUARE_EVALUATOR_H
 
 #include <memory>
-#include "../game/Position.h"
-#include "../game/utils.h"
-#include "../game/BoardListener.h"
-#include "evaluator.h"
-#include "ColoredEvaluation.h"
+#include "../../game/Position.h"
+#include "../../game/utils.h"
+#include "../../game/BoardListener.h"
+#include "../evaluator.h"
+#include "../ColoredEvaluation.h"
 
 namespace ChessEngine {
 

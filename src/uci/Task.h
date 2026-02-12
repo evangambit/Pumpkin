@@ -1,7 +1,7 @@
 #ifndef PUMPKIN_UCI_TASK_H
 #define PUMPKIN_UCI_TASK_H
 
-#include "../eval/PieceSquareEvaluator.h"
+#include "../eval/pst/PieceSquareEvaluator.h"
 
 #include <atomic>
 #include <condition_variable>
