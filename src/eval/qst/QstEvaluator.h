@@ -8,20 +8,12 @@
 
 #include "../../game/Position.h"
 #include "../evaluator.h"
+#include "../OrientedBitboard.h"
 #include "../../game/utils.h"
 #include "../../game/Threats.h"
 #include "../PawnAnalysis.h"
 
 namespace ChessEngine {
-
-template<Color US>
-Bitboard orient(Bitboard b) {
-  if constexpr (US == Color::BLACK) {
-    return flip_vertically(b);
-  } else {
-    return b;
-  }
-}
 
 template<size_t N>
 float min(const float *arr) {
@@ -83,11 +75,11 @@ struct QuantizedSquareTable {
   }
 
   template<int SCALE = 1>
-  inline void contribute(Bitboard occupied, Evaluation *eval) const {
+  inline void contribute(OrientedBitboard occupied, Evaluation *eval) const {
     static_assert(SCALE == 1 || SCALE == -1, "SCALE must be 1 or -1");
     Evaluation delta = 0;
     for (size_t i = 0; i < QUANTIZATION; ++i) {
-      delta += std::popcount(occupied & masks[i]) * weights[i];
+      delta += std::popcount(occupied.bits & masks[i]) * weights[i];
     }
     if constexpr (SCALE == 1) {
       *eval += delta;
@@ -231,7 +223,7 @@ struct TaperedQuantizedSquareTable {
   QuantizedSquareTable<QUANTIZATION> lateWeights;
 
   template<int SCALE = 1>
-  void contribute(Bitboard occupied, Evaluation *early, Evaluation *late) const {
+  void contribute(OrientedBitboard occupied, Evaluation *early, Evaluation *late) const {
     if (QUANTIZATION == 0) {
       return;
     }
@@ -263,6 +255,10 @@ inline Bitboard shiftToDestination(SafeSquare source, Bitboard bb) {
     bb >>= -dy * 8;
   }
   return bb;
+}
+template<SafeSquare DESTINATION>
+inline OrientedBitboard shiftToDestination(SafeSquare source, OrientedBitboard ob) {
+  return OrientedBitboard{shiftToDestination<DESTINATION>(source, ob.bits)};
 }
 
 
@@ -482,13 +478,14 @@ struct QstEvaluator : public EvaluatorInterface {
   void get_features(const Position& pos, std::vector<Bitboard> *out) {
     this->evaluate<US>(pos);
     for (size_t i = 0; i < Q_NUM_FEATURES; ++i) {
-      out->push_back(features[i]);
+      out->push_back(features[i].bits);
     }
   }
 
   // It's a little hacky to store features as a member variable, but it helps
   // ensure that get_features and evaluate are consistent with each other.
-  Bitboard features[Q_NUM_FEATURES];
+  // Unfortunately this means
+  OrientedBitboard features[Q_NUM_FEATURES];
 
   template<Color US>
   ColoredEvaluation<US> evaluate(const Position& pos) {
@@ -496,8 +493,8 @@ struct QstEvaluator : public EvaluatorInterface {
     constexpr Direction kForward = US == Color::WHITE ? Direction::NORTH : Direction::SOUTH;
     constexpr Direction kBackward = US == Color::WHITE ? Direction::SOUTH : Direction::NORTH;
 
-    const Bitboard ourPawns = orient<US>(pos.pieceBitboards_[coloredPiece<US, Piece::PAWN>()]);
-    const Bitboard theirPawns = orient<US>(pos.pieceBitboards_[coloredPiece<THEM, Piece::PAWN>()]);
+    const OrientedBitboard ourPawns = orient<US>(pos.pieceBitboards_[coloredPiece<US, Piece::PAWN>()]);
+    const OrientedBitboard theirPawns = orient<US>(pos.pieceBitboards_[coloredPiece<THEM, Piece::PAWN>()]);
 
     int32_t stage = earliness(pos);
     Evaluation early = biases[0];
@@ -542,8 +539,8 @@ struct QstEvaluator : public EvaluatorInterface {
     constexpr uint8_t theirQueensideCastling = US == Color::WHITE ? kCastlingRights_BlackQueen : kCastlingRights_WhiteQueen;
     const bool weCannotCastle = (pos.currentState_.castlingRights & (ourKingsideCastling | ourQueensideCastling)) == 0;
     const bool theyCannotCastle = (pos.currentState_.castlingRights & (theirKingsideCastling | theirQueensideCastling)) == 0;
-    features[Q_KING_NO_CASTLE_US] = orient<US>(pos.pieceBitboards_[coloredPiece<US, Piece::KING>()]) * weCannotCastle;
-    features[Q_KING_NO_CASTLE_THEM] = orient<US>(pos.pieceBitboards_[coloredPiece<THEM, Piece::KING>()]) * theyCannotCastle;
+    features[Q_KING_NO_CASTLE_US] = orient<US>(pos.pieceBitboards_[coloredPiece<US, Piece::KING>()]).iff(weCannotCastle);
+    features[Q_KING_NO_CASTLE_THEM] = orient<US>(pos.pieceBitboards_[coloredPiece<THEM, Piece::KING>()]).iff(theyCannotCastle);
     kingAssumingNoCastling.contribute(features[Q_KING_NO_CASTLE_US], &early, &late);
     kingAssumingNoCastling.contribute<-1>(flip_vertically(features[Q_KING_NO_CASTLE_THEM]), &early, &late);
 
@@ -624,8 +621,8 @@ struct QstEvaluator : public EvaluatorInterface {
 
     // How well do we control the squares around our king?
 
-    const Bitboard nearOurKingMask = kKingDist[2][SafeSquare::SE4];
-    const Bitboard nearTheirKingMask = kKingDist[2][SafeSquare::SE5];
+    const OrientedBitboard nearOurKingMask = OrientedBitboard{kKingDist[2][SafeSquare::SE4]};
+    const OrientedBitboard nearTheirKingMask = OrientedBitboard{kKingDist[2][SafeSquare::SE5]};
 
     features[Q_BAD_FOR_PAWN_NEAR_KING_US] = shiftToDestination<SafeSquare::SE4>( ourKingSq, orient<US>(threats.badForOur[Piece::PAWN])) & nearOurKingMask;
     features[Q_BAD_FOR_PAWN_NEAR_KING_THEM] = shiftToDestination<SafeSquare::SE5>(theirKingSq, orient<US>(threats.badForTheir[Piece::PAWN])) & nearTheirKingMask;
