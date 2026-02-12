@@ -16,8 +16,12 @@ from chess import engine as chess_engine
 """
 a=de7-md4
 sqlite3 data/${a}/db.sqlite3 "select * from positions" > data/${a}/pos.txt
+
 shuf data/${a}/pos.txt > data/${a}/pos.shuf.txt
-./make_tables data/de7-md4/pos.shuf.txt data/de7-md4/tables
+or
+terashuf < data/${a}/pos.txt > data/${a}/pos.shuf.txt
+
+./make_tables data/${a}/pos.shuf.txt data/${a}/tables
 """
 
 def wdl2score(wdl):
