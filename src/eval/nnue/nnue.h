@@ -63,7 +63,7 @@ struct Matrix {
     in.read(reinterpret_cast<char*>(&rows), sizeof(uint32_t));
     in.read(reinterpret_cast<char*>(&cols), sizeof(uint32_t));
     if (rows != HEIGHT || cols != WIDTH) {
-      throw std::runtime_error("Matrix size mismatch");
+      throw std::runtime_error("Matrix size mismatch; expected " + std::to_string(HEIGHT) + "x" + std::to_string(WIDTH) + ", got " + std::to_string(rows) + "x" + std::to_string(cols));
     }
     float *buffer = new float[rows * cols];
     in.read(reinterpret_cast<char*>(buffer), sizeof(float) * rows * cols);
@@ -72,8 +72,6 @@ struct Matrix {
         data[i * WIDTH + j] = static_cast<int16_t>(buffer[i * WIDTH + j] * (1 << SCALE_SHIFT));
       }
     }
-    // std::cout << "Loaded matrix " << name << " of size " << HEIGHT << "x" << WIDTH << std::endl;
-    // std::cout << *this << std::endl;
     delete[] buffer;
   }
 
@@ -218,8 +216,6 @@ struct Vector {
     for (size_t i = 0; i < DIM; ++i) {
       data[i] = static_cast<int16_t>(buffer[i] * (1 << SCALE_SHIFT));
     }
-    // std::cout << "Loaded vector " << name << " of size " << DIM << std::endl;
-    // std::cout << *this << std::endl;
   }
 
   Vector<DIM>& operator+=(const Vector< DIM >& other) {
@@ -318,21 +314,36 @@ inline void matmul(Matrix<HEIGHT, WIDTH>& mat, const Vector<WIDTH>& vec, Vector<
   }
 }
 
+/**
+ * Performs matmul(mat, concat(vec1, vec2)), where concat(vec1, vec2) is the concatenation of the two vectors.
+ */
+template<size_t HEIGHT, size_t COMBINED_WIDTH, size_t WIDTH1, size_t WIDTH2>
+inline void concat_and_matmul(const Matrix<HEIGHT, COMBINED_WIDTH>& mat, const Vector<WIDTH1>& vec1, const Vector<WIDTH2>& vec2, Vector<HEIGHT>* out) {
+  static_assert(WIDTH1 + WIDTH2 == COMBINED_WIDTH, "Matrix width must match the sum of the two vector widths");
+  for (size_t i = 0; i < HEIGHT; ++i) {
+    int32_t sum = 0;
+    for (size_t j = 0; j < WIDTH1; ++j) {
+      sum += static_cast<int32_t>(mat.data[i * COMBINED_WIDTH + j]) * static_cast<int32_t>(vec1.data[j]);
+    }
+    for (size_t j = 0; j < WIDTH2; ++j) {
+      sum += static_cast<int32_t>(mat.data[i * COMBINED_WIDTH + WIDTH1 + j]) * static_cast<int32_t>(vec2.data[j]);
+    }
+    out->data[i] = static_cast<int16_t>(sum >> SCALE_SHIFT);
+  }
+}
+
 struct Nnue {
   bool x[INPUT_DIM];
   Vector<EMBEDDING_DIM> embWeights[INPUT_DIM];
   Vector<EMBEDDING_DIM> whiteAcc;
   Vector<EMBEDDING_DIM> blackAcc;
 
-  Matrix<HIDDEN1_DIM, EMBEDDING_DIM> layer1;
+  Matrix<HIDDEN1_DIM, EMBEDDING_DIM * 2> layer1;
   Vector<HIDDEN1_DIM> bias1;
   Vector<HIDDEN1_DIM> hidden1;
 
-  Matrix<HIDDEN2_DIM, HIDDEN1_DIM> layer2;
-  Vector<HIDDEN2_DIM> bias2;
-  Vector<HIDDEN2_DIM> hidden2;
-  Matrix<OUTPUT_DIM, HIDDEN2_DIM> layer3;
-  Vector<OUTPUT_DIM> bias3;
+  Matrix<OUTPUT_DIM, HIDDEN1_DIM> layer2;
+  Vector<OUTPUT_DIM> bias2;
   Vector<OUTPUT_DIM> output;
 
   Nnue() {
@@ -341,12 +352,8 @@ struct Nnue {
     blackAcc.setZero();
     layer1.setZero();
     bias1.setZero();
-    hidden1.setZero();
     layer2.setZero();
     bias2.setZero();
-    hidden2.setZero();
-    layer3.setZero();
-    bias3.setZero();
     output.setZero();
   }
 
@@ -365,6 +372,7 @@ struct Nnue {
   }
 
   void clear_accumulator() {
+    std::fill_n(x, INPUT_DIM, false);
     whiteAcc.setZero();
     blackAcc.setZero();
   }
@@ -377,8 +385,6 @@ struct Nnue {
     bias1.randn_();
     layer2.randn_();
     bias2.randn_();
-    layer3.randn_();
-    bias3.randn_();
   }
 
   void compute_acc_from_scratch(const ChessEngine::Position& pos) {
@@ -404,8 +410,6 @@ struct Nnue {
     bias1.load_from_stream(in);
     layer2.load_from_stream(in);
     bias2.load_from_stream(in);
-    layer3.load_from_stream(in);
-    bias3.load_from_stream(in);
 
     // Verify that the entire file has been read
     char dummy;
@@ -423,21 +427,17 @@ struct Nnue {
     bias1.randn_();
     layer2.randn_();
     bias2.randn_();
-    layer3.randn_();
-    bias3.randn_();
   }
 
   int16_t *forward(ChessEngine::Color sideToMove) {
-    matmul(layer1, sideToMove == ChessEngine::Color::WHITE ? whiteAcc : blackAcc, &hidden1);
+    const Vector<EMBEDDING_DIM>& mover = sideToMove == ChessEngine::Color::WHITE ? whiteAcc : blackAcc;
+    const Vector<EMBEDDING_DIM>& opponent = sideToMove == ChessEngine::Color::WHITE ? blackAcc : whiteAcc;
+    concat_and_matmul<HIDDEN1_DIM, EMBEDDING_DIM * 2, EMBEDDING_DIM, EMBEDDING_DIM>(layer1, mover, opponent, &hidden1);
     hidden1 += bias1;
     hidden1.clip_(0, 1 << SCALE_SHIFT);
 
-    matmul(layer2, hidden1, &hidden2);
-    hidden2 += bias2;
-    hidden2.clip_(0, 1 << SCALE_SHIFT);
-    matmul(layer3, hidden2, &output);
-    output += bias3;
-
+    matmul(layer2, hidden1, &output);
+    output += bias2;
     return output.data_ptr();
   }
 
@@ -450,8 +450,6 @@ struct Nnue {
     copy->bias1 = this->bias1;
     copy->layer2 = this->layer2;
     copy->bias2 = this->bias2;
-    copy->layer3 = this->layer3;
-    copy->bias3 = this->bias3;
     return copy;
   }
 };

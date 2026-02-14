@@ -5,7 +5,9 @@
 #include "../../game/movegen/sliding.h"
 #include "QstEvaluator.h"
 #include "../nnue/sharded_matrix.h"
+#include "../nnue/nnue.h"
 
+#include <gflags/gflags.h>
 #include <thread>
 #include <chrono>
 #include <vector>
@@ -14,11 +16,15 @@
 #include <iostream>
 #include <bit>
 
+DEFINE_string(output, "", "Output prefix for the sharded matrices");
+DEFINE_bool(emit_qst, false, "Whether to emit QST features");
+DEFINE_bool(emit_nnue, false, "Whether to emit NNUE features");
+
 /*
  * This tool converts a text file of chess positions into sharded binary matrices
  * for training the QstEvaluator.
  * 
- * Usage: cat <input_file> | ./make_tables_qst <output_prefix>
+ * Usage: cat <input_file> | ./make_tables_qst --output=<output_prefix>
  */
 
 using namespace ChessEngine;
@@ -35,7 +41,8 @@ void process(
   WriterB& qstInputWriter,
   WriterI16& evalWriter,
   WriterI8& pieceCountWriter,
-  QstEvaluator& qstEvaluator
+  QstEvaluator& qstEvaluator,
+  WriterI16& sparseNnueInputWriter
   ) {
   if (line.size() != 4 && line.size() != 2) {
     std::cout << "error: line has " << line.size() << " elements" << std::endl;
@@ -46,26 +53,37 @@ void process(
   // If line has 4 elements, it's in the format: fen | win | draw | loss
 
   Position pos(line[0]);
-  std::vector<Bitboard> features;
-  features.reserve(Q_NUM_FEATURES);
-  if (pos.turn_ == Color::WHITE) {
-    qstEvaluator.get_features<Color::WHITE>(pos, &features);
-  } else {
-    qstEvaluator.get_features<Color::BLACK>(pos, &features);
-  }
-  
-  if (features.size() != Q_NUM_FEATURES) {
-    std::cerr << "Error: Expected " << Q_NUM_FEATURES << " features, got " << features.size() << std::endl;
-    return;
+
+  if (FLAGS_emit_qst) {
+    std::vector<Bitboard> features;
+    features.reserve(Q_NUM_FEATURES);
+    if (pos.turn_ == Color::WHITE) {
+      qstEvaluator.get_features<Color::WHITE>(pos, &features);
+    } else {
+      qstEvaluator.get_features<Color::BLACK>(pos, &features);
+    }
+    
+    if (features.size() != Q_NUM_FEATURES) {
+      std::cerr << "Error: Expected " << Q_NUM_FEATURES << " features, got " << features.size() << std::endl;
+      return;
+    }
+
+    bool qstFeatures[Q_NUM_FEATURES * 64];
+    for (size_t i = 0; i < Q_NUM_FEATURES; ++i) {
+      for (size_t j = 0; j < 64; ++j) {
+        qstFeatures[i * 64 + j] = (features[i] >> j) & 1;
+      }
+    }
+    qstInputWriter.write_row(qstFeatures);
   }
 
-  bool qstFeatures[Q_NUM_FEATURES * 64];
-  for (size_t i = 0; i < Q_NUM_FEATURES; ++i) {
-    for (size_t j = 0; j < 64; ++j) {
-      qstFeatures[i * 64 + j] = (features[i] >> j) & 1;
+  if (FLAGS_emit_nnue) {
+    NNUE::Features features = NNUE::pos2features(pos);
+    if (pos.turn_ == Color::BLACK) {
+      features.flip_();
     }
+    sparseNnueInputWriter.write_row(features.onIndices);
   }
-  qstInputWriter.write_row(qstFeatures);
 
   int16_t wdl[3];
   if (line.size() == 4) {
@@ -108,20 +126,23 @@ void process(
 }
 
 int main(int argc, char *argv[]) {
+  gflags::ParseCommandLineFlags(&argc, &argv, true);
+
   initialize_geometry();
   initialize_zorbrist();
   initialize_movegen();
 
-  if (argc != 2) {
-    std::cerr << "Usage: cat <input> | " << argv[0] << " <output>" << std::endl;
+  if (FLAGS_output.empty()) {
+    std::cerr << "Usage: cat <input> | " << argv[0] << " --output=<output_prefix>" << std::endl;
     return 1;
   }
 
-  const std::string outpath = argv[1];
+  const std::string outpath = FLAGS_output;
 
   WriterB qstInputWriter(outpath + "-qst", { Q_NUM_FEATURES * 64 });
   WriterI16 evalWriter(outpath + "-eval", { 3 });
   WriterI8 pieceCountWriter(outpath + "-piece-counts", { 10 });
+  WriterI16 sparseNnueInputWriter(outpath + "-nnue", { NNUE::MAX_NUM_ONES_IN_INPUT });
 
   std::chrono::time_point<std::chrono::system_clock> startTime = std::chrono::system_clock::now();
 
@@ -134,7 +155,7 @@ int main(int argc, char *argv[]) {
       continue;
     }
     std::vector<std::string> parts = split(line, '|');
-    process(parts, qstInputWriter, evalWriter, pieceCountWriter, qstEvaluator);
+    process(parts, qstInputWriter, evalWriter, pieceCountWriter, qstEvaluator, sparseNnueInputWriter);
 
     if ((++counter) % 100'000 == 0) {
       double ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime).count();
