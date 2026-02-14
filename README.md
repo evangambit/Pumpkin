@@ -11,11 +11,11 @@ g++ -std=c++20 -o test_runner src/eval/nnue/tests/nnue-tests.cpp $(find src/ -na
 
 # Update NNUE object file (model_bin.o) from a binary file
 
-xxd -i model.bin > model_data.c
-xxd -i qst.bin > qst_data.c
+xxd -i model.bin > model_data.cpp
+xxd -i qst.bin > qst_data.cpp
 
 # Build main
-./build.sh uci src/uci.cpp -O3 -DNDEBUG model_data.c qst_data.c
+./build.sh uci src/uci.cpp -O3 -DNDEBUG
 
 ./main rnbqkbnr/pp1ppppp/8/2p5/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2
 
@@ -29,7 +29,12 @@ g++ -std=c++20 -o uci src/uci.cpp model_bin.o $(find src/ -name "*.cpp" | grep -
 
 # cutechess
 
-cutechess/build/cutechess-cli -engine cmd=uci arg="evaluator nnue" -engine cmd=old arg="evaluator nnue" -each tc=40/60 proto=uci -rounds 100 -debug
+~/bin/cutechess-cli \
+-engine cmd=uci name=NewNNUE arg="evaluator nnue" \
+-engine cmd=old name=OldNNUE arg="evaluator nnue" \
+-each tc=40/60 proto=uci \
+-rounds 10 \
+-concurrency 8 -pgnout tournament/a.pgn -openings file=/Users/morganredding/Downloads/Unique_110225/Unique_v110225.pgn plies=12
 
 ```
 
