@@ -144,8 +144,8 @@ const int16_t kMoveOrderToSquare[64 * 6] = {
   -4,   -5,   -7,   -5,   -6,   -8,   -9,   -7,
 };
 
-constexpr unsigned kMaxSearchDepth = 64;
-constexpr unsigned kMaxPlyFromRoot = kMaxSearchDepth + 32;  // Allow some extra ply since we extend depth sometimes.
+constexpr unsigned kMaxSearchDepth = 32;
+constexpr unsigned kMaxPlyFromRoot = kMaxSearchDepth + 16;
 
 struct Killers {
   Move moves[2];

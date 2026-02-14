@@ -23,4 +23,4 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
 fi
 
 # Build command
-g++ $CXXFLAGS -o $1 $2 $(find src/ -name "*.cpp" | grep -Ev "([Tt]ests?|uci|main|make_tables|pgns2fens|make_moveorder_tables)\\.cpp") $INCLUDE_FLAGS $LDFLAGS model_data.c qst_data.c ${@:3}
+g++ $CXXFLAGS -o $1 $2 $(find src/ -name "*.cpp" | grep -Ev "([Tt]ests?|uci|main|make_tables|pgns2fens|make_moveorder_tables)\\.cpp") $INCLUDE_FLAGS $LDFLAGS model_data.cpp qst_data.cpp ${@:3}
