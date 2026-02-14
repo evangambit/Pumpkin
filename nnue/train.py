@@ -16,20 +16,29 @@ from features import board2x, x2board, kMaxNumOnesInInput
 from accumulator import Emb
 from nnue_model import NNUE
 
+
+def save_tensor(tensor: torch.Tensor, name: str, out: io.BufferedWriter):
+  tensor = tensor.cpu().detach().numpy()
+  name = name.ljust(16)
+  assert len(name) == 16
+  out.write(np.array([ord(c) for c in name], dtype=np.uint8).tobytes())
+  out.write(np.array(len(tensor.shape), dtype=np.int32).tobytes())
+  out.write(np.array(tensor.shape, dtype=np.int32).tobytes())
+  out.write(tensor.tobytes())
+
 def evaluate_data_quality(dataset):
   import chess
   from chess import engine as chess_engine
-  engine = chess_engine.SimpleEngine.popen_uci('/usr/games/stockfish')
+  engine = chess_engine.SimpleEngine.popen_uci('/opt/homebrew/bin/stockfish')
   chunk = next(iter(dataset))
   correct, mse = 0, 0
   for i in range(100):
-    x, y, turn, piece_counts = chunk
-    x, y, turn, piece_counts = x[i], y[i], turn[i], piece_counts[i]
+    x, y, piece_counts = chunk
+    x, y, piece_counts = x[i], y[i], piece_counts[i]
     assert x.shape == (kMaxNumOnesInInput,)
     assert y.shape == (3,)
-    assert turn.shape == (1,)
     assert piece_counts.shape == (10,)
-    board = x2board(x, turn)
+    board = x2board(x, True)
     lines = engine.analyse(board, chess_engine.Limit(depth=7), multipv=1)
     wdl = lines[0]['score'].white().wdl()
     wdl = np.array([wdl.wins, wdl.draws, wdl.losses], dtype=np.int32)
@@ -75,16 +84,13 @@ timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 run_dir = os.path.join("runs", timestamp)
 os.makedirs(run_dir, exist_ok=True)
 
-device = torch.cuda.current_device()
+device = torch.device('mps' if torch.backends.mps.is_available() else 'cuda' if torch.cuda.is_available() else 'cpu')
 
 print("Loading dataset...")
-# dataset_name = 'de6-md2'  # Accuracy: 78%, MSE: 0.077179
-dataset_name = 'de7-md4'  # Data quality: Accuracy: 92%, MSE: 0.037526
 dataset = ShardedMatricesIterableDataset(
-  f'data/{dataset_name}/tables-nnue',
-  f'data/{dataset_name}/tables-eval',
-  f'data/{dataset_name}/tables-turn',
-  f'data/{dataset_name}/tables-piece-counts',
+  f'data/x-nnue',
+  f'data/x-eval',
+  f'data/x-piece-counts',
   chunk_size=CHUNK_SIZE,
 )
 evaluate_data_quality(dataset)
@@ -96,7 +102,7 @@ dataloader = tdata.DataLoader(dataset, batch_size=BATCH_SIZE//CHUNK_SIZE, shuffl
 
 print("Creating model...")
  # [512, 128]
-model = NNUE(input_size=kMaxNumOnesInInput, hidden_sizes=[1024, 256, 64], output_size=1).to(device)
+model = NNUE(input_size=kMaxNumOnesInInput, hidden_sizes=[512, 8], output_size=1).to(device)
 
 print("Creating optimizer...")
 opt = torch.optim.AdamW(model.parameters(), lr=0.0, weight_decay=0.1)
@@ -108,7 +114,7 @@ def warmup_length(beta, c = 2.0):
   return int(c / (1 - beta))
 
 # Calculate total steps
-NUM_EPOCHS = 4
+NUM_EPOCHS = 1
 steps_per_epoch = len(dataloader)
 total_steps = NUM_EPOCHS * steps_per_epoch
 warmup_steps = warmup_length(0.999) # AdamW's beta is 0.999.
@@ -141,14 +147,14 @@ for epoch in range(NUM_EPOCHS):
     
     batch = [v.reshape((BATCH_SIZE,) + v.shape[2:]).to(device) for v in batch]
 
-    x, y_white_perspective, turn, piece_counts = batch
+    x, y_white_perspective, piece_counts = batch
     y_white_perspective = y_white_perspective.float() / 1000.0
 
-    win_mover_perspective = y_white_perspective[:,0] * (turn.squeeze() == 1).float() + y_white_perspective[:,2] * (turn.squeeze() == -1).float()
+    win_mover_perspective = y_white_perspective[:,0]
     draw_mover_perspective = y_white_perspective[:,1]
-    lose_mover_perspective = y_white_perspective[:,2] * (turn.squeeze() == 1).float() + y_white_perspective[:,0] * (turn.squeeze() == -1).float()
+    lose_mover_perspective = y_white_perspective[:,2]
 
-    output, layers = model(x, turn)
+    output, layers = model(x)
 
     penalty = 0.0
     for layer_output in layers:
@@ -162,7 +168,7 @@ for epoch in range(NUM_EPOCHS):
       output, label, reduction='mean',
     )
     mse = loss.item()
-    baseline = ((label - 0.5) ** 2).mean().item()
+    baseline = ((label - label.mean()) ** 2).mean().item()
 
     (loss + penalty * 0.02).backward()
     opt.step()
@@ -172,28 +178,17 @@ for epoch in range(NUM_EPOCHS):
     if (batch_idx + 1) % 500 == 0:
       print(f"loss: {np.mean(metrics['loss'][-1000:]):.4f}, mse: {np.mean(metrics['mse'][-1000:]):.4f}, penalty: {np.mean(metrics['penalty'][-1000:]):.4f}")
 
-def save_tensor(tensor: torch.Tensor, name: str, out: io.BufferedWriter):
-  tensor = tensor.cpu().detach().numpy()
-  name = name.ljust(16)
-  assert len(name) == 16
-  out.write(np.array([ord(c) for c in name], dtype=np.uint8).tobytes())
-  out.write(np.array(len(tensor.shape), dtype=np.int32).tobytes())
-  out.write(np.array(tensor.shape, dtype=np.int32).tobytes())
-  out.write(tensor.tobytes())
-
 # Save the model
 
 with open(os.path.join(run_dir, 'model.pt'), 'wb') as f:
   torch.save(model.state_dict(), f)
 
 with open(os.path.join(run_dir, 'model.bin'), 'wb') as f:
-  save_tensor(model.emb.weight(False)[:-1], 'embedding', f)
+  save_tensor(model.emb.weight()[:-1], 'embedding', f)
   save_tensor(model.mlp[0].weight, 'linear0.weight', f)
   save_tensor(model.mlp[0].bias, 'linear0.bias', f)
   save_tensor(model.mlp[2].weight, 'linear1.weight', f)
   save_tensor(model.mlp[2].bias, 'linear1.bias', f)
-  save_tensor(model.mlp[4].weight, 'linear2.weight', f)
-  save_tensor(model.mlp[4].bias, 'linear2.bias', f)
 
 plt.figure(figsize=(10,10))
 output = output.squeeze().cpu().detach().numpy()
@@ -212,16 +207,13 @@ plt.savefig(os.path.join(run_dir, 'nnue-loss.png'))
 
 board = chess.Board()
 X = []
-T = []
 moves = np.array(list(board.legal_moves))
 for move in moves:
   board.push(move)
   X.append(torch.tensor(board2x(board)).unsqueeze(0).to(device))
-  T.append(-1)
   board.pop()
 
-# Flip bc these are all from black's perspective
-output = -model(torch.cat(X, dim=0), torch.tensor(T, device=device).unsqueeze(1))[0][:,0]
+output = model(torch.cat(X, dim=0))[0].squeeze()
 
 I = output.cpu().detach().numpy().argsort()[::-1]
 for i in I:
@@ -231,31 +223,28 @@ for i in I:
 
 white_winning = 'rnbqkbnr/pppppppp/8/8/2BPPB2/2N2N2/PPP2PPP/R2Q1RK1 w Qkq - 0 1'
 board = chess.Board(white_winning)
-output = model(
-  torch.tensor(board2x(board)).unsqueeze(0).to(device),
-  torch.tensor([1], device=device).unsqueeze(0),
-)[0][:,0]
+output = model(torch.tensor(board2x(board)).unsqueeze(0).to(device))[0][:,0]
 print(f"White winning position score: {output[0].item():.4f}")
 
-# loss: 0.0339, mse: 0.2576, penalty: 0.0019
-# Nf3     0.1300
-# e4      0.0932
-# d4      0.0859
-# e3      0.0574
-# Nc3     0.0509
-# c4      0.0509
-# g3      0.0504
-# b4      0.0237
-# g4      0.0216
-# d3      0.0211
-# c3      0.0112
-# a3      0.0069
-# h3      0.0011
-# Nh3    -0.0027
-# a4     -0.0108
-# h4     -0.0155
-# b3     -0.0220
-# Na3    -0.0391
-# f4     -0.1045
-# f3     -0.1073
-# White winning position score: 3.7974
+# loss: 0.0194, mse: 0.5199, penalty: 0.0200
+# e4      0.6946
+# c4      0.6531
+# c3      0.6399
+# e3      0.6351
+# d4      0.6285
+# Nc3     0.6163
+# Nf3     0.6140
+# a3      0.5890
+# g3      0.5652
+# h3      0.5644
+# b3      0.5609
+# b4      0.5340
+# a4      0.5203
+# Na3     0.5192
+# d3      0.5174
+# Nh3     0.4823
+# h4      0.4611
+# f3      0.4248
+# f4      0.4180
+# g4      0.3641
+# White winning position score: 0.8122

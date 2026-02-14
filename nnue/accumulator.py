@@ -27,27 +27,19 @@ class Emb(nn.Module):
       self.ranks.zero_()
       self.files.zero_()
       self.tiles.zero_()
+  
+  @staticmethod
+  def flip_vertical(x):
+    # Flip the pieces (White <-> Black) and the ranks.
+    return x.flip(1).roll(6, dims=0)
 
-  def weight(self, vertically_flipped=False):
-    """
-    Return the embedding weight matrix.
-
-    We could implement this whole class as as an nn.Embedding,
-    but this way we can
-    # 1) support vertical flipping
-    # 2) apply higher regularization (theoretically at least) 
-
-    Shape: (768 + 1, dout)
-    """
+  def weight(self):
     tiles = self.tiles + self.pieces + self.ranks + self.files
-    if vertically_flipped:
-      # Flip the pieces (White <-> Black) and the ranks.
-      tiles = tiles.flip(1).roll(6, dims=0)
-
-    batch_size = tiles.shape[0]
     return torch.cat([tiles.reshape(768, -1), self.zeros], dim=0)
   
-  def forward(self, x, vertically_flipped=False):
+  def forward(self, x):
     assert len(x.shape) == 2
     assert x.shape[1] == kMaxNumOnesInInput, f"x.shape={x.shape}"
-    return self.weight(vertically_flipped=vertically_flipped)[x.to(torch.int32)].sum(1)
+    w = self.weight()
+    flipped = self.flip_vertical(w)
+    return w[x.to(torch.int32)].sum(1), flipped[x.to(torch.int32)].sum(1)

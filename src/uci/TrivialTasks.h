@@ -176,9 +176,19 @@ class SetEvaluatorTask : public Task {
       std::cout << "Evaluator set to pst." << std::endl;
     } else if (evaluatorName == "nnue") {
       std::shared_ptr<NNUE::Nnue> nnue_model = std::make_shared<NNUE::Nnue>();
-      std::istringstream f(std::string(model_bin, model_bin_len));
-      // std::ifstream f("model.bin", std::ios::binary);
-      nnue_model->load(f);
+      if (command.size() > 0) {
+        std::string modelFile = command.at(0);
+        command.pop_front();
+        std::ifstream f(modelFile, std::ios::binary);
+        if (!f) {
+          std::cout << "Error: could not open model file \"" << modelFile << "\"" << std::endl;
+          return;
+        }
+        nnue_model->load(f);
+      } else {
+        std::istringstream f(std::string(model_bin, model_bin_len));
+        nnue_model->load(f);
+      }
       state->evaluator = std::make_shared<NNUE::NnueEvaluator>(nnue_model);
       std::cout << "Evaluator set to nnue." << std::endl;
     } else if (evaluatorName == "qst") {

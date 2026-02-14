@@ -13,11 +13,14 @@ namespace NNUE {
 
 double randn(double stddev = 1.0);
 
+int16_t feature_index(ChessEngine::SafeColoredPiece piece, unsigned square);
+
+int16_t flip_feature_index(int16_t index);
+
 constexpr int SCALE_SHIFT = 8;
-constexpr int EMBEDDING_DIM = 1024;
-constexpr int HIDDEN1_DIM = 256;
-constexpr int HIDDEN2_DIM = 64;
-constexpr int OUTPUT_DIM = 16;
+constexpr int EMBEDDING_DIM = 512;
+constexpr int HIDDEN1_DIM = 8;
+constexpr int OUTPUT_DIM = 1;
 
 constexpr int MAX_NUM_ONES_IN_INPUT = 32 + 4;
 
@@ -60,11 +63,12 @@ struct Features {
   uint16_t operator[](size_t i) const {
     return onIndices[i];
   }
+  void flip_() {
+    for (size_t i = 0; i < length; i++) {
+      onIndices[i] = flip_feature_index(onIndices[i]);
+    }
+  }
 };
-
-int16_t feature_index(ChessEngine::SafeColoredPiece piece, unsigned square);
-
-int16_t flip_feature_index(int16_t index);
 
 Features pos2features(const struct ChessEngine::Position& pos);
 
