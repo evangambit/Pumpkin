@@ -36,12 +36,22 @@ constexpr unsigned kMaxSearchDepth = 32;
 constexpr unsigned kMaxPlyFromRoot = kMaxSearchDepth + 16;
 constexpr int kMaxQuiescenceDepth = kMaxPlyFromRoot - kMaxSearchDepth;
 
+/**
+ * Initially we just alternated between replacing the first and second
+ * indices when add was called. Now we use an alternative which seems
+ * to perform better: moves[0] is considered the "primary" killer move,
+ * and moves[1] is considered secondary. When a new killer move is added,
+ * it either promotes to primary (if it matches the current secondary) or
+ * replaces the secondary.
+ */
 struct Killers {
   Move moves[2];
-  uint8_t index;
   void add(Move move) {
-    moves[index] = move;
-    index = (index + 1) % 2;
+    if (moves[1] == move) {
+      std::swap(moves[0], moves[1]);
+    } else {
+      moves[1] = move;
+    }
   }
   bool contains(Move move) const {
     return moves[0] == move || moves[1] == move;
