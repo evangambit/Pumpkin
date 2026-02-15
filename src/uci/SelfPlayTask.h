@@ -41,7 +41,7 @@ class SelfPlayTask : public Task {
 
   static void _threaded_selfplay(UciEngineState* state, bool* isRunning) {
     std::cout << "Entering self-play loop with evaluator " << state->evaluator->to_string() << std::endl;
-    constexpr uint64_t kNodeLimit = 1'000'000;
+    constexpr uint64_t kNodeLimit = 10'000'000;
     std::unordered_map<uint64_t, int> positionCounts;
 
     while (true) {

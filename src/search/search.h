@@ -136,20 +136,8 @@ enum SearchType {
   NULL_WINDOW_SEARCH,
 };
 
-const Evaluation kQMoveOrderingPieceValue[Piece::NUM_PIECES] = {
+constexpr Evaluation kQMoveOrderingPieceValue[Piece::NUM_PIECES] = {
   1000,    // NO_PIECE (means it's a check)
-  100,  // PAWN
-  320,  // KNIGHT
-  330,  // BISHOP
-  500,  // ROOK
-  900,  // QUEEN
-  20000 // KING
-};
-
-// The only difference between search and qsearch is that this considers NO_PIECE to have a value of zero
-// since it is not a reliable indicator of a check move in normal search.
-const Evaluation kMoveOrderingPieceValue[Piece::NUM_PIECES] = {
-  0,    // NO_PIECE
   100,  // PAWN
   320,  // KNIGHT
   330,  // BISHOP
@@ -293,7 +281,7 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
       std::cout << "Illegal move generated in qsearch: " << move->move.uci() << std::endl;
       std::cout << thread->position_.fen() << std::endl;
       std::cout << thread->position_ << std::endl;
-      exit(1);
+      continue;
     }
     if (IS_PRINT_QNODE) {
       std::cout << repeat("  ", plyFromRoot) << "Trying move: " << move->move.uci() << std::endl;
@@ -510,17 +498,39 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   }
 
   // Add score to each move.
+  Threats<TURN> threats(thread->position_);
   const Move lastMove = SEARCH_TYPE == SearchType::ROOT ? kNullMove : thread->position_.history_.back().move;
+  /**
+  ±16000: best move from transposition table
+  +8000: is capture
+  
+  deltas for ranking captures can range from -4000 to 4000
+
+   */
+  constexpr Evaluation kMoveOrderingPieceValue[Piece::NUM_PIECES] = {
+    0,    // NO_PIECE
+    100,  // PAWN
+    320,  // KNIGHT
+    330,  // BISHOP
+    500,  // ROOK
+    900,  // QUEEN
+    2000 // KING
+  };
+
   for (ExtMove* move = moves; move < end; ++move) {
-    move->score = move->move == entry.bestMove ? 10000 : 0;
+    move->score = move->move == entry.bestMove ? 16000 : -16000;
     // Prioritize captures after the TT move.
+    move->score += move->capture != ColoredPiece::NO_COLORED_PIECE ? 8000 : -8000;
+
+    // Ranking within captures. Bonus for capturing a high value piece, penalty for
+    // taking a piece that is defended.
     move->score += kMoveOrderingPieceValue[cp2p(thread->position_.tiles_[move->move.to])];
-    // Next prioritize the killer move(s).
-    move->score += thread->frames_[plyFromRoot].killers.contains(move->move) ? 50 : 0;
+    move->score -= value_or_zero((threats.badForOur[move->piece] & bb(move->move.to)) > 0, kMoveOrderingPieceValue[move->piece]);
+
+    // Prioritize the killer move(s) as equivalent to a non-sacking capture.
+    move->score += thread->frames_[plyFromRoot].killers.contains(move->move) ? 8000 : 0;
 
     // Prioritize moves that caused a beta cutoff in a similar position, in response to a similar move.
-    // Elo difference: 117.2 +/- 49.7, LOS: 100.0 %, DrawRatio: 5.5 %
-    // 59 - 33 - 8
     move->score += frame->responseTo[move->piece][lastMove.to] == move->move ? 20 : 0;
     move->score += frame->responseFrom[move->piece][lastMove.from] == move->move ? 20 : 0;
     move->score += (frame - 2)->responseTo[move->piece][lastMove.to] == move->move ? 10 : 0;
@@ -577,10 +587,9 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
         std::cout << repeat("  ", plyFromRoot) << "Illegal move generated that leaves us in check: " << move->move.uci() << std::endl;
       }
       undo<TURN>(&thread->position_);
-      std::cout << "Illegal move generated in quiescence search: " << move->move.uci() << std::endl;
+      std::cout << "Illegal move generated in negamax search: " << move->move.uci() << std::endl;
       std::cout << thread->position_.fen() << std::endl;
       std::cout << thread->position_ << std::endl;
-      exit(1);
       continue;
     }
 
