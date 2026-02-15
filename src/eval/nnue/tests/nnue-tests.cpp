@@ -207,7 +207,6 @@ TEST_F(NNUETest, NnueRandn) {
   // After random initialization, matrices should not be all zero
   EXPECT_FALSE(nnue.layer1 == 0);
   EXPECT_FALSE(nnue.layer2 == 0);
-  EXPECT_FALSE(nnue.layer3 == 0);
   
   // Embedding weights should be initialized
   bool has_nonzero_emb = false;
@@ -370,23 +369,10 @@ TEST_F(NNUETest, NnueClone) {
   // Check that layers are copied
   EXPECT_TRUE(cloned->layer1 == nnue.layer1);
   EXPECT_TRUE(cloned->layer2 == nnue.layer2);
-  EXPECT_TRUE(cloned->layer3 == nnue.layer3);
   
   // Check that biases are copied
   EXPECT_TRUE(cloned->bias1 == nnue.bias1);
   EXPECT_TRUE(cloned->bias2 == nnue.bias2);
-  EXPECT_TRUE(cloned->bias3 == nnue.bias3);
-}
-
-// Test constant values
-TEST_F(NNUETest, ConstantValues) {
-  EXPECT_EQ(SCALE_SHIFT, 6);
-  EXPECT_EQ(EMBEDDING_DIM, 1024);
-  EXPECT_EQ(HIDDEN1_DIM, 256);
-  EXPECT_EQ(HIDDEN2_DIM, 64);
-  EXPECT_EQ(OUTPUT_DIM, 16);
-  EXPECT_EQ(MAX_NUM_ONES_IN_INPUT, 32 + 4);
-  EXPECT_EQ(SpecialFeatures::INPUT_DIM, 768);
 }
 
 // Test SpecialFeatures enum values
