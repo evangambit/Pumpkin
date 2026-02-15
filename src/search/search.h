@@ -133,6 +133,7 @@ ColoredEvaluation<TURN> evaluate(std::shared_ptr<EvaluatorInterface> evaluator, 
 enum SearchType {
   ROOT,  // Useful for multi-PV searches
   NORMAL_SEARCH,
+  NULL_WINDOW_SEARCH,
 };
 
 const Evaluation kQMoveOrderingPieceValue[Piece::NUM_PIECES] = {
@@ -498,11 +499,11 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   }
 
   // If we don't have a best move from the TT, we compute one with reduced depth.
-  // if (depth > 2 && (entry.key != key || entry.bestMove == kNullMove)) {
-  //   NegamaxResult<TURN> result = negamax<TURN, SEARCH_TYPE>(thread, depth - 2, alpha, beta, plyFromRoot, frame, stopThinking);
-  //   entry.bestMove = result.bestMove;
-  //   entry.value = result.evaluation.value;
-  // }
+  if (depth > 2 && (entry.key != key || entry.bestMove == kNullMove)) {
+    NegamaxResult<TURN> result = negamax<TURN, SEARCH_TYPE>(thread, depth - 2, alpha, beta, plyFromRoot, frame, stopThinking);
+    entry.bestMove = result.bestMove;
+    entry.value = result.evaluation.value;
+  }
 
   if (IS_PRINT_NODE) {
     std::cout << repeat("  ", plyFromRoot) << "Ordering moves." << std::endl;
@@ -611,8 +612,8 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
       }
     } else {
       // Simple, full-window, full-depth search. Used for the first move in non-root search.
-      // In the root node, we only use this when multiPV==1, since we don't care about
-      // the exact evaluation of moves that aren't the best move.
+      // In the root node, we use this when multiPV==1, since we don't care about the exact
+      // evaluation of moves that aren't the best move.
       eval = -negamax<opposite_color<TURN>(), SearchType::NORMAL_SEARCH>(thread, childDepth, -beta, -alpha, plyFromRoot + 1, frame + 1, stopThinking).evaluation;
     }
 
