@@ -525,10 +525,21 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     // Ranking within captures. Bonus for capturing a high value piece, penalty for
     // taking a piece that is defended.
     move->score += kMoveOrderingPieceValue[cp2p(thread->position_.tiles_[move->move.to])];
-    move->score -= value_or_zero((threats.badForOur[move->piece] & bb(move->move.to)) > 0, kMoveOrderingPieceValue[move->piece]);
+    move->score -= value_or_zero(
+      ((threats.badForOur[move->piece] & bb(move->move.to)) > 0)
+      &&
+      move->capture != ColoredPiece::NO_COLORED_PIECE
+    , kMoveOrderingPieceValue[move->piece]);
 
     // Prioritize the killer move(s) as equivalent to a non-sacking capture.
     move->score += thread->frames_[plyFromRoot].killers.contains(move->move) ? 8000 : 0;
+
+    // Penalize non-capture moves that move to a defended square.
+    move->score -= value_or_zero(
+      ((threats.badForOur[move->piece] & bb(move->move.to)) > 0)
+      &&
+      move->capture == ColoredPiece::NO_COLORED_PIECE
+    , 200);
 
     // Prioritize moves that caused a beta cutoff in a similar position, in response to a similar move.
     move->score += frame->responseTo[move->piece][lastMove.to] == move->move ? 20 : 0;
