@@ -3,6 +3,7 @@
 #include "game/movegen/movegen.h"
 #include "game/utils.h"
 #include "uci/GoTask.h"
+#include "uci/SelfPlayTask.h"
 #include "uci/Task.h"
 #include "uci/TrivialTasks.h"
 #include "uci/SetOptionTask.h"
@@ -192,6 +193,8 @@ struct UciEngine {
       // Todo
     } else if (parts[0] == "evaluator") {
       state->taskQueue.push_back(std::make_shared<SetEvaluatorTask>(parts));
+    } else if (parts[0] == "selfplay") {
+      state->taskQueue.push_back(std::make_shared<SelfPlayTask>());
     } else {
       state->taskQueue.push_back(std::make_shared<UnrecognizedCommandTask>(parts));
     }

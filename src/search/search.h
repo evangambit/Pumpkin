@@ -146,6 +146,7 @@ const int16_t kMoveOrderToSquare[64 * 6] = {
 
 constexpr unsigned kMaxSearchDepth = 32;
 constexpr unsigned kMaxPlyFromRoot = kMaxSearchDepth + 16;
+constexpr int kMaxQuiescenceDepth = kMaxPlyFromRoot - kMaxSearchDepth;
 
 struct Killers {
   Move moves[2];
@@ -192,7 +193,9 @@ struct Thread {
     const std::unordered_set<Move>& permittedMoves,
     TranspositionTable* tt
   )
-    : id_(id), position_(pos), evaluator_(evaluator), permittedMoves_(permittedMoves), multiPV_(multiPV), tt_(tt) {}
+    : id_(id), position_(pos), evaluator_(evaluator), permittedMoves_(permittedMoves), multiPV_(multiPV), tt_(tt) {
+      this->position_.set_listener(this->evaluator_);
+    }
   
   Thread(const Thread& other)
   : id_(other.id_),
@@ -265,8 +268,6 @@ const Evaluation kMoveOrderingPieceValue[Piece::NUM_PIECES] = {
   900,  // QUEEN
   20000 // KING
 };
-
-constexpr int kMaxQuiescenceDepth = 32;  // Prevent stack overflow from unbounded qsearch recursion
 
 template<Color TURN>
 NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, ColoredEvaluation<TURN> beta, int plyFromRoot, int quiescenceDepth, Frame *frame, std::atomic<bool> *stopThinking) {
@@ -800,6 +801,20 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
       if (IS_PRINT_NODE) {
       std::cout << repeat("  ", plyFromRoot) << "Search stopped externally. No TT entry found, returning null move." << std::endl;
       }
+      if (SEARCH_TYPE == SearchType::ROOT) {
+        // Need to always return something sensible from the root.
+        // TODO: this is pretty hacky, since nodeCount is checked inside of negamax, but other conditions
+        // are checked outside of it. We should probably unify this logic better.
+        size_t nodeCount = thread->nodeCount_;
+        size_t nodeLimit = thread->nodeLimit_;
+        thread->nodeCount_ = 0;
+        thread->nodeLimit_ = 10'000'000; // Arbitrary large number to ensure we search at least a little bit.
+        std::atomic<bool> neverStop{false};
+        NegamaxResult<TURN> result = negamax<TURN, SearchType::ROOT>(thread, 1, ColoredEvaluation<TURN>(kMinEval), ColoredEvaluation<TURN>(kMaxEval), plyFromRoot, frame, &neverStop);
+        thread->nodeCount_ += nodeCount;
+        thread->nodeLimit_ = nodeLimit;
+        return result;
+      }
       return NegamaxResult<TURN>(kNullMove, 0);
     }
   }
@@ -904,6 +919,7 @@ SearchResult<TURN> negamax_result_to_search_result(const NegamaxResult<TURN>& re
 // Color-templated search function to be used by the UCI interface.
 template<Color TURN>
 SearchResult<TURN> search(Thread* thread, std::atomic<bool> *stopThinking, std::function<void(int, SearchResult<TURN>)> onDepthCompleted, bool timeSensitive) {
+  thread->tt_->new_search();
   assert(thread->position_.turn_ == TURN);
   std::atomic<bool> neverStopThinking{false};
   NegamaxResult<TURN> result = negamax<TURN, SearchType::ROOT>(
@@ -915,12 +931,18 @@ SearchResult<TURN> search(Thread* thread, std::atomic<bool> *stopThinking, std::
     &thread->frames_[0],
     &neverStopThinking  // Guarantee we always search at least depth 1 before stopping.
   );
+  if (result.bestMove == kNullMove) {
+    std::cout << "Error: Search did not find a move." << std::endl;
+    exit(1);
+  }
   SearchResult<TURN> searchResult = negamax_result_to_search_result<TURN>(result, thread);
   if (onDepthCompleted != nullptr) {
     onDepthCompleted(1, searchResult);
   }
   for (int i = 2; i <= std::min(thread->depth_, kMaxSearchDepth); ++i) {
-    if (stopThinking->load()) break;
+    if (stopThinking->load()) {
+      break;
+    }
     result = negamax<TURN, SearchType::ROOT>(
       thread,
       i,
@@ -930,6 +952,10 @@ SearchResult<TURN> search(Thread* thread, std::atomic<bool> *stopThinking, std::
       &thread->frames_[0],
       stopThinking
     );
+    if (result.bestMove == kNullMove) {
+      std::cout << "Error: Search did not find a move." << result << std::endl;
+      exit(1);
+    }
     searchResult = negamax_result_to_search_result<TURN>(result, thread);
     if (stopThinking->load()) {
       // Primary variations may be incomplete or invalid if the search was stopped.
