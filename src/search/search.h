@@ -244,7 +244,7 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
 
     move->score = kQMoveOrderingPieceValue[cp2p(move->capture)];
     move->score -= value_or_zero(
-      ((threats.badForOur[move->piece] & bb(move->move.to)) > 0) && !((threats.badForOur[move->piece] & bb(move->move.from)) > 0),
+      ((threats.badForOur[move->piece] & bb(move->move.to)) > 0),
       kQMoveOrderingPieceValue[move->piece]
     );
 
