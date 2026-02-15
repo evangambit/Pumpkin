@@ -3,13 +3,14 @@
 
 #ifndef IS_PRINT_NODE
 #define IS_PRINT_NODE 0
+// #define IS_PRINT_NODE ((frame)->hash == 17514877330620511575ULL)
 // #define IS_PRINT_NODE (plyFromRoot == 0 || frame->hash == 15932567610229845462ULL || frame->hash == 15427882709703266013ULL)
 // #define IS_PRINT_NODE (thread->position_.currentState_.hash == 412260009870427727ULL)
 #endif
 
 #ifndef IS_PRINT_QNODE
 #define IS_PRINT_QNODE 0
-// #define IS_PRINT_QNODE ((frame - quiescenceDepth)->hash == 15427882709703266013ULL)
+// #define IS_PRINT_QNODE ((frame - quiescenceDepth)->hash == 17514877330620511575ULL)
 #endif
 
 #include <algorithm>
@@ -936,6 +937,7 @@ SearchResult<TURN> search(Thread* thread, std::atomic<bool> *stopThinking, std::
     exit(1);
   }
   SearchResult<TURN> searchResult = negamax_result_to_search_result<TURN>(result, thread);
+  SearchResult<TURN> lastResult = searchResult;
   if (onDepthCompleted != nullptr) {
     onDepthCompleted(1, searchResult);
   }
@@ -959,18 +961,10 @@ SearchResult<TURN> search(Thread* thread, std::atomic<bool> *stopThinking, std::
     searchResult = negamax_result_to_search_result<TURN>(result, thread);
     if (stopThinking->load()) {
       // Primary variations may be incomplete or invalid if the search was stopped.
-      // Re-run the search at depth=1 to get a valid result.
-      result = negamax<TURN, SearchType::ROOT>(
-        thread,
-        1,
-        /*alpha=*/ColoredEvaluation<TURN>(kMinEval),
-        /*beta=*/ColoredEvaluation<TURN>(kMaxEval),
-        /*plyFromRoot=*/0,
-        &thread->frames_[0],
-        &neverStopThinking
-      );
-      searchResult = negamax_result_to_search_result<TURN>(result, thread);
+      // Fallback to the last completed search result, which is guaranteed to be valid.
+      searchResult = lastResult;
     }
+    lastResult = searchResult;
     if (onDepthCompleted != nullptr) {
       onDepthCompleted(i, searchResult);
     }
