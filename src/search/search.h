@@ -248,6 +248,8 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
       kQMoveOrderingPieceValue[move->piece]
     );
 
+    move->score += thread->frames_[plyFromRoot].killers.contains(move->move) ? 8000 : 0;
+
     move->score += frame->responseTo[move->piece][lastMove.to] == move->move ? 20 : 0;
     move->score += frame->responseFrom[move->piece][lastMove.from] == move->move ? 20 : 0;
     move->score += (frame - 2)->responseTo[move->piece][lastMove.to] == move->move ? 10 : 0;
