@@ -13,7 +13,7 @@ t = ''
 for i, arg in enumerate(args.moves):
 	moves = list(board.legal_moves)
 	moves = [m for m in moves if m.uci() == arg]
-	assert len(moves) == 1, moves
+	assert len(moves) == 1, (len(moves), arg, board)
 	if i % 2 == 0:
 		t += ' ' + str(i//2 + 1) + '.'
 	t += ' ' + board.san(moves[0])
