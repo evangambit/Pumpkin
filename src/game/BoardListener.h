@@ -23,7 +23,7 @@ struct Position;
 struct EvaluatorInterface {
   virtual ~EvaluatorInterface() = default;
 
-    // Evaluation methods
+  // Evaluation methods
   virtual ColoredEvaluation<Color::WHITE> evaluate_white(const Position& pos) = 0;
   virtual ColoredEvaluation<Color::BLACK> evaluate_black(const Position& pos) = 0;
   virtual std::shared_ptr<EvaluatorInterface> clone() const = 0;

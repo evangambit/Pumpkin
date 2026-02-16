@@ -26,6 +26,20 @@ struct FakeBoardListener : public EvaluatorInterface {
   void remove_piece(SafeColoredPiece cp, SafeSquare square) override {
     removedSquares.push_back(square);
   }
+
+  ColoredEvaluation<Color::WHITE> evaluate_white(const Position& pos) override {
+    return ColoredEvaluation<Color::WHITE>(0);
+  }
+  ColoredEvaluation<Color::BLACK> evaluate_black(const Position& pos) override {
+    return ColoredEvaluation<Color::BLACK>(0);
+  }
+  std::shared_ptr<EvaluatorInterface> clone() const override {
+    return std::make_shared<FakeBoardListener>();
+  }
+  size_t num_features() const override { return 0; }
+  std::string to_string() const override {
+    return "FakeBoardListener";
+  }
 };
 
 class PositionTest : public ::testing::Test {
@@ -95,7 +109,7 @@ TEST_F(PositionTest, FenParsingBlackToMove) {
   Position pos("rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1");
   
   EXPECT_EQ(pos.turn_, Color::BLACK);
-  EXPECT_EQ(pos.currentState_.epSquare, SafeSquare::SE3);
+  EXPECT_EQ(pos.currentState_.epSquare, UnsafeSquare::UE3);
 }
 
 // Test FEN generation matches input
@@ -173,7 +187,7 @@ TEST_F(PositionTest, NullMoveAfterPawnDouble) {
 
   uint64_t hashAfterWhiteMove = pos.currentState_.hash;
   EXPECT_EQ(pos.turn_, Color::BLACK);
-  EXPECT_EQ(pos.currentState_.epSquare, SafeSquare::SE3);
+  EXPECT_EQ(pos.currentState_.epSquare, UnsafeSquare::UE3);
 
   make_nullmove<Color::BLACK>(&pos);
 
@@ -186,7 +200,7 @@ TEST_F(PositionTest, NullMoveAfterPawnDouble) {
 
   EXPECT_EQ(pos.currentState_.hash, hashAfterWhiteMove);
   EXPECT_EQ(pos.turn_, Color::BLACK);
-  EXPECT_EQ(pos.currentState_.epSquare, SafeSquare::SE3);
+  EXPECT_EQ(pos.currentState_.epSquare, UnsafeSquare::UE3);
 
   undo<Color::WHITE>(&pos);
 
