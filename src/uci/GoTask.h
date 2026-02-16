@@ -155,7 +155,6 @@ class GoTask : public Task {
     this->baseThreadState = std::make_shared<Thread>(
       /* thread id=*/ 0,
       state->position,
-      state->evaluator,
       state->multiPV,
       std::unordered_set<Move>(),
       state->tt_.get()

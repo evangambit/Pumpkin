@@ -7,7 +7,7 @@
 
 namespace ChessEngine {
 
-struct FakeBoardListener : public BoardListener {
+struct FakeBoardListener : public EvaluatorInterface {
   std::vector<std::pair<ColoredPiece, SafeSquare>> placedPieces;
   std::vector<SafeSquare> removedSquares;
   bool wasEmptied = false;

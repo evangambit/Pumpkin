@@ -137,7 +137,7 @@ void Position::_empty_() {
   tiles_.fill(ColoredPiece::NO_COLORED_PIECE);
   colorBitboards_.fill(kEmptyBitboard);
   currentState_.epSquare = UnsafeSquare::UNO_SQUARE;
-  boardListener_->empty();
+  evaluator_->empty();
   wholeMoveCounter_ = 1;
   currentState_.halfMoveCounter = 0;
   currentState_.hash = 0;

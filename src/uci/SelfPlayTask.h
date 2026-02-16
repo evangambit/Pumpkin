@@ -40,7 +40,6 @@ class SelfPlayTask : public Task {
   }
 
   static void _threaded_selfplay(UciEngineState* state, bool* isRunning) {
-    std::cout << "Entering self-play loop with evaluator " << state->evaluator->to_string() << std::endl;
     constexpr uint64_t kNodeLimit = 10'000'000;
     std::unordered_map<uint64_t, int> positionCounts;
 
@@ -89,7 +88,6 @@ class SelfPlayTask : public Task {
       Thread searchThread(
         /* thread id=*/ 0,
         state->position,
-        state->evaluator,
         /* multiPV=*/ 1,
         std::unordered_set<Move>(),
         state->tt_.get()
@@ -97,10 +95,6 @@ class SelfPlayTask : public Task {
       searchThread.depth_ = kMaxSearchDepth;
       searchThread.nodeLimit_ = kNodeLimit;
       searchThread.stopTime_ = std::chrono::high_resolution_clock::time_point::max();
-      if (searchThread.position_.boardListener_ != state->evaluator) {
-        std::cerr << "Error: BoardListener of position does not match evaluator." << std::endl;
-        exit(1);
-      }
 
       // Search
       std::atomic<bool> neverStop{false};

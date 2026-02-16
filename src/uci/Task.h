@@ -1,7 +1,7 @@
 #ifndef PUMPKIN_UCI_TASK_H
 #define PUMPKIN_UCI_TASK_H
 
-#include "../eval/pst/PieceSquareEvaluator.h"
+#include "../eval/nnue/NnueEvaluator.h"
 
 #include <atomic>
 #include <condition_variable>
@@ -10,6 +10,9 @@
 #include <mutex>
 #include <sstream>
 #include <unordered_set>
+
+extern const char model_bin[];
+extern unsigned int model_bin_len;
 
 namespace ChessEngine {
 
@@ -44,11 +47,17 @@ class Task {
 
 
 struct UciEngineState {
-  UciEngineState() : tt_(std::make_shared<TranspositionTable>(100'000)),
-                      moveOverheadMs(50),
-                      numThreads(1),
-                      multiPV(1),
-                      evaluator(std::make_shared<PieceSquareEvaluator>()) {}
+  UciEngineState()
+    : tt_(std::make_shared<TranspositionTable>(100'000)),
+      moveOverheadMs(50),
+      numThreads(1),
+      multiPV(1) {
+    this->position = Position("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+    std::shared_ptr<NNUE::Nnue> nnue_model = std::make_shared<NNUE::Nnue>();
+    std::istringstream f(std::string(model_bin, model_bin_len));
+    nnue_model->load(f);
+    this->position.set_listener(std::make_shared<NNUE::NnueEvaluator>(nnue_model));
+  }
 
   std::mutex mutex;
   std::condition_variable condVar;
@@ -64,7 +73,6 @@ struct UciEngineState {
   unsigned numThreads;
   unsigned multiPV;
   Position position;
-  std::shared_ptr<EvaluatorInterface> evaluator;
   std::string name;
 };
 

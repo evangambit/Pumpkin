@@ -92,6 +92,60 @@ class ProbeTask : public Task {
   std::deque<std::string> command;
 };
 
+struct EvalTask : public Task {
+  EvalTask(std::deque<std::string> command) : command(command) {}
+  void start(UciEngineState *state) {
+    Position pos = state->position;
+    command.pop_front();
+    bool printAllChildren = false;
+    while (command.size() > 0) {
+      std::string moveStr = command.at(0);
+      command.pop_front();
+      if (moveStr == "*") {
+        printAllChildren = true;
+        break;
+      }
+      Move move = uci_to_move(pos, moveStr);
+      if (move == kNullMove) {
+        std::cout << "Error: invalid move \"" << moveStr << "\"" << std::endl;
+        return;
+      }
+      ez_make_move(&pos, move);
+    }
+    if (!printAllChildren) {
+      ColoredEvaluation<WHITE> eval = evaluate<WHITE>(pos.evaluator_, pos);
+      std::cout << eval.value << " (white) (" << pos.evaluator_->to_string() << ")" << std::endl;
+      return;
+    }
+    ExtMove moves[kMaxNumMoves];
+    ExtMove* end;
+    if (pos.turn_ == Color::BLACK) {
+      end = compute_legal_moves<Color::BLACK>(&pos, &(moves[0]));
+    } else {
+      end = compute_legal_moves<Color::WHITE>(&pos, &(moves[0]));
+    }
+    for (ExtMove* move = moves; move != end; ++move) {
+      ez_make_move(&pos, move->move);
+      if (pos.turn_ == Color::BLACK) {
+        move->score = -evaluate<BLACK>(pos.evaluator_, pos).value;
+      } else {
+        move->score = evaluate<WHITE>(pos.evaluator_, pos).value;
+      }
+      ez_undo(&pos);
+    }
+    if (pos.turn_ == Color::BLACK) {
+      std::sort(moves, end, [](ExtMove a, ExtMove b) { return a.score < b.score; });
+    } else {
+      std::sort(moves, end, [](ExtMove a, ExtMove b) { return a.score > b.score; });
+    }
+    for (ExtMove* move = moves; move != end; ++move) {
+      std::cout << move->uci() << ": " << move->score << " (white) (" << pos.evaluator_->to_string() << ")" << std::endl;
+    }
+  }
+ private:
+  std::deque<std::string> command;
+};
+
 struct MoveTask : public Task {
   MoveTask(std::deque<std::string> command) : command(command) {}
   void start(UciEngineState *state) {
@@ -176,10 +230,10 @@ class SetEvaluatorTask : public Task {
     std::string evaluatorName = command.at(0);
     command.pop_front();
     if (evaluatorName == "simple") {
-      state->evaluator = std::make_shared<SimpleEvaluator>();
+      state->position.set_listener(std::make_shared<SimpleEvaluator>());
       std::cout << "Evaluator set to simple." << std::endl;
     } else if (evaluatorName == "pst") {
-      state->evaluator = std::make_shared<PieceSquareEvaluator>();
+      state->position.set_listener(std::make_shared<PieceSquareEvaluator>());
       std::cout << "Evaluator set to pst." << std::endl;
     } else if (evaluatorName == "nnue") {
       std::shared_ptr<NNUE::Nnue> nnue_model = std::make_shared<NNUE::Nnue>();
@@ -196,7 +250,7 @@ class SetEvaluatorTask : public Task {
         std::istringstream f(std::string(model_bin, model_bin_len));
         nnue_model->load(f);
       }
-      state->evaluator = std::make_shared<NNUE::NnueEvaluator>(nnue_model);
+      state->position.set_listener(std::make_shared<NNUE::NnueEvaluator>(nnue_model));
       std::cout << "Evaluator set to nnue." << std::endl;
     } else if (evaluatorName == "qst") {
       auto qst = std::make_shared<QstEvaluator>();
@@ -208,7 +262,7 @@ class SetEvaluatorTask : public Task {
         std::istringstream f(std::string(qst_bin, qst_bin_len));
         qst->load(f);
       }
-      state->evaluator = qst;
+      state->position.set_listener(qst);
       std::cout << "Evaluator set to qst." << std::endl;
     } else {
       std::cout << "Error: unrecognized evaluator name \"" << evaluatorName << "\"" << std::endl;
