@@ -1,11 +1,11 @@
-#include "../../game/Geometry.h"
-#include "../../game/Utils.h"
-#include "../../game/Position.h"
-#include "../../game/movegen/movegen.h"
-#include "../../game/movegen/sliding.h"
-#include "QstEvaluator.h"
-#include "../nnue/ShardedMatrix.h"
-#include "../nnue/Nnue.h"
+#include "../game/Geometry.h"
+#include "../game/Utils.h"
+#include "../game/Position.h"
+#include "../game/movegen/movegen.h"
+#include "../game/movegen/sliding.h"
+#include "nnue/ShardedMatrix.h"
+#include "nnue/Nnue.h"
+#include "qst/QstEvaluator.h"
 
 #include <gflags/gflags.h>
 #include <thread>

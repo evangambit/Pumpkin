@@ -20,7 +20,7 @@ sh build.sh test_runner -lgtest src/eval/nnue/tests/nnue-tests.cpp -lgtest_main 
 
 # Make tables
 
-    ./build.sh mt src/eval/nnue/make_tables.cpp -O3 -DNDEBUG
+    ./build.sh mt src/eval/make_tables.cpp -O3 -DNDEBUG
 
 # cutechess
 
