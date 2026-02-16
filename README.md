@@ -4,7 +4,7 @@
 sudo apt-get install -y libgflags-dev libgtest-dev
 
 # Run tests.
-g++ -std=c++20 -o test_runner $(find src/ -name "*.cpp" | grep -Ev '(main|uci|make_tables).cpp') -I/usr/local/include -L/usr/local/lib -lgtest -lgtest_main -pthread && ./test_runner
+sh build.sh test_runner $(find src -name "*.cpp" | grep 'Tests\.cpp') -lgtest -lgtest_main -pthread && ./test_runner
 
 # Run one test
 sh build.sh test_runner -lgtest src/eval/nnue/tests/nnue-tests.cpp -lgtest_main && ./test_runner
@@ -16,11 +16,11 @@ sh build.sh test_runner -lgtest src/eval/nnue/tests/nnue-tests.cpp -lgtest_main 
 
 # Build uci
 
-    ./build.sh uci src/uci.cpp -O3 -DNDEBUG
+    ./build.sh uci src/uci/main.cpp -O3 -DNDEBUG
 
 # Make tables
 
-    ./build.sh mt src/eval/make_tables.cpp -O3 -DNDEBUG
+    ./build.sh mt src/eval/MakeTablesMain.cpp -O3 -DNDEBUG
 
 # cutechess
 
@@ -50,7 +50,7 @@ With nodes/move
 
 # pgn2fen
 
-    sh build.sh p2f src/pgns2fens.cpp  -O3 -DNDEBUG
+    sh build.sh p2f src/PgnsToFensMain.cpp  -O3 -DNDEBUG
 
 Randomly drop 90% of lines (better position diversity).
 
