@@ -18,14 +18,25 @@
 namespace ChessEngine {
 
 class SelfPlayTask : public Task {
+  uint64_t nodeLimit_ = 10'000'000;
  public:
-  SelfPlayTask() : isRunning(false), thread(nullptr) {}
+  SelfPlayTask(std::deque<std::string> command) : isRunning(false), thread(nullptr) {
+    if (command.size() > 1) {
+      std::string nodeLimitStr = command.at(1);
+      try {
+        nodeLimit_ = std::stoull(nodeLimitStr);
+      } catch (const std::exception& e) {
+        std::cout << "Error: could not parse node limit \"" << nodeLimitStr << "\": " << e.what() << std::endl;
+        nodeLimit_ = 10'000'000;
+      }
+    }
+  }
 
   void start(UciEngineState *state) override {
     std::cout << "Starting self-play task" << std::endl;
     assert(!isRunning);
     isRunning = true;
-    this->thread = new std::thread(SelfPlayTask::_threaded_selfplay, state, &isRunning);
+    this->thread = new std::thread(SelfPlayTask::_threaded_selfplay, state, &isRunning, nodeLimit_);
   }
 
   bool is_running() override {
@@ -39,8 +50,7 @@ class SelfPlayTask : public Task {
     delete this->thread;
   }
 
-  static void _threaded_selfplay(UciEngineState* state, bool* isRunning) {
-    constexpr uint64_t kNodeLimit = 10'000'000;
+  static void _threaded_selfplay(UciEngineState* state, bool* isRunning, uint64_t nodeLimit) {
     std::unordered_map<uint64_t, int> positionCounts;
 
     while (true) {
@@ -93,7 +103,7 @@ class SelfPlayTask : public Task {
         state->tt_.get()
       );
       searchThread.depth_ = kMaxSearchDepth;
-      searchThread.nodeLimit_ = kNodeLimit;
+      searchThread.nodeLimit_ = nodeLimit;
       searchThread.stopTime_ = std::chrono::high_resolution_clock::time_point::max();
 
       // Search
