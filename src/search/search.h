@@ -399,7 +399,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
         if (IS_PRINT_NODE) {
           std::cout << repeat("  ", plyFromRoot) << "TT Hit: EXACT" << std::endl;
         }
-        return NegamaxResult<TURN>(entry.bestMove, ColoredEvaluation<TURN>(entry.value));
+        return NegamaxResult<TURN>(entry.bestMove, ColoredEvaluation<TURN>(entry.value).clamp_(alpha, beta));
       } else if (entry.bound == BoundType::LOWER && entry.value >= beta.value) {
         if (IS_PRINT_NODE) {
           std::cout << repeat("  ", plyFromRoot) << "TT Hit: LOWER" << std::endl;
@@ -492,11 +492,12 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   // We need to check this *after* we do the checkmate test above, since you can win on the 50th move.
   if (thread->position_.is_fifty_move_rule()) {
     if (IS_PRINT_NODE) {
-    std::cout << repeat("  ", plyFromRoot) << "Fifty-move rule draw detected." << std::endl;
+      std::cout << repeat("  ", plyFromRoot) << "Fifty-move rule draw detected." << std::endl;
     }
     return NegamaxResult<TURN>(kNullMove, ColoredEvaluation<TURN>(std::max(originalAlpha.value, std::min(beta.value, Evaluation(0)))));
   }
 
+  // Internal Iterative Deepening.
   // If we don't have a best move from the TT, we compute one with reduced depth.
   if (depth > 2 && (entry.key != key || entry.bestMove == kNullMove)) {
     NegamaxResult<TURN> result = negamax<TURN, SEARCH_TYPE>(thread, depth - 2, alpha, beta, plyFromRoot, frame, stopThinking);
@@ -580,8 +581,6 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     for (ExtMove* m = moves; m != end; ++m) {
       std::cout << m->move.uci() << "(" << m->score << ") ";
     }
-    std::cout << std::endl;
-    std::cout << bstr(threats.badForOur[Piece::BISHOP]) << std::endl;
   }
 
   if (SEARCH_TYPE == SearchType::ROOT) {
@@ -592,8 +591,17 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     std::cout << repeat("  ", plyFromRoot) << "Searching moves." << std::endl;
   }
 
-  NegamaxResult<TURN> bestResult(kNullMove, alpha);
-  Move bestMoveTT = kNullMove;
+  // We use kMinEval instead of alpha so that we still get a best move, even if all moves fail low.
+  // This is helpful for probing the TT to try and understand why we got a cutoff. I don't think it
+  // meaningfully changes the engine's strength, since if all moves fail low, then the TT will just
+  // store the first move. OTOH maybe this is bad, since prioritizing a random first move could be
+  // worse than allowing the other move ordering heuristics to just do their thing.
+  //
+  // Note that, regardless of whether we initialize bestResult.evaluation with kMinEval or alpha,
+  // it is different than alpha! Alpha is the value passed to our children (as -beta), whereas
+  // bestResult.evaluation is the value we will return. When multiPV > 1 and we're in the root,
+  // these are typically different values.
+  NegamaxResult<TURN> bestResult(kNullMove, ColoredEvaluation<TURN>(kMinEval));
   uint8_t numQuietMovesSearched = 0;
   for (ExtMove* move = moves; move < end; ++move) {
     if (thread->position_.pieceBitboards_[enemyKing] & bb(move->move.to)) {
@@ -685,7 +693,6 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     if (eval > bestResult.evaluation) {
       bestResult.bestMove = move->move;
       bestResult.evaluation = eval;
-      bestMoveTT = move->move;
     }
     if (eval > alpha) {
       if (SEARCH_TYPE == SearchType::ROOT) {
@@ -761,11 +768,11 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   bestResult.evaluation.clamp_(originalAlpha, beta);
 
   if (IS_PRINT_NODE) {
-    std::cout << repeat("  ", plyFromRoot) << "Storing in TT: depth=" << depth << " eval=" << bestResult.evaluation.value << " bound=" << bound_type_to_string(bound) << std::endl;
+    std::cout << repeat("  ", plyFromRoot) << "Storing in TT: depth=" << depth << " move=" << bestResult.bestMove.uci() << " eval=" << bestResult.evaluation.value << " bound=" << bound_type_to_string(bound) << std::endl;
   }
   thread->tt_->store(
     thread->position_.currentState_.hash,
-    bestMoveTT,
+    bestResult.bestMove,
     depth,
     bestResult.evaluation.value,
     bound

@@ -64,21 +64,28 @@ class ProbeTask : public Task {
       ez_make_move(&pos, move);
     }
     TTEntry entry;
-    if (state->tt_->probe(pos.currentState_.hash, entry)) {
-      std::cout << "TT Entry found for current position:" << std::endl;
-      std::cout << "  Hash: " << pos.currentState_.hash << std::endl;
-      std::cout << "  Best Move: " << entry.bestMove.uci() << std::endl;
-      if (entry.value <= kLongestForcedMate) {
-        std::cout << "Value: " << entry.value << "(mate " << -(entry.value - kCheckmate + 1) / 2 << ")" << std::endl;
-      } else if (entry.value >= -kLongestForcedMate) {
-        std::cout << "Value: " << entry.value << "(mate " << -(entry.value + kCheckmate - 1) / 2 << ")" << std::endl;
-      } else {
-        std::cout << "Value: " << entry.value << "(cp " << entry.value << ")" << std::endl;
+    size_t counter = 0;
+    while (state->tt_->probe(pos.currentState_.hash, entry) && (counter++ < 10)) {
+      if (pos.turn_ == Color::BLACK) {
+        // Print bounds/values from white's perspective.
+        entry = entry.flip();
       }
-      std::cout << "  Depth: " << entry.depth << std::endl;
-      std::cout << "  Bound: " << bound_type_to_string(entry.bound) << std::endl;
-    } else {
-      std::cout << "No TT Entry found for current position." << std::endl;
+      std::cout << entry.bestMove.uci();
+      if (entry.value <= kLongestForcedMate) {
+        std::cout << "  Value: " << "mate " << -(entry.value - kCheckmate + 1) / 2;
+      } else if (entry.value >= -kLongestForcedMate) {
+        std::cout << "  Value: " << "mate " << -(entry.value + kCheckmate - 1) / 2;
+      } else {
+        std::cout << "  Value: " << "cp " << entry.value;
+      }
+      std::cout << "  Depth: " << entry.depth;
+      std::cout << "  Bound: " << bound_type_to_string(entry.bound);
+      std::cout << "  Hash: " << pos.currentState_.hash;
+      std::cout << std::endl;
+      if (entry.bestMove == kNullMove) {
+        break;
+      }
+      ez_make_move(&pos, entry.bestMove);
     }
   }
  private:
