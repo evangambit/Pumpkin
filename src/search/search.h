@@ -116,7 +116,6 @@ struct Thread {
 template<Color TURN>
 struct NegamaxResult {
   NegamaxResult() : bestMove(kNullMove), evaluation(0) {}
-  NegamaxResult(Move move, Evaluation eval) : bestMove(move), evaluation(ColoredEvaluation<TURN>(eval)) {}
   NegamaxResult(Move move, ColoredEvaluation<TURN> eval) : bestMove(move), evaluation(eval) {}
   Move bestMove;
   ColoredEvaluation<TURN> evaluation;
@@ -173,11 +172,11 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
   uint64_t key = thread->position_.currentState_.hash;
   if (thread->tt_->probe(key, entry)) {
     if (entry.bound == BoundType::EXACT) {
-      return NegamaxResult<TURN>(entry.bestMove, entry.value);
+      return NegamaxResult<TURN>(entry.bestMove, ColoredEvaluation<TURN>(entry.value).clamp_(alpha, beta));
     } else if (entry.bound == BoundType::LOWER && entry.value >= beta.value) {
-      return NegamaxResult<TURN>(entry.bestMove, entry.value);
+      return NegamaxResult<TURN>(entry.bestMove, beta);
     } else if (entry.bound == BoundType::UPPER && entry.value <= alpha.value) {
-      return NegamaxResult<TURN>(entry.bestMove, entry.value);
+      return NegamaxResult<TURN>(entry.bestMove, alpha);
     }
   } else {
     entry.bestMove = kNullMove;
@@ -216,13 +215,13 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
     if (IS_PRINT_QNODE) {
       std::cout << repeat("  ", plyFromRoot) << "Checkmate detected in quiescence search." << std::endl;
     }
-    return NegamaxResult<TURN>(kNullMove, kCheckmate);
+    return NegamaxResult<TURN>(kNullMove, ColoredEvaluation<TURN>(kCheckmate).clamp_(originalAlpha, beta));
   }
   if (IS_PRINT_QNODE) {
     std::cout << repeat("  ", plyFromRoot) << "Comparing static evaluation to alpha/beta" << std::endl;
   }
 
-  NegamaxResult<TURN> bestResult(kNullMove, evaluate<TURN>(thread->evaluator_, thread->position_));
+  NegamaxResult<TURN> bestResult(kNullMove, evaluate<TURN>(thread->evaluator_, thread->position_).clamp_(alpha, beta));
   if (IS_PRINT_QNODE) {
     std::cout << repeat("  ", plyFromRoot) << "Static evaluation: " << bestResult.evaluation.value << " (hash = " << frame->hash << ")" << std::endl;
   }
@@ -381,11 +380,11 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   // Check for immediate cutoffs based on mate distance.
   Evaluation lowestPossibleEvaluation = kCheckmate + plyFromRoot;
   if (SEARCH_TYPE != SearchType::ROOT && lowestPossibleEvaluation >= beta.value) {
-    return NegamaxResult<TURN>(kNullMove, beta.value);
+    return NegamaxResult<TURN>(kNullMove, beta);
   }
   Evaluation highestPossibleEvaluation = -kCheckmate - plyFromRoot;
   if (SEARCH_TYPE != SearchType::ROOT && highestPossibleEvaluation <= alpha.value) {
-    return NegamaxResult<TURN>(kNullMove, alpha.value);
+    return NegamaxResult<TURN>(kNullMove, alpha);
   }
 
   if (IS_PRINT_NODE) {
@@ -400,17 +399,17 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
         if (IS_PRINT_NODE) {
           std::cout << repeat("  ", plyFromRoot) << "TT Hit: EXACT" << std::endl;
         }
-        return NegamaxResult<TURN>(entry.bestMove, entry.value);
+        return NegamaxResult<TURN>(entry.bestMove, ColoredEvaluation<TURN>(entry.value));
       } else if (entry.bound == BoundType::LOWER && entry.value >= beta.value) {
         if (IS_PRINT_NODE) {
           std::cout << repeat("  ", plyFromRoot) << "TT Hit: LOWER" << std::endl;
         }
-        return NegamaxResult<TURN>(entry.bestMove, entry.value);
+        return NegamaxResult<TURN>(entry.bestMove, beta);
       } else if (entry.bound == BoundType::UPPER && entry.value <= alpha.value) {
         if (IS_PRINT_NODE) {
           std::cout << repeat("  ", plyFromRoot) << "TT Hit: UPPER" << std::endl;
         }
-        return NegamaxResult<TURN>(entry.bestMove, entry.value);
+        return NegamaxResult<TURN>(entry.bestMove, alpha);
       }
     }
   } else {
@@ -421,7 +420,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     if (IS_PRINT_NODE) {
       std::cout << repeat("  ", plyFromRoot) << "Search stopped externally." << std::endl;
     }
-    return NegamaxResult<TURN>(kNullMove, 0);
+    return NegamaxResult<TURN>(kNullMove, ColoredEvaluation<TURN>(0).clamp_(originalAlpha, beta));
   }
 
   thread->nodeCount_++;
@@ -479,14 +478,14 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     );
     if (inCheck) {
       if (IS_PRINT_NODE) {
-      std::cout << repeat("  ", plyFromRoot) << "Checkmate detected." << std::endl;
+        std::cout << repeat("  ", plyFromRoot) << "Checkmate detected." << std::endl;
       }
-      return NegamaxResult<TURN>(kNullMove, kCheckmate);
+      return NegamaxResult<TURN>(kNullMove, ColoredEvaluation<TURN>(kCheckmate));
     } else {
       if (IS_PRINT_NODE) {
-      std::cout << repeat("  ", plyFromRoot) << "Stalemate detected." << std::endl;
+        std::cout << repeat("  ", plyFromRoot) << "Stalemate detected." << std::endl;
       }
-      return NegamaxResult<TURN>(kNullMove, 0);
+      return NegamaxResult<TURN>(kNullMove, ColoredEvaluation<TURN>(std::max(originalAlpha.value, std::min(beta.value, Evaluation(0)))));
     }
   }
 
@@ -495,7 +494,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     if (IS_PRINT_NODE) {
     std::cout << repeat("  ", plyFromRoot) << "Fifty-move rule draw detected." << std::endl;
     }
-    return NegamaxResult<TURN>(kNullMove, 0);
+    return NegamaxResult<TURN>(kNullMove, ColoredEvaluation<TURN>(std::max(originalAlpha.value, std::min(beta.value, Evaluation(0)))));
   }
 
   // If we don't have a best move from the TT, we compute one with reduced depth.
@@ -580,7 +579,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     std::cout << repeat("  ", plyFromRoot) << "Searching moves." << std::endl;
   }
 
-  NegamaxResult<TURN> bestResult(kNullMove, kMinEval);
+  NegamaxResult<TURN> bestResult(kNullMove, alpha);
   Move bestMoveTT = kNullMove;
   uint8_t numQuietMovesSearched = 0;
   for (ExtMove* move = moves; move < end; ++move) {
@@ -638,9 +637,13 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
         && !inCheck;
 
       // Null window search (possibly with reduced depth).
-      eval = -negamax<opposite_color<TURN>(), SearchType::NORMAL_SEARCH>(thread, std::max(childDepth - reduction, 0), -(alpha + 1), -alpha, plyFromRoot + 1, frame + 1, stopThinking).evaluation;
-      if (eval.value > alpha.value) {
-        eval = -negamax<opposite_color<TURN>(), SearchType::NORMAL_SEARCH>(thread, childDepth, -beta, -alpha, plyFromRoot + 1, frame + 1, stopThinking).evaluation;
+      if (SEARCH_TYPE != SearchType::NULL_WINDOW_SEARCH) {
+        eval = -negamax<opposite_color<TURN>(), SearchType::NULL_WINDOW_SEARCH>(thread, std::max(childDepth - reduction, 0), -(alpha + 1), -alpha, plyFromRoot + 1, frame + 1, stopThinking).evaluation;
+        if (eval.value > alpha.value) {
+          eval = -negamax<opposite_color<TURN>(), SearchType::NORMAL_SEARCH>(thread, childDepth, -beta, -alpha, plyFromRoot + 1, frame + 1, stopThinking).evaluation;
+        }
+      } else {
+        eval = -negamax<opposite_color<TURN>(), SearchType::NULL_WINDOW_SEARCH>(thread, childDepth, -beta, -alpha, plyFromRoot + 1, frame + 1, stopThinking).evaluation;
       }
     } else {
       // Simple, full-window, full-depth search. Used for the first move in non-root search.
@@ -714,7 +717,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
       if (IS_PRINT_NODE) {
         std::cout << repeat("  ", plyFromRoot) << "Search stopped externally. Returning TT best move." << std::endl;
       }
-      return NegamaxResult<TURN>(entry.bestMove, std::max(originalAlpha.value, std::min(entry.value, beta.value)));
+      return NegamaxResult<TURN>(entry.bestMove, ColoredEvaluation<TURN>(entry.value).clamp_(originalAlpha, beta));
     } else {
       if (IS_PRINT_NODE) {
         std::cout << repeat("  ", plyFromRoot) << "Search stopped externally. No TT entry found, returning null move." << std::endl;
@@ -733,7 +736,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
         thread->nodeLimit_ = nodeLimit;
         return result;
       }
-      return NegamaxResult<TURN>(kNullMove, originalAlpha.value);
+      return NegamaxResult<TURN>(kNullMove, originalAlpha);
     }
   }
 

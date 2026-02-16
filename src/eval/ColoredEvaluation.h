@@ -35,8 +35,9 @@ struct ColoredEvaluation {
     value += other.value;
     return *this;
   }
-  void clamp_(const ColoredEvaluation<TURN>& alpha, const ColoredEvaluation<TURN>& beta) {
+  ColoredEvaluation<TURN>& clamp_(const ColoredEvaluation<TURN>& alpha, const ColoredEvaluation<TURN>& beta) {
     value = std::max(alpha.value, std::min(value, beta.value));
+    return *this;
   }
   friend std::ostream& operator<<(std::ostream& os, const ColoredEvaluation<TURN>& eval) {
     os << (TURN == Color::WHITE ? eval.value : -eval.value);
