@@ -3,7 +3,7 @@
 
 #ifndef IS_PRINT_NODE
 #define IS_PRINT_NODE 0
-// #define IS_PRINT_NODE ((frame)->hash == 17514877330620511575ULL)
+// #define IS_PRINT_NODE (SEARCH_TYPE == SearchType::ROOT)
 // #define IS_PRINT_NODE (plyFromRoot == 0 || frame->hash == 15932567610229845462ULL || frame->hash == 15427882709703266013ULL)
 // #define IS_PRINT_NODE (thread->position_.currentState_.hash == 412260009870427727ULL)
 #endif
@@ -551,6 +551,10 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
       &&
       move->capture == ColoredPiece::NO_COLORED_PIECE
     , 200);
+    // Bonus for moving a piece that is under attack.
+    move->score += value_or_zero(
+      ((threats.badForOur[move->piece] & bb(move->move.from)) > 0)
+    , 50);
 
     // Prioritize moves that caused a beta cutoff in a similar position, in response to a similar move.
     move->score += frame->responseTo[move->piece][lastMove.to] == move->move ? 20 : 0;
@@ -570,6 +574,15 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
       return a.score > b.score;
     }
   );
+
+  if (IS_PRINT_NODE) {
+    std::cout << repeat("  ", plyFromRoot) << "Ordered moves: ";
+    for (ExtMove* m = moves; m != end; ++m) {
+      std::cout << m->move.uci() << "(" << m->score << ") ";
+    }
+    std::cout << std::endl;
+    std::cout << bstr(threats.badForOur[Piece::BISHOP]) << std::endl;
+  }
 
   if (SEARCH_TYPE == SearchType::ROOT) {
     thread->primaryVariations_.clear();
