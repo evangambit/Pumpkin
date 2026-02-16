@@ -708,15 +708,16 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
 
   if (stopThinking->load()) {
     // Search was stopped externally. We cannot trust the result
-    // of our for loop above, so look up the best move from the TT.
+    // of our for loop above, so we return early to avoid writing
+    // an inaccurate result to the transposition table.
     if (thread->tt_->probe(key, entry)) {
       if (IS_PRINT_NODE) {
-      std::cout << repeat("  ", plyFromRoot) << "Search stopped externally. Returning TT best move." << std::endl;
+        std::cout << repeat("  ", plyFromRoot) << "Search stopped externally. Returning TT best move." << std::endl;
       }
-      return NegamaxResult<TURN>(entry.bestMove, entry.value);
+      return NegamaxResult<TURN>(entry.bestMove, std::max(originalAlpha.value, std::min(entry.value, beta.value)));
     } else {
       if (IS_PRINT_NODE) {
-      std::cout << repeat("  ", plyFromRoot) << "Search stopped externally. No TT entry found, returning null move." << std::endl;
+        std::cout << repeat("  ", plyFromRoot) << "Search stopped externally. No TT entry found, returning null move." << std::endl;
       }
       if (SEARCH_TYPE == SearchType::ROOT) {
         // Need to always return something sensible from the root.
@@ -732,7 +733,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
         thread->nodeLimit_ = nodeLimit;
         return result;
       }
-      return NegamaxResult<TURN>(kNullMove, 0);
+      return NegamaxResult<TURN>(kNullMove, originalAlpha.value);
     }
   }
 
@@ -740,6 +741,8 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   BoundType bound = BoundType::EXACT;
   if (bestResult.evaluation <= originalAlpha) bound = BoundType::UPPER;
   else if (bestResult.evaluation >= beta) bound = BoundType::LOWER;
+
+  bestResult.evaluation.clamp_(originalAlpha, beta);
 
   if (IS_PRINT_NODE) {
     std::cout << repeat("  ", plyFromRoot) << "Storing in TT: depth=" << depth << " eval=" << bestResult.evaluation.value << " bound=" << bound_type_to_string(bound) << std::endl;
@@ -753,9 +756,8 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   );
 
   if (IS_PRINT_NODE) {
-  std::cout << repeat("  ", plyFromRoot) << "Negamax returning: bestMove=" << bestResult.bestMove.uci() << " eval=" << bestResult.evaluation.value  << " depth=" << depth << std::endl;
+    std::cout << repeat("  ", plyFromRoot) << "Negamax returning: bestMove=" << bestResult.bestMove.uci() << " eval=" << bestResult.evaluation.value  << " depth=" << depth << std::endl;
   }
-
 
   return bestResult;
 }
