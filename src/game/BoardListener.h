@@ -13,7 +13,7 @@
 #include "Geometry.h"
 #include "Utils.h"
 #include "Move.h"
-#include "../string_utils.h"
+#include "../StringUtils.h"
 #include "../eval/ColoredEvaluation.h"
 
 namespace ChessEngine {

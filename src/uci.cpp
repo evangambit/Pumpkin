@@ -8,7 +8,7 @@
 #include "uci/TrivialTasks.h"
 #include "uci/SetOptionTask.h"
 #include "uci/PositionTask.h"
-#include "string_utils.h"
+#include "StringUtils.h"
 
 #include <atomic>
 #include <condition_variable>
