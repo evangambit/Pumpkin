@@ -71,7 +71,6 @@ struct Thread {
   unsigned depth_{1};
   std::chrono::high_resolution_clock::time_point stopTime_;
   Position position_;
-  std::shared_ptr<EvaluatorInterface> evaluator_;
   std::unordered_set<Move> permittedMoves_;
   std::vector<std::pair<Move, Evaluation>> primaryVariations_;  // Contains multiPV number of best moves.
   uint64_t nodeCount_{0};
@@ -86,29 +85,23 @@ struct Thread {
   Thread(
     uint64_t id,
     const Position& pos,
-    std::shared_ptr<EvaluatorInterface> evaluator,
     uint64_t multiPV,
     const std::unordered_set<Move>& permittedMoves,
     TranspositionTable* tt
   )
-    : id_(id), position_(pos), evaluator_(evaluator), permittedMoves_(permittedMoves), multiPV_(multiPV), tt_(tt) {
-      this->position_.set_listener(this->evaluator_);
-    }
+    : id_(id), position_(pos), permittedMoves_(permittedMoves), multiPV_(multiPV), tt_(tt) {}
   
   Thread(const Thread& other)
   : id_(other.id_),
     multiPV_(other.multiPV_),
     depth_(other.depth_),
     position_(other.position_),
-    evaluator_(other.evaluator_->clone()),
     permittedMoves_(other.permittedMoves_),
     primaryVariations_(other.primaryVariations_),
     nodeCount_(other.nodeCount_),
     qNodeCount_(other.qNodeCount_),
     nodeLimit_(other.nodeLimit_),
-    tt_(other.tt_) {
-      this->position_.set_listener(this->evaluator_);
-    }
+    tt_(other.tt_) {}
 
   std::atomic<bool> stopSearchFlag{false};
 };
@@ -159,7 +152,7 @@ template<Color TURN>
 NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, ColoredEvaluation<TURN> beta, int plyFromRoot, int quiescenceDepth, Frame *frame, std::atomic<bool> *stopThinking) {
   // Prevent stack overflow - return static eval if we've gone too deep
   if (quiescenceDepth >= kMaxQuiescenceDepth) {
-    return NegamaxResult<TURN>(kNullMove, evaluate<TURN>(thread->evaluator_, thread->position_));
+    return NegamaxResult<TURN>(kNullMove, evaluate<TURN>(thread->position_.evaluator_, thread->position_));
   }
 
   frame->hash = thread->position_.currentState_.hash;
@@ -221,7 +214,7 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
     std::cout << repeat("  ", plyFromRoot) << "Comparing static evaluation to alpha/beta" << std::endl;
   }
 
-  NegamaxResult<TURN> bestResult(kNullMove, evaluate<TURN>(thread->evaluator_, thread->position_).clamp_(alpha, beta));
+  NegamaxResult<TURN> bestResult(kNullMove, evaluate<TURN>(thread->position_.evaluator_, thread->position_).clamp_(alpha, beta));
   if (IS_PRINT_QNODE) {
     std::cout << repeat("  ", plyFromRoot) << "Static evaluation: " << bestResult.evaluation.value << " (hash = " << frame->hash << ")" << std::endl;
   }

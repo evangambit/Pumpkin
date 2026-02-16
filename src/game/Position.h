@@ -72,10 +72,10 @@ class Position {
     states_(other.states_),
     history_(other.history_),
     currentState_(other.currentState_),
-    boardListener_(std::make_shared<DummyBoardListener>()),
+    evaluator_(other.evaluator_->clone()),
     wholeMoveCounter_(other.wholeMoveCounter_),
     turn_(other.turn_) {
-      this->set_listener(this->boardListener_);
+      this->set_listener(this->evaluator_);
     }
 
   static Position init();
@@ -92,15 +92,15 @@ class Position {
   std::vector<PositionState> states_;
   std::vector<ExtMove> history_;
   PositionState currentState_;
-  std::shared_ptr<BoardListener> boardListener_ = std::make_shared<DummyBoardListener>();
+  std::shared_ptr<EvaluatorInterface> evaluator_ = std::make_shared<DummyEvaluator>();
 
-  void set_listener(std::shared_ptr<BoardListener> listener) {
-    boardListener_ = listener;
-    boardListener_->empty();
+  void set_listener(std::shared_ptr<EvaluatorInterface> listener) {
+    evaluator_ = listener;
+    evaluator_->empty();
     for (size_t i = 0; i < kNumSquares; ++i) {
         ColoredPiece cp = this->tiles_[SafeSquare(i)];
         if (cp != ColoredPiece::NO_COLORED_PIECE) {
-            boardListener_->place_piece(cp, SafeSquare(i));
+            evaluator_->place_piece(cp, SafeSquare(i));
         }
     }
   }
@@ -133,17 +133,17 @@ class Position {
   }
 
   inline void increment_piece_map(ColoredPiece cp, SafeSquare sq) {
-    this->boardListener_->place_piece(cp, sq);
+    this->evaluator_->place_piece(cp, sq);
   }
   inline void decrement_piece_map(ColoredPiece cp, SafeSquare sq) {
-    this->boardListener_->remove_piece(cp, sq);
+    this->evaluator_->remove_piece(cp, sq);
   }
 
   inline void increment_piece_map(SafeColoredPiece cp, SafeSquare sq) {
-    this->boardListener_->place_piece(cp, sq);
+    this->evaluator_->place_piece(cp, sq);
   }
   inline void decrement_piece_map(SafeColoredPiece cp, SafeSquare sq) {
-    this->boardListener_->remove_piece(cp, sq);
+    this->evaluator_->remove_piece(cp, sq);
   }
 
   void assert_valid_state() const;

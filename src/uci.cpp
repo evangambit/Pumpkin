@@ -49,9 +49,7 @@ void wait_for_task(UciEngineState *state) {
 struct UciEngine {
   UciEngineState state;
 
-  UciEngine() {
-    this->state.position = Position("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
-  }
+  UciEngine() {}
   static void print_preamble(UciEngineState *state) {
     std::cout << "id name " << state->name << std::endl;
     std::cout << "id author Morgan Redding" << std::endl << std::endl;
@@ -195,6 +193,8 @@ struct UciEngine {
       state->taskQueue.push_back(std::make_shared<SetEvaluatorTask>(parts));
     } else if (parts[0] == "selfplay") {
       state->taskQueue.push_back(std::make_shared<SelfPlayTask>());
+    } else if (parts[0] == "eval") {
+      state->taskQueue.push_back(std::make_shared<EvalTask>(parts));
     } else {
       state->taskQueue.push_back(std::make_shared<UnrecognizedCommandTask>(parts));
     }
