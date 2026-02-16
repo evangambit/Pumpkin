@@ -4,7 +4,7 @@
 #include <memory>
 #include <sstream>
 
-#include "../nnue.h"
+#include "../Nnue.h"
 #include "../NnueEvaluator.h"
 #include "../../../game/Position.h"
 #include "../../../game/movegen/movegen.h"

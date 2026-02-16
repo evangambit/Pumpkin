@@ -2,7 +2,7 @@
 #define MOVEGEN_PAWNS_H
 
 #include "../Position.h"
-#include "../utils.h"
+#include "../Utils.h"
 
 namespace ChessEngine {
 

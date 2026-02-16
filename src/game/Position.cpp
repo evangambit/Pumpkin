@@ -3,7 +3,7 @@
 #include <iostream>
 #include <random>
 
-#include "utils.h"
+#include "Utils.h"
 #include "Move.h"
 
 namespace ChessEngine {

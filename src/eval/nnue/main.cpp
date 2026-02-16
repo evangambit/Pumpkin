@@ -3,10 +3,10 @@
 #include <fstream>
 #include <memory>
 
-#include "nnue.h"
+#include "Nnue.h"
 
 #include "../../game/Position.h"
-#include "../evaluator.h"
+#include "../Evaluator.h"
 #include "NnueEvaluator.h"
 
 using namespace ChessEngine;

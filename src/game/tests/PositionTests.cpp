@@ -3,7 +3,7 @@
 #include <vector>
 
 #include "../Position.h"
-#include "../utils.h"
+#include "../Utils.h"
 
 namespace ChessEngine {
 

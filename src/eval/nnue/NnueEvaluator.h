@@ -5,11 +5,11 @@
 #include <iostream>
 #include <fstream>
 
-#include "nnue.h"
-#include "utils.h"
+#include "Nnue.h"
+#include "Utils.h"
 
 #include "../../game/Position.h"
-#include "../evaluator.h"
+#include "../Evaluator.h"
 
 using namespace ChessEngine;
 

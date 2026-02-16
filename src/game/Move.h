@@ -3,7 +3,7 @@
 
 #include <cstdint>
 
-#include "geometry.h"
+#include "Geometry.h"
 
 namespace ChessEngine {
 

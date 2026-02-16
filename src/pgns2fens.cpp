@@ -40,7 +40,7 @@
 #include <gflags/gflags.h>
 
 #include "game/Position.h"
-#include "game/geometry.h"
+#include "game/Geometry.h"
 #include "game/movegen/movegen.h"
 #include "string_utils.h"
 

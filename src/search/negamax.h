@@ -14,10 +14,10 @@
 #include <unordered_set>
 
 #include "../game/Position.h"
-#include "../game/utils.h"
+#include "../game/Utils.h"
 #include "../game/movegen/movegen.h"
 #include "../game/Threats.h"
-#include "../eval/evaluator.h"
+#include "../eval/Evaluator.h"
 #include "../eval/ColoredEvaluation.h"
 
 #include "transposition_table.h"

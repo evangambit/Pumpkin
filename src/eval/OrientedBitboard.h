@@ -1,4 +1,4 @@
-#include "../game/geometry.h"
+#include "../game/Geometry.h"
 
 namespace ChessEngine {
 

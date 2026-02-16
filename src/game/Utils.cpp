@@ -2,7 +2,7 @@
 #include <cassert>
 #include <cstdint>
 
-#include "utils.h"
+#include "Utils.h"
 
 namespace ChessEngine {
 
