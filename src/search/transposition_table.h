@@ -23,6 +23,16 @@ struct TTEntry {
   Evaluation value;
   BoundType bound;
   uint8_t generation;
+  TTEntry flip() const {
+    TTEntry flipped = *this;
+    flipped.value = -flipped.value;
+    if (bound == BoundType::LOWER) {
+      flipped.bound = BoundType::UPPER;
+    } else if (bound == BoundType::UPPER) {
+      flipped.bound = BoundType::LOWER;
+    }
+    return flipped;
+  }
 };
 
 class TranspositionTable {
