@@ -1,10 +1,10 @@
-#include "../../game/geometry.h"
-#include "../../game/utils.h"
+#include "../../game/Geometry.h"
+#include "../../game/Utils.h"
 #include "../../game/Position.h"
 #include "../../game/movegen/movegen.h"
 #include "../../game/movegen/sliding.h"
-#include "nnue.h"
-#include "sharded_matrix.h"
+#include "Nnue.h"
+#include "ShardedMatrix.h"
 
 #include <thread>
 

@@ -2,7 +2,7 @@
 #define MOVEGEN_ROOKS_H
 
 #include "../Position.h"
-#include "../utils.h"
+#include "../Utils.h"
 #include "sliding.h"
 
 namespace ChessEngine {

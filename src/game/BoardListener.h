@@ -10,8 +10,8 @@
 #include <algorithm>
 #include <memory>
 
-#include "geometry.h"
-#include "utils.h"
+#include "Geometry.h"
+#include "Utils.h"
 #include "Move.h"
 #include "../string_utils.h"
 #include "../eval/ColoredEvaluation.h"

@@ -7,9 +7,9 @@
 #include <bit>
 
 #include "../../game/Position.h"
-#include "../evaluator.h"
+#include "../Evaluator.h"
 #include "../OrientedBitboard.h"
-#include "../../game/utils.h"
+#include "../../game/Utils.h"
 #include "../../game/Threats.h"
 #include "../PawnAnalysis.h"
 

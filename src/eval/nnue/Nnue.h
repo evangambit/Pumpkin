@@ -9,7 +9,7 @@
 #include <memory>
 
 #include "../../game/Position.h"
-#include "utils.h"
+#include "Utils.h"
 
 namespace NNUE {
 

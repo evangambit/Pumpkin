@@ -11,9 +11,9 @@
 #include <memory>
 
 #include "BoardListener.h"
-#include "geometry.h"
+#include "Geometry.h"
 #include "Move.h"
-#include "utils.h"
+#include "Utils.h"
 #include "../string_utils.h"
 
 namespace ChessEngine {

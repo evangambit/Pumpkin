@@ -2,7 +2,7 @@
 #define MOVEGEN_H
 
 #include "../Position.h"
-#include "../geometry.h"
+#include "../Geometry.h"
 
 #include "pawns.h"
 #include "knights.h"

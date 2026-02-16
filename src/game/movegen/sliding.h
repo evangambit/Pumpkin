@@ -2,7 +2,7 @@
 #define MOVEGEN_SLIDING_H
 
 #include "../Position.h"
-#include "../utils.h"
+#include "../Utils.h"
 
 #include <bit>
 

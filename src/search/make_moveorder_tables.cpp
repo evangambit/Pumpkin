@@ -1,9 +1,9 @@
-#include "../game/geometry.h"
-#include "../game/utils.h"
+#include "../game/Geometry.h"
+#include "../game/Utils.h"
 #include "../game/Position.h"
 #include "../game/Move.h"
 #include "../game/movegen/movegen.h"
-#include "../eval/nnue/sharded_matrix.h"
+#include "../eval/nnue/ShardedMatrix.h"
 
 #include <chrono>
 #include <vector>

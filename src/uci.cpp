@@ -1,7 +1,7 @@
 #include "search/search.h"
 #include "game/Position.h"
 #include "game/movegen/movegen.h"
-#include "game/utils.h"
+#include "game/Utils.h"
 #include "uci/GoTask.h"
 #include "uci/SelfPlayTask.h"
 #include "uci/Task.h"

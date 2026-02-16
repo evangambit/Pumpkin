@@ -3,9 +3,9 @@
 
 #include <memory>
 #include "../../game/Position.h"
-#include "../../game/utils.h"
+#include "../../game/Utils.h"
 #include "../../game/BoardListener.h"
-#include "../evaluator.h"
+#include "../Evaluator.h"
 #include "../ColoredEvaluation.h"
 
 namespace ChessEngine {

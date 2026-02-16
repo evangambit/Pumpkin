@@ -1,8 +1,8 @@
 #ifndef THREATS_H
 #define THREATS_H
 
-#include "utils.h"
-#include "geometry.h"
+#include "Utils.h"
+#include "Geometry.h"
 #include "Position.h"
 
 #include "movegen/bishops.h"

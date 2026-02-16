@@ -7,7 +7,7 @@
 
 #include <string>
 
-#include "utils.h"
+#include "Utils.h"
 
 namespace ChessEngine {
 

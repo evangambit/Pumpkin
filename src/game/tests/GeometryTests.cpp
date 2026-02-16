@@ -2,8 +2,8 @@
 
 #include <vector>
 
-#include "../utils.h"
-#include "../geometry.h"
+#include "../Utils.h"
+#include "../Geometry.h"
 
 #define EXPECT_BB_EQ(actual, expected) \
   EXPECT_TRUE((actual) == (expected)) \
