@@ -14,7 +14,7 @@
 #include "Geometry.h"
 #include "Move.h"
 #include "Utils.h"
-#include "../string_utils.h"
+#include "../StringUtils.h"
 
 namespace ChessEngine {
 
