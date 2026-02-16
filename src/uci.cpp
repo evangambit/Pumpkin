@@ -192,7 +192,7 @@ struct UciEngine {
     } else if (parts[0] == "evaluator") {
       state->taskQueue.push_back(std::make_shared<SetEvaluatorTask>(parts));
     } else if (parts[0] == "selfplay") {
-      state->taskQueue.push_back(std::make_shared<SelfPlayTask>());
+      state->taskQueue.push_back(std::make_shared<SelfPlayTask>(parts));
     } else if (parts[0] == "eval") {
       state->taskQueue.push_back(std::make_shared<EvalTask>(parts));
     } else {

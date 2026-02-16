@@ -9,6 +9,7 @@ extern const char qst_bin[];
 extern unsigned int qst_bin_len;
 
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <deque>
 #include <iostream>
