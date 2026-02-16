@@ -1,17 +1,10 @@
+/**
+ * This file contains the core search logit, but may not be the most
+ * usable API. See search.h for a more user-friendly search interface.
+ */
+
 #ifndef NEGAMAX_H
 #define NEGAMAX_H
-
-#ifndef IS_PRINT_NODE
-#define IS_PRINT_NODE 0
-// #define IS_PRINT_NODE (SEARCH_TYPE == SearchType::ROOT)
-// #define IS_PRINT_NODE (plyFromRoot == 0 || frame->hash == 15932567610229845462ULL || frame->hash == 15427882709703266013ULL)
-// #define IS_PRINT_NODE (thread->position_.currentState_.hash == 412260009870427727ULL)
-#endif
-
-#ifndef IS_PRINT_QNODE
-#define IS_PRINT_QNODE 0
-// #define IS_PRINT_QNODE ((frame - quiescenceDepth)->hash == 17514877330620511575ULL)
-#endif
 
 #include <algorithm>
 #include <atomic>
@@ -28,6 +21,21 @@
 #include "../eval/ColoredEvaluation.h"
 
 #include "transposition_table.h"
+
+
+// IS_PRINT_NODE and IS_PRINT_QNODE can be used to print debugging information for specific nodes.
+
+#ifndef IS_PRINT_NODE
+#define IS_PRINT_NODE 0
+// #define IS_PRINT_NODE (SEARCH_TYPE == SearchType::ROOT)
+// #define IS_PRINT_NODE (plyFromRoot == 0 || frame->hash == 15932567610229845462ULL || frame->hash == 15427882709703266013ULL)
+// #define IS_PRINT_NODE (thread->position_.currentState_.hash == 412260009870427727ULL)
+#endif
+
+#ifndef IS_PRINT_QNODE
+#define IS_PRINT_QNODE 0
+// #define IS_PRINT_QNODE ((frame - quiescenceDepth)->hash == 17514877330620511575ULL)
+#endif
 
 namespace ChessEngine {
 
@@ -57,6 +65,7 @@ struct Killers {
   }
 };
 
+/** Ply-specific information. */
 struct Frame {
   Killers killers;
   Move responseTo[Piece::NUM_PIECES][64];
@@ -64,12 +73,15 @@ struct Frame {
   uint64_t hash;
 };
 
+/**
+  * Thread-specific information. e.g. every thread has its own nodeCount_, position, etc.
+  */
 struct Thread {
   uint64_t id_;
   uint64_t multiPV_;
   unsigned depth_{1};
   std::chrono::high_resolution_clock::time_point stopTime_;
-  Position position_;
+  Position position_;  // Note: position contains a pointer to the evaluator.
   std::unordered_set<Move> permittedMoves_;
   std::vector<std::pair<Move, Evaluation>> primaryVariations_;  // Contains multiPV number of best moves.
   uint64_t nodeCount_{0};
@@ -78,7 +90,8 @@ struct Thread {
   Frame buffer[4];  // Empty buffer so that frames_[plyFromRoot - 4] is valid.
   Frame frames_[kMaxPlyFromRoot];
 
-  // This pointer should be considered non-owning. The TranspositionTable should created and managed elsewhere.
+  // This pointer should be considered non-owning. The TranspositionTable should created and
+  // managed elsewhere since it should be shared across threads and searches.
   TranspositionTable* tt_;
 
   Thread(
@@ -87,8 +100,7 @@ struct Thread {
     uint64_t multiPV,
     const std::unordered_set<Move>& permittedMoves,
     TranspositionTable* tt
-  )
-    : id_(id), position_(pos), permittedMoves_(permittedMoves), multiPV_(multiPV), tt_(tt) {}
+  ) : id_(id), position_(pos), permittedMoves_(permittedMoves), multiPV_(multiPV), tt_(tt) {}
   
   Thread(const Thread& other)
   : id_(other.id_),
@@ -102,6 +114,7 @@ struct Thread {
     nodeLimit_(other.nodeLimit_),
     tt_(other.tt_) {}
 
+  // TODO: when we add multi-threading, we should share stopSearchFlag across threads.
   std::atomic<bool> stopSearchFlag{false};
 };
 

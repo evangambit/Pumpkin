@@ -3,6 +3,11 @@
 
 namespace ChessEngine {
 
+/**
+  * A wrapper around a raw evaluation score which is always from the perspective of a specific color.
+  *
+  * This is useful to avoid accidentally mixing up scores from different perspectives.
+  */
 template<Color TURN>
 struct ColoredEvaluation {
   int16_t value;
