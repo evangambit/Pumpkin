@@ -65,6 +65,16 @@ struct NnueEvaluator : public EvaluatorInterface {
 
   // TODO: get rid of WDL, stop using doubles.
   Evaluation _evaluate(const Position& pos) {
+    if ((pos.pieceBitboards_[ColoredPiece::WHITE_PAWN] | pos.pieceBitboards_[ColoredPiece::BLACK_PAWN]) == kEmptyBitboard) {
+      int whiteMinor = std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_KNIGHT] | pos.pieceBitboards_[ColoredPiece::WHITE_BISHOP]);
+      int blackMinor = std::popcount(pos.pieceBitboards_[ColoredPiece::BLACK_KNIGHT] | pos.pieceBitboards_[ColoredPiece::BLACK_BISHOP]);
+      int whiteMajor = std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_ROOK] | pos.pieceBitboards_[ColoredPiece::WHITE_QUEEN]);
+      int blackMajor = std::popcount(pos.pieceBitboards_[ColoredPiece::BLACK_ROOK] | pos.pieceBitboards_[ColoredPiece::BLACK_QUEEN]);
+      if (whiteMajor + blackMajor == 0 && whiteMinor <= 1 && blackMinor <= 1) {
+        // No pawns, no major pieces, and <= 1 minor. Almost certainly a draw.
+        return Evaluation(0);
+      }
+    }
     #ifndef NDEBUG
       Vector<1024> accCopy = nnue_model->whiteAcc;
     #endif

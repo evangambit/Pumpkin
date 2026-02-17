@@ -1,18 +1,6 @@
 #ifndef SEARCH_H
 #define SEARCH_H
 
-#ifndef IS_PRINT_NODE
-#define IS_PRINT_NODE 0
-// #define IS_PRINT_NODE (SEARCH_TYPE == SearchType::ROOT)
-// #define IS_PRINT_NODE (plyFromRoot == 0 || frame->hash == 15932567610229845462ULL || frame->hash == 15427882709703266013ULL)
-// #define IS_PRINT_NODE (thread->position_.currentState_.hash == 412260009870427727ULL)
-#endif
-
-#ifndef IS_PRINT_QNODE
-#define IS_PRINT_QNODE 0
-// #define IS_PRINT_QNODE ((frame - quiescenceDepth)->hash == 17514877330620511575ULL)
-#endif
-
 #include <algorithm>
 #include <atomic>
 #include <bit>

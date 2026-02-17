@@ -1,13 +1,12 @@
 
 
-```
-sudo apt-get install -y libgflags-dev libgtest-dev
+    sudo apt-get install -y libgflags-dev libgtest-dev
 
 # Run tests.
-sh build.sh test_runner $(find src -name "*.cpp" | grep 'Tests\.cpp') -lgtest -lgtest_main -pthread && ./test_runner
+    sh build.sh test_runner $(find src -name "*.cpp" | grep 'Tests\.cpp') -lgtest -lgtest_main -pthread && ./test_runner
 
 # Run one test
-sh build.sh test_runner -lgtest src/eval/nnue/tests/nnue-tests.cpp -lgtest_main && ./test_runner
+    sh build.sh test_runner -lgtest src/eval/nnue/tests/nnue-tests.cpp -lgtest_main && ./test_runner --gtest_output=stream
 
 # Update NNUE object file (model_bin.o) from a binary file
 

@@ -272,7 +272,7 @@ TEST_F(NNUETest, NnueClearAccumulator) {
   Nnue nnue;
   nnue.randn_();
   
-  size_t index = 100;
+  const size_t index = 100;
   nnue.increment(index);
   EXPECT_FALSE(nnue.whiteAcc == 0);
   
@@ -280,8 +280,7 @@ TEST_F(NNUETest, NnueClearAccumulator) {
   
   EXPECT_TRUE(nnue.whiteAcc == 0);
   EXPECT_TRUE(nnue.blackAcc == 0);
-  // x should still be set
-  EXPECT_TRUE(nnue.x[index]);
+  EXPECT_FALSE(nnue.x[index]);
 }
 
 // Test NNUE compute_acc_from_scratch

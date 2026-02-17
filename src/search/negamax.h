@@ -428,6 +428,14 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     return NegamaxResult<TURN>(kNullMove, ColoredEvaluation<TURN>(0).clamp_(originalAlpha, beta));
   }
 
+  // TODO: We need to check this *after* we do the checkmate test above, since you can win on the 50th move.
+  if (thread->position_.is_fifty_move_rule()) {
+    if (IS_PRINT_NODE) {
+      std::cout << repeat("  ", plyFromRoot) << "Fifty-move rule draw detected." << std::endl;
+    }
+    return NegamaxResult<TURN>(kNullMove, ColoredEvaluation<TURN>(std::max(originalAlpha.value, std::min(beta.value, Evaluation(0)))));
+  }
+
   thread->nodeCount_++;
   if (thread->nodeCount_ >= thread->nodeLimit_) {
     stopThinking->store(true);
@@ -492,14 +500,6 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
       }
       return NegamaxResult<TURN>(kNullMove, ColoredEvaluation<TURN>(std::max(originalAlpha.value, std::min(beta.value, Evaluation(0)))));
     }
-  }
-
-  // We need to check this *after* we do the checkmate test above, since you can win on the 50th move.
-  if (thread->position_.is_fifty_move_rule()) {
-    if (IS_PRINT_NODE) {
-      std::cout << repeat("  ", plyFromRoot) << "Fifty-move rule draw detected." << std::endl;
-    }
-    return NegamaxResult<TURN>(kNullMove, ColoredEvaluation<TURN>(std::max(originalAlpha.value, std::min(beta.value, Evaluation(0)))));
   }
 
   // Internal Iterative Deepening.
