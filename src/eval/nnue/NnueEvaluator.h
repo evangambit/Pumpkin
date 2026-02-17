@@ -24,29 +24,24 @@ struct WDL {
 struct NnueEvaluator : public EvaluatorInterface {
   std::shared_ptr<Nnue> nnue_model;
 
-  NnueEvaluator(std::shared_ptr<Nnue> model) : nnue_model(model) {}
+  Bitboard lastPieceBitboards[SafeColoredPiece::S_BLACK_KING + 1];
+
+  NnueEvaluator(std::shared_ptr<Nnue> model) : nnue_model(model) {
+    this->empty();
+  }
 
   // Board listener
   void empty() override {
     nnue_model->clear_accumulator();
+    std::fill_n(lastPieceBitboards, SafeColoredPiece::S_BLACK_KING + 1, kEmptyBitboard);
   }
   void place_piece(ColoredPiece cp, SafeSquare square) override {
-    if (cp == ColoredPiece::NO_COLORED_PIECE) {
-      return;
-    }
-    this->place_piece(to_safe_colored_piece(cp), square);
   }
   void remove_piece(ColoredPiece cp, SafeSquare square) override {
-    if (cp == ColoredPiece::NO_COLORED_PIECE) {
-      return;
-    }
-    this->remove_piece(to_safe_colored_piece(cp), square);
   }
   void place_piece(SafeColoredPiece cp, SafeSquare square) override {
-    nnue_model->increment(feature_index(cp, square));
   }
   void remove_piece(SafeColoredPiece cp, SafeSquare square) override {
-    nnue_model->decrement(feature_index(cp, square));
   }
 
 
@@ -78,6 +73,22 @@ struct NnueEvaluator : public EvaluatorInterface {
     #ifndef NDEBUG
       Vector<1024> accCopy = nnue_model->whiteAcc;
     #endif
+
+    for (SafeColoredPiece cp = SafeColoredPiece::S_WHITE_PAWN; cp <= SafeColoredPiece::S_BLACK_KING; cp = SafeColoredPiece(cp + 1)) {
+      const Bitboard oldBitboard = lastPieceBitboards[cp];
+      const Bitboard newBitboard = pos.pieceBitboards_[to_colored_piece(cp)];
+      Bitboard diff = oldBitboard & ~newBitboard;
+      while (diff) {
+        const SafeSquare sq = pop_lsb_i_promise_board_is_not_empty(diff);
+        nnue_model->decrement(feature_index(cp, sq));
+      }
+      diff = ~oldBitboard & newBitboard;
+      while (diff) {
+        const SafeSquare sq = pop_lsb_i_promise_board_is_not_empty(diff);
+        nnue_model->increment(feature_index(cp, sq));
+      }
+      lastPieceBitboards[cp] = newBitboard;
+    }
 
     if (((pos.currentState_.castlingRights & kCastlingRights_WhiteKing) > 0) != nnue_model->x[WHITE_KINGSIDE_CASTLING_RIGHT]) {
       if ((pos.currentState_.castlingRights & kCastlingRights_WhiteKing)) {

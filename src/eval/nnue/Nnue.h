@@ -355,6 +355,7 @@ struct Nnue {
     layer2.setZero();
     bias2.setZero();
     output.setZero();
+    this->clear_accumulator();
   }
 
   void increment(size_t index) {
