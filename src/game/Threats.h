@@ -37,99 +37,106 @@ inline Bitboard at_least_two(Bitboard a, Bitboard b, Bitboard c, Bitboard d, Bit
   return ((a | b | c) & (d | e | f)) | at_least_two(a, b, c) | at_least_two(d, e, f);  // 21 ops
 }
 
-template<Color US>
 struct Threats {
-  Bitboard ourPawnTargets;
-  Bitboard ourKnightTargets;
-  Bitboard ourBishopTargets;
-  Bitboard ourRookTargets;
-  Bitboard ourQueenTargets;
-  Bitboard ourKingTargets;
+  Bitboard whitePawnTargets;
+  Bitboard whiteKnightTargets;
+  Bitboard whiteBishopTargets;
+  Bitboard whiteRookTargets;
+  Bitboard whiteQueenTargets;
+  Bitboard whiteKingTargets;
 
-  Bitboard theirPawnTargets;
-  Bitboard theirKnightTargets;
-  Bitboard theirBishopTargets;
-  Bitboard theirRookTargets;
-  Bitboard theirQueenTargets;
-  Bitboard theirKingTargets;
+  Bitboard blackPawnTargets;
+  Bitboard blackKnightTargets;
+  Bitboard blackBishopTargets;
+  Bitboard blackRookTargets;
+  Bitboard blackQueenTargets;
+  Bitboard blackKingTargets;
 
-  Bitboard ourTargets;
-  Bitboard ourDoubleTargets;
-  Bitboard theirTargets;
-  Bitboard theirDoubleTargets;
+  Bitboard whiteTargets;
+  Bitboard whiteDoubleTargets;
+  Bitboard blackTargets;
+  Bitboard blackDoubleTargets;
 
   // TODO: use these.
-  Bitboard badForOur[7];
-  Bitboard badForTheir[7];
+  Bitboard badForWhite[7];
+  Bitboard badForBlack[7];
 
-  template<ColoredPiece cp>
-  Bitboard targets() const {
-    constexpr bool isOurColor = (cp2color(cp) == US);
-    constexpr Piece piece = cp2p(cp);
-    switch (piece) {
-      case Piece::PAWN:
-        return isOurColor ? ourPawnTargets : theirPawnTargets;
-      case Piece::KNIGHT:
-        return isOurColor ? ourKnightTargets : theirKnightTargets;
-      case Piece::BISHOP:
-        return isOurColor ? ourBishopTargets : theirBishopTargets;
-      case Piece::ROOK:
-        return isOurColor ? ourRookTargets : theirRookTargets;
-      case Piece::QUEEN:
-        return isOurColor ? ourQueenTargets : theirQueenTargets;
-      case Piece::KING:
-        return isOurColor ? ourKingTargets : theirKingTargets;
-      case Piece::NO_PIECE:
-        return kEmptyBitboard;
+  // template<ColoredPiece cp>
+  // Bitboard targets() const {
+  //   constexpr bool isOurColor = (cp2color(cp) == Color::WHITE);
+  //   constexpr Piece piece = cp2p(cp);
+  //   switch (piece) {
+  //     case Piece::PAWN:
+  //       return isOurColor ? whitePawnTargets : blackPawnTargets;
+  //     case Piece::KNIGHT:
+  //       return isOurColor ? whiteKnightTargets : blackKnightTargets;
+  //     case Piece::BISHOP:
+  //       return isOurColor ? whiteBishopTargets : blackBishopTargets;
+  //     case Piece::ROOK:
+  //       return isOurColor ? whiteRookTargets : blackRookTargets;
+  //     case Piece::QUEEN:
+  //       return isOurColor ? whiteQueenTargets : blackQueenTargets;
+  //     case Piece::KING:
+  //       return isOurColor ? whiteKingTargets : blackKingTargets;
+  //     case Piece::NO_PIECE:
+  //       return kEmptyBitboard;
+  //   }
+  // }
+
+  template<Color US>
+  Bitboard badForOur(Piece piece) const {
+    if constexpr (US == Color::WHITE) {
+      return badForWhite[piece];
+    } else {
+      return badForBlack[piece];
     }
   }
 
   template<ColoredPiece cp>
   Bitboard badFor() const {
-    constexpr bool isOurColor = (cp2color(cp) == US);
+    constexpr Color color = cp2color(cp);
     constexpr Piece piece = cp2p(cp);
-    if (isOurColor) {
-      return badForOur[piece];
+    if (color == Color::WHITE) {
+      return badForWhite[piece];
     } else {
-      return badForTheir[piece];
+      return badForBlack[piece];
     }
   }
 
   // TODO: bishops can attack one square through our own pawns.
   Threats(const Position& pos) {
-    constexpr Color THEM = opposite_color<US>();
-    constexpr Direction kForward = (US == Color::WHITE ? Direction::NORTH : Direction::SOUTH);
+    constexpr Direction kForward = Direction::NORTH;
     constexpr Direction kForwardRight = (kForward == Direction::NORTH ? Direction::NORTH_EAST : Direction::SOUTH_WEST);
     constexpr Direction kForwardLeft = (kForward == Direction::NORTH ? Direction::NORTH_WEST : Direction::SOUTH_EAST);
     constexpr Direction kBackwardRight = (kForward == Direction::NORTH ? Direction::SOUTH_WEST : Direction::NORTH_EAST);
     constexpr Direction kBackwardLeft = (kForward == Direction::NORTH ? Direction::SOUTH_EAST : Direction::NORTH_WEST);
 
-    const SafeSquare ourKingSq = lsb_i_promise_board_is_not_empty(pos.pieceBitboards_[coloredPiece<US, Piece::KING>()]);
-    const SafeSquare theirKingSq = lsb_i_promise_board_is_not_empty(pos.pieceBitboards_[coloredPiece<THEM, Piece::KING>()]);
+    const SafeSquare ourKingSq = lsb_i_promise_board_is_not_empty(pos.pieceBitboards_[coloredPiece<Color::WHITE, Piece::KING>()]);
+    const SafeSquare theirKingSq = lsb_i_promise_board_is_not_empty(pos.pieceBitboards_[coloredPiece<Color::BLACK, Piece::KING>()]);
 
     const Bitboard everyone = pos.colorBitboards_[Color::WHITE] | pos.colorBitboards_[Color::BLACK];
 
-    const Bitboard ourRooklikePieces = pos.pieceBitboards_[coloredPiece<US, Piece::ROOK>()] | pos.pieceBitboards_[coloredPiece<US, Piece::QUEEN>()];
-    const Bitboard theirRooklikePieces = pos.pieceBitboards_[coloredPiece<THEM, Piece::ROOK>()] | pos.pieceBitboards_[coloredPiece<THEM, Piece::QUEEN>()];
-    const Bitboard ourBishoplikePieces = pos.pieceBitboards_[coloredPiece<US, Piece::BISHOP>()] | pos.pieceBitboards_[coloredPiece<US, Piece::QUEEN>()];
-    const Bitboard theirBishoplikePieces = pos.pieceBitboards_[coloredPiece<THEM, Piece::BISHOP>()] | pos.pieceBitboards_[coloredPiece<THEM, Piece::QUEEN>()];
+    const Bitboard ourRooklikePieces = pos.pieceBitboards_[coloredPiece<Color::WHITE, Piece::ROOK>()] | pos.pieceBitboards_[coloredPiece<Color::WHITE, Piece::QUEEN>()];
+    const Bitboard theirRooklikePieces = pos.pieceBitboards_[coloredPiece<Color::BLACK, Piece::ROOK>()] | pos.pieceBitboards_[coloredPiece<Color::BLACK, Piece::QUEEN>()];
+    const Bitboard ourBishoplikePieces = pos.pieceBitboards_[coloredPiece<Color::WHITE, Piece::BISHOP>()] | pos.pieceBitboards_[coloredPiece<Color::WHITE, Piece::QUEEN>()];
+    const Bitboard theirBishoplikePieces = pos.pieceBitboards_[coloredPiece<Color::BLACK, Piece::BISHOP>()] | pos.pieceBitboards_[coloredPiece<Color::BLACK, Piece::QUEEN>()];
 
-    Bitboard ourPawn1 = shift<kForwardRight>(pos.pieceBitboards_[coloredPiece<US, Piece::PAWN>()]);
-    Bitboard ourPawn2 = shift<kForwardLeft>(pos.pieceBitboards_[coloredPiece<US, Piece::PAWN>()]);
-    Bitboard theirPawn1 = shift<kBackwardRight>(pos.pieceBitboards_[coloredPiece<THEM, Piece::PAWN>()]);
-    Bitboard theirPawn2 = shift<kBackwardLeft>(pos.pieceBitboards_[coloredPiece<THEM, Piece::PAWN>()]);
+    Bitboard ourPawn1 = shift<kForwardRight>(pos.pieceBitboards_[coloredPiece<Color::WHITE, Piece::PAWN>()]);
+    Bitboard ourPawn2 = shift<kForwardLeft>(pos.pieceBitboards_[coloredPiece<Color::WHITE, Piece::PAWN>()]);
+    Bitboard theirPawn1 = shift<kBackwardRight>(pos.pieceBitboards_[coloredPiece<Color::BLACK, Piece::PAWN>()]);
+    Bitboard theirPawn2 = shift<kBackwardLeft>(pos.pieceBitboards_[coloredPiece<Color::BLACK, Piece::PAWN>()]);
 
-    const Bitboard ourKnights = pos.pieceBitboards_[coloredPiece<US, Piece::KNIGHT>()];
-    const Bitboard ourBishops = pos.pieceBitboards_[coloredPiece<US, Piece::BISHOP>()];
-    const Bitboard ourRooks = pos.pieceBitboards_[coloredPiece<US, Piece::ROOK>()];
-    const Bitboard ourQueens = pos.pieceBitboards_[coloredPiece<US, Piece::QUEEN>()];
-    const Bitboard ourKings = pos.pieceBitboards_[coloredPiece<US, Piece::KING>()];
+    const Bitboard ourKnights = pos.pieceBitboards_[coloredPiece<Color::WHITE, Piece::KNIGHT>()];
+    const Bitboard ourBishops = pos.pieceBitboards_[coloredPiece<Color::WHITE, Piece::BISHOP>()];
+    const Bitboard ourRooks = pos.pieceBitboards_[coloredPiece<Color::WHITE, Piece::ROOK>()];
+    const Bitboard ourQueens = pos.pieceBitboards_[coloredPiece<Color::WHITE, Piece::QUEEN>()];
+    const Bitboard ourKings = pos.pieceBitboards_[coloredPiece<Color::WHITE, Piece::KING>()];
 
-    const Bitboard theirKnights = pos.pieceBitboards_[coloredPiece<THEM, Piece::KNIGHT>()];
-    const Bitboard theirBishops = pos.pieceBitboards_[coloredPiece<THEM, Piece::BISHOP>()];
-    const Bitboard theirRooks = pos.pieceBitboards_[coloredPiece<THEM, Piece::ROOK>()];
-    const Bitboard theirQueens = pos.pieceBitboards_[coloredPiece<THEM, Piece::QUEEN>()];
-    const Bitboard theirKings = pos.pieceBitboards_[coloredPiece<THEM, Piece::KING>()];
+    const Bitboard theirKnights = pos.pieceBitboards_[coloredPiece<Color::BLACK, Piece::KNIGHT>()];
+    const Bitboard theirBishops = pos.pieceBitboards_[coloredPiece<Color::BLACK, Piece::BISHOP>()];
+    const Bitboard theirRooks = pos.pieceBitboards_[coloredPiece<Color::BLACK, Piece::ROOK>()];
+    const Bitboard theirQueens = pos.pieceBitboards_[coloredPiece<Color::BLACK, Piece::QUEEN>()];
+    const Bitboard theirKings = pos.pieceBitboards_[coloredPiece<Color::BLACK, Piece::KING>()];
 
     // In general we assume "sane" positions -- no more than 2 knights, 2 bishops, 2 rooks, 1 queen (on each side).
 
@@ -154,92 +161,92 @@ struct Threats {
     Bitboard theirRooks1_moves = theirRooks == kEmptyBitboard ? kEmptyBitboard : compute_single_rook_moves(lsb_i_promise_board_is_not_empty(theirRooks), everyone & ~theirRooks);
     Bitboard theirRooks2_moves = std::popcount(theirRooks) < 2 ? kEmptyBitboard : compute_single_rook_moves(msb_i_promise_board_is_not_empty(theirRooks), everyone & ~theirRooks);
 
-    Bitboard ourQueenTargets = kEmptyBitboard;
+    Bitboard whiteQueenTargets = kEmptyBitboard;
     if (ourQueens != kEmptyBitboard) {
-      ourQueenTargets |= compute_one_bishops_targets(lsb_i_promise_board_is_not_empty(ourQueens), everyone & ~ourBishops);
-      ourQueenTargets |= compute_single_rook_moves(lsb_i_promise_board_is_not_empty(ourQueens), everyone & ~ourRooks);
+      whiteQueenTargets |= compute_one_bishops_targets(lsb_i_promise_board_is_not_empty(ourQueens), everyone & ~ourBishops);
+      whiteQueenTargets |= compute_single_rook_moves(lsb_i_promise_board_is_not_empty(ourQueens), everyone & ~ourRooks);
     }
-    Bitboard theirQueenTargets = kEmptyBitboard;
+    Bitboard blackQueenTargets = kEmptyBitboard;
     if (theirQueens != kEmptyBitboard) {
-      theirQueenTargets |= compute_one_bishops_targets(lsb_i_promise_board_is_not_empty(theirQueens), everyone & ~theirBishops & ~ourBishops);
-      theirQueenTargets |= compute_single_rook_moves(lsb_i_promise_board_is_not_empty(theirQueens), everyone & ~theirRooks & ~ourRooks);
+      blackQueenTargets |= compute_one_bishops_targets(lsb_i_promise_board_is_not_empty(theirQueens), everyone & ~theirBishops & ~ourBishops);
+      blackQueenTargets |= compute_single_rook_moves(lsb_i_promise_board_is_not_empty(theirQueens), everyone & ~theirRooks & ~ourRooks);
     }
 
-    Bitboard ourKingTargets = kKingMoves[ourKingSq];
-    Bitboard theirKingTargets = kKingMoves[theirKingSq];
+    Bitboard whiteKingTargets = kKingMoves[ourKingSq];
+    Bitboard blackKingTargets = kKingMoves[theirKingSq];
 
-    this->ourPawnTargets = ourPawn1 | ourPawn2;
-    this->theirPawnTargets = theirPawn1 | theirPawn2;
-    this->ourKnightTargets = ourKnight1_moves | ourKnight2_moves;
-    this->theirKnightTargets = theirKnight1_moves | theirKnight2_moves;
-    this->ourBishopTargets = ourBishops1_moves | ourBishops2_moves;
-    this->theirBishopTargets = theirBishops1_moves | theirBishops2_moves;
-    this->ourRookTargets = ourRooks1_moves | ourRooks2_moves;
-    this->theirRookTargets = theirRooks1_moves | theirRooks2_moves;
-    this->ourQueenTargets = ourQueenTargets;
-    this->theirQueenTargets = ourQueenTargets;
-    this->ourKingTargets = ourKingTargets;
-    this->theirKingTargets = theirKingTargets;
+    this->whitePawnTargets = ourPawn1 | ourPawn2;
+    this->blackPawnTargets = theirPawn1 | theirPawn2;
+    this->whiteKnightTargets = ourKnight1_moves | ourKnight2_moves;
+    this->blackKnightTargets = theirKnight1_moves | theirKnight2_moves;
+    this->whiteBishopTargets = ourBishops1_moves | ourBishops2_moves;
+    this->blackBishopTargets = theirBishops1_moves | theirBishops2_moves;
+    this->whiteRookTargets = ourRooks1_moves | ourRooks2_moves;
+    this->blackRookTargets = theirRooks1_moves | theirRooks2_moves;
+    this->whiteQueenTargets = whiteQueenTargets;
+    this->blackQueenTargets = whiteQueenTargets;
+    this->whiteKingTargets = whiteKingTargets;
+    this->blackKingTargets = blackKingTargets;
 
-    this->ourTargets = this->ourPawnTargets;
-    this->theirTargets = this->theirPawnTargets;
-    this->ourDoubleTargets = ourPawn1 & ourPawn2;
-    this->theirDoubleTargets = theirPawn1 & theirPawn2;
+    this->whiteTargets = this->whitePawnTargets;
+    this->blackTargets = this->blackPawnTargets;
+    this->whiteDoubleTargets = ourPawn1 & ourPawn2;
+    this->blackDoubleTargets = theirPawn1 & theirPawn2;
 
-    this->ourDoubleTargets |= ourKnight1_moves & this->ourTargets;
-    this->ourTargets |= ourKnight1_moves;
-    this->ourDoubleTargets |= ourKnight2_moves & this->ourTargets;
-    this->ourTargets |= ourKnight2_moves;
+    this->whiteDoubleTargets |= ourKnight1_moves & this->whiteTargets;
+    this->whiteTargets |= ourKnight1_moves;
+    this->whiteDoubleTargets |= ourKnight2_moves & this->whiteTargets;
+    this->whiteTargets |= ourKnight2_moves;
 
-    this->theirDoubleTargets |= theirKnight1_moves & this->theirTargets;
-    this->theirTargets |= theirKnight1_moves;
-    this->theirDoubleTargets |= theirKnight2_moves & this->theirTargets;
-    this->theirTargets |= theirKnight2_moves;
+    this->blackDoubleTargets |= theirKnight1_moves & this->blackTargets;
+    this->blackTargets |= theirKnight1_moves;
+    this->blackDoubleTargets |= theirKnight2_moves & this->blackTargets;
+    this->blackTargets |= theirKnight2_moves;
 
     // Can speed this up by assuming bishops are on opposite colors.
-    this->ourDoubleTargets |= this->ourBishopTargets & this->ourTargets;
-    this->ourTargets |= this->ourBishopTargets;
-    this->theirDoubleTargets |= (theirBishops1_moves | theirBishops2_moves) & this->theirTargets;
-    this->theirTargets |= theirBishops1_moves | theirBishops2_moves;
+    this->whiteDoubleTargets |= this->whiteBishopTargets & this->whiteTargets;
+    this->whiteTargets |= this->whiteBishopTargets;
+    this->blackDoubleTargets |= (theirBishops1_moves | theirBishops2_moves) & this->blackTargets;
+    this->blackTargets |= theirBishops1_moves | theirBishops2_moves;
 
-    this->ourDoubleTargets |= ourRooks1_moves & this->ourTargets;
-    this->ourTargets |= ourRooks1_moves;
-    this->ourDoubleTargets |= ourRooks2_moves & this->ourTargets;
-    this->ourTargets |= ourRooks2_moves;
+    this->whiteDoubleTargets |= ourRooks1_moves & this->whiteTargets;
+    this->whiteTargets |= ourRooks1_moves;
+    this->whiteDoubleTargets |= ourRooks2_moves & this->whiteTargets;
+    this->whiteTargets |= ourRooks2_moves;
 
-    this->theirDoubleTargets |= theirRooks1_moves & this->theirTargets;
-    this->theirTargets |= theirRooks1_moves;
-    this->theirDoubleTargets |= theirRooks2_moves & this->theirTargets;
-    this->theirTargets |= theirRooks2_moves;
+    this->blackDoubleTargets |= theirRooks1_moves & this->blackTargets;
+    this->blackTargets |= theirRooks1_moves;
+    this->blackDoubleTargets |= theirRooks2_moves & this->blackTargets;
+    this->blackTargets |= theirRooks2_moves;
 
-    this->ourDoubleTargets |= ourQueenTargets & this->ourTargets;
-    this->ourTargets |= ourQueenTargets;
-    this->theirDoubleTargets |= theirQueenTargets & this->theirTargets;
-    this->theirTargets |= theirQueenTargets;
+    this->whiteDoubleTargets |= whiteQueenTargets & this->whiteTargets;
+    this->whiteTargets |= whiteQueenTargets;
+    this->blackDoubleTargets |= blackQueenTargets & this->blackTargets;
+    this->blackTargets |= blackQueenTargets;
 
-    this->ourDoubleTargets |= ourKingTargets & this->ourTargets;
-    this->ourTargets |= ourKingTargets;
-    this->theirDoubleTargets |= theirKingTargets & this->theirTargets;
-    this->theirTargets |= theirKingTargets;
+    this->whiteDoubleTargets |= whiteKingTargets & this->whiteTargets;
+    this->whiteTargets |= whiteKingTargets;
+    this->blackDoubleTargets |= blackKingTargets & this->blackTargets;
+    this->blackTargets |= blackKingTargets;
 
-    const Bitboard badForAllOfUs = this->theirTargets & ~this->ourTargets;
-    const Bitboard badForAllOfThem = this->ourTargets & ~this->theirTargets;
+    const Bitboard badForAllOfUs = this->blackTargets & ~this->whiteTargets;
+    const Bitboard badForAllOfThem = this->whiteTargets & ~this->blackTargets;
 
-    this->badForOur[Piece::PAWN] = badForAllOfUs;
-    this->badForTheir[Piece::PAWN] = badForAllOfThem;
+    this->badForWhite[Piece::PAWN] = badForAllOfUs;
+    this->badForBlack[Piece::PAWN] = badForAllOfThem;
 
     // Not defended by a pawn and attacked more than once.
-    this->badForOur[Piece::PAWN] |= (~(ourPawn1 | ourPawn2)) & (this->theirDoubleTargets & ~this->ourDoubleTargets);
-    this->badForTheir[Piece::PAWN] |= (~(theirPawn1 | theirPawn2)) & (this->ourDoubleTargets & ~this->theirDoubleTargets);
+    this->badForWhite[Piece::PAWN] |= (~(ourPawn1 | ourPawn2)) & (this->blackDoubleTargets & ~this->whiteDoubleTargets);
+    this->badForBlack[Piece::PAWN] |= (~(theirPawn1 | theirPawn2)) & (this->whiteDoubleTargets & ~this->blackDoubleTargets);
 
     // Defended by one pawn and attacked by a pawn and a piece.
-    this->badForOur[Piece::PAWN] |= (ourPawn1 ^ ourPawn2) & (theirPawn1 | theirPawn2) & (this->theirDoubleTargets & ~this->ourDoubleTargets);
-    this->badForTheir[Piece::PAWN] |= (theirPawn1 ^ theirPawn2) & (ourPawn1 | ourPawn2) & (this->ourDoubleTargets & ~this->theirDoubleTargets);
+    this->badForWhite[Piece::PAWN] |= (ourPawn1 ^ ourPawn2) & (theirPawn1 | theirPawn2) & (this->blackDoubleTargets & ~this->whiteDoubleTargets);
+    this->badForBlack[Piece::PAWN] |= (theirPawn1 ^ theirPawn2) & (ourPawn1 | ourPawn2) & (this->whiteDoubleTargets & ~this->blackDoubleTargets);
 
-    this->badForOur[Piece::PAWN] &= ~pos.colorBitboards_[THEM];
-    this->badForTheir[Piece::PAWN] &= ~pos.colorBitboards_[US];
+    this->badForWhite[Piece::PAWN] &= ~pos.colorBitboards_[Color::BLACK];
+    this->badForBlack[Piece::PAWN] &= ~pos.colorBitboards_[Color::WHITE];
 
-    // We exclude the piece being considered as a valid defender, since "badForOur" is frequently used to answer
+    // We exclude the piece being considered as a valid defender, since "badForWhite" is frequently used to answer
     // the question "is it okay to move here?", and you can't keep defending a square if you move to it!
 
     // When computing double attacks, pieces that are more valuable than the piece being considered are merged
@@ -249,66 +256,66 @@ struct Threats {
     Bitboard ourTwo_def, ourTwo_atk, theirTwo_def, theirTwo_atk;
     Bitboard ourOne_def, ourOne_atk, theirOne_def, theirOne_atk;
 
-    const Bitboard ourMinorTargets = this->ourKnightTargets | this->ourBishopTargets;
-    const Bitboard theirMinorTargets = this->theirKnightTargets | this->theirBishopTargets;
-    const Bitboard ourRoyalTargets = ourQueenTargets | ourKingTargets;
-    const Bitboard theirRoyalTargets = theirQueenTargets | theirKingTargets;
+    const Bitboard whiteMinorTargets = this->whiteKnightTargets | this->whiteBishopTargets;
+    const Bitboard blackMinorTargets = this->blackKnightTargets | this->blackBishopTargets;
+    const Bitboard whiteRoyalTargets = whiteQueenTargets | whiteKingTargets;
+    const Bitboard blackRoyalTargets = blackQueenTargets | blackKingTargets;
 
-    ourOne_def = (ourKnight1_moves & ourKnight2_moves) | this->ourBishopTargets | this->ourRookTargets | ourRoyalTargets;
-    ourOne_atk = ourMinorTargets | this->ourRookTargets | ourRoyalTargets;
-    theirOne_def = (theirKnight1_moves & theirKnight2_moves) | this->theirBishopTargets | this->theirRookTargets | theirRoyalTargets;
-    theirOne_atk = theirMinorTargets | this->theirRookTargets | theirRoyalTargets;
+    ourOne_def = (ourKnight1_moves & ourKnight2_moves) | this->whiteBishopTargets | this->whiteRookTargets | whiteRoyalTargets;
+    ourOne_atk = whiteMinorTargets | this->whiteRookTargets | whiteRoyalTargets;
+    theirOne_def = (theirKnight1_moves & theirKnight2_moves) | this->blackBishopTargets | this->blackRookTargets | blackRoyalTargets;
+    theirOne_atk = blackMinorTargets | this->blackRookTargets | blackRoyalTargets;
     // Minor optimization: we merge both bishops since their targets are mutually exclusive 99% of the time.
     ourTwo_def = at_least_two(
-      ourKnight1_moves & ourKnight2_moves, this->ourBishopTargets, this->ourRookTargets | ourRoyalTargets
+      ourKnight1_moves & ourKnight2_moves, this->whiteBishopTargets, this->whiteRookTargets | whiteRoyalTargets
     );
     ourTwo_atk = at_least_two(
-      ourKnight1_moves, ourKnight2_moves, this->ourBishopTargets, this->ourRookTargets | ourRoyalTargets
+      ourKnight1_moves, ourKnight2_moves, this->whiteBishopTargets, this->whiteRookTargets | whiteRoyalTargets
     );
     theirTwo_def = at_least_two(
-      theirKnight1_moves & theirKnight2_moves, this->theirBishopTargets, this->theirRookTargets | theirRoyalTargets
+      theirKnight1_moves & theirKnight2_moves, this->blackBishopTargets, this->blackRookTargets | blackRoyalTargets
     );
     theirTwo_atk = at_least_two(
-      theirKnight1_moves, theirKnight2_moves, this->theirBishopTargets, this->theirRookTargets | theirRoyalTargets
+      theirKnight1_moves, theirKnight2_moves, this->blackBishopTargets, this->blackRookTargets | blackRoyalTargets
     );
-    this->badForOur[Piece::KNIGHT] = badForAllOfUs | this->theirPawnTargets | (theirTwo_atk & ~ourTwo_def) | (theirOne_atk & ~ourOne_def);
-    this->badForOur[Piece::KNIGHT] &= ~(theirKings | theirQueens | theirRooks | theirKnights | theirBishops);
-    this->badForTheir[Piece::KNIGHT] = badForAllOfThem | this->ourPawnTargets | (ourTwo_atk & ~theirTwo_def) | (ourOne_atk & ~theirOne_def);
-    this->badForTheir[Piece::KNIGHT] &= ~(ourKings | ourQueens | ourRooks | ourKnights | ourBishops);
+    this->badForWhite[Piece::KNIGHT] = badForAllOfUs | this->blackPawnTargets | (theirTwo_atk & ~ourTwo_def) | (theirOne_atk & ~ourOne_def);
+    this->badForWhite[Piece::KNIGHT] &= ~(theirKings | theirQueens | theirRooks | theirKnights | theirBishops);
+    this->badForBlack[Piece::KNIGHT] = badForAllOfThem | this->whitePawnTargets | (ourTwo_atk & ~theirTwo_def) | (ourOne_atk & ~theirOne_def);
+    this->badForBlack[Piece::KNIGHT] &= ~(ourKings | ourQueens | ourRooks | ourKnights | ourBishops);
 
-    ourOne_def = this->ourKnightTargets | (ourBishops1_moves & ourBishops2_moves) | this->ourRookTargets | ourRoyalTargets;
-    ourOne_atk = ourMinorTargets | this->ourRookTargets | ourRoyalTargets;
-    theirOne_def = theirKnight1_moves | theirKnight2_moves | (theirBishops1_moves & theirBishops2_moves) | this->theirRookTargets | theirRoyalTargets;
-    theirOne_atk = theirMinorTargets | this->theirRookTargets | theirRoyalTargets;
-    ourTwo_def = at_least_two(ourKnight1_moves, ourKnight2_moves, this->ourRookTargets | ourRoyalTargets);
-    ourTwo_atk = at_least_two(ourKnight1_moves, ourKnight2_moves, this->ourBishopTargets, this->ourRookTargets | ourRoyalTargets);
-    theirTwo_def = at_least_two(theirKnight1_moves, theirKnight2_moves, this->theirRookTargets | theirRoyalTargets);
-    theirTwo_atk = at_least_two(theirKnight1_moves, theirKnight2_moves, this->theirBishopTargets, this->theirRookTargets | theirRoyalTargets);
-    this->badForOur[Piece::BISHOP] = badForAllOfUs | this->theirPawnTargets | (theirTwo_atk & ~ourTwo_def) | (theirOne_atk & ~ourOne_def);
-    this->badForOur[Piece::BISHOP] &= ~(theirKings | theirQueens | theirRooks | theirKnights | theirBishops);
-    this->badForTheir[Piece::BISHOP] = badForAllOfThem | this->ourPawnTargets | (ourTwo_atk & ~theirTwo_def) | (ourOne_atk & ~theirOne_def);
-    this->badForTheir[Piece::BISHOP] &= ~(ourKings | ourQueens | ourRooks | ourKnights | ourBishops);
+    ourOne_def = this->whiteKnightTargets | (ourBishops1_moves & ourBishops2_moves) | this->whiteRookTargets | whiteRoyalTargets;
+    ourOne_atk = whiteMinorTargets | this->whiteRookTargets | whiteRoyalTargets;
+    theirOne_def = theirKnight1_moves | theirKnight2_moves | (theirBishops1_moves & theirBishops2_moves) | this->blackRookTargets | blackRoyalTargets;
+    theirOne_atk = blackMinorTargets | this->blackRookTargets | blackRoyalTargets;
+    ourTwo_def = at_least_two(ourKnight1_moves, ourKnight2_moves, this->whiteRookTargets | whiteRoyalTargets);
+    ourTwo_atk = at_least_two(ourKnight1_moves, ourKnight2_moves, this->whiteBishopTargets, this->whiteRookTargets | whiteRoyalTargets);
+    theirTwo_def = at_least_two(theirKnight1_moves, theirKnight2_moves, this->blackRookTargets | blackRoyalTargets);
+    theirTwo_atk = at_least_two(theirKnight1_moves, theirKnight2_moves, this->blackBishopTargets, this->blackRookTargets | blackRoyalTargets);
+    this->badForWhite[Piece::BISHOP] = badForAllOfUs | this->blackPawnTargets | (theirTwo_atk & ~ourTwo_def) | (theirOne_atk & ~ourOne_def);
+    this->badForWhite[Piece::BISHOP] &= ~(theirKings | theirQueens | theirRooks | theirKnights | theirBishops);
+    this->badForBlack[Piece::BISHOP] = badForAllOfThem | this->whitePawnTargets | (ourTwo_atk & ~theirTwo_def) | (ourOne_atk & ~theirOne_def);
+    this->badForBlack[Piece::BISHOP] &= ~(ourKings | ourQueens | ourRooks | ourKnights | ourBishops);
 
-    ourOne_def = ourMinorTargets | (ourRooks1_moves & ourRooks2_moves) | ourRoyalTargets;
-    ourOne_atk = ourMinorTargets | this->ourRookTargets | ourRoyalTargets;
-    theirOne_def = theirMinorTargets | (theirRooks1_moves & theirRooks2_moves) | theirRoyalTargets;
-    theirOne_atk = theirMinorTargets | this->theirRookTargets | theirRoyalTargets;
-    ourTwo_def = at_least_two(ourKnight1_moves, ourKnight2_moves, this->ourBishopTargets, ourRooks1_moves & ourRooks2_moves, ourRoyalTargets);
-    ourTwo_atk = at_least_two(ourKnight1_moves, ourKnight2_moves, this->ourBishopTargets, ourRooks1_moves, ourRooks2_moves, ourRoyalTargets);
-    theirTwo_def = at_least_two(theirKnight1_moves, theirKnight2_moves, this->theirBishopTargets, theirRooks1_moves & theirRooks2_moves, theirRoyalTargets);
-    theirTwo_atk = at_least_two(theirKnight1_moves, theirKnight2_moves, this->theirBishopTargets, theirRooks1_moves, theirRooks2_moves, theirRoyalTargets);
-    this->badForOur[Piece::ROOK] = badForAllOfUs | (this->theirPawnTargets | theirMinorTargets) | (theirTwo_atk & ~ourTwo_def) | (theirOne_atk & ~ourOne_def);
-    this->badForOur[Piece::ROOK] &= ~(theirKings | theirQueens | theirRooks);
-    this->badForTheir[Piece::ROOK] = badForAllOfThem | (this->ourPawnTargets | ourMinorTargets) | (ourTwo_atk & ~theirTwo_def) | (ourOne_atk & ~theirOne_def);
-    this->badForTheir[Piece::ROOK] &= ~(ourKings | ourQueens | ourRooks);
+    ourOne_def = whiteMinorTargets | (ourRooks1_moves & ourRooks2_moves) | whiteRoyalTargets;
+    ourOne_atk = whiteMinorTargets | this->whiteRookTargets | whiteRoyalTargets;
+    theirOne_def = blackMinorTargets | (theirRooks1_moves & theirRooks2_moves) | blackRoyalTargets;
+    theirOne_atk = blackMinorTargets | this->blackRookTargets | blackRoyalTargets;
+    ourTwo_def = at_least_two(ourKnight1_moves, ourKnight2_moves, this->whiteBishopTargets, ourRooks1_moves & ourRooks2_moves, whiteRoyalTargets);
+    ourTwo_atk = at_least_two(ourKnight1_moves, ourKnight2_moves, this->whiteBishopTargets, ourRooks1_moves, ourRooks2_moves, whiteRoyalTargets);
+    theirTwo_def = at_least_two(theirKnight1_moves, theirKnight2_moves, this->blackBishopTargets, theirRooks1_moves & theirRooks2_moves, blackRoyalTargets);
+    theirTwo_atk = at_least_two(theirKnight1_moves, theirKnight2_moves, this->blackBishopTargets, theirRooks1_moves, theirRooks2_moves, blackRoyalTargets);
+    this->badForWhite[Piece::ROOK] = badForAllOfUs | (this->blackPawnTargets | blackMinorTargets) | (theirTwo_atk & ~ourTwo_def) | (theirOne_atk & ~ourOne_def);
+    this->badForWhite[Piece::ROOK] &= ~(theirKings | theirQueens | theirRooks);
+    this->badForBlack[Piece::ROOK] = badForAllOfThem | (this->whitePawnTargets | whiteMinorTargets) | (ourTwo_atk & ~theirTwo_def) | (ourOne_atk & ~theirOne_def);
+    this->badForBlack[Piece::ROOK] &= ~(ourKings | ourQueens | ourRooks);
 
-    this->badForOur[Piece::QUEEN] = badForAllOfUs | this->theirPawnTargets | theirMinorTargets | this->theirRookTargets | ((theirRoyalTargets) & ~this->ourTargets);
-    this->badForOur[Piece::QUEEN] &= ~(theirKings | theirQueens);
-    this->badForTheir[Piece::QUEEN] = badForAllOfThem | this->ourPawnTargets | ourMinorTargets | this->ourRookTargets | ((ourRoyalTargets) & ~this->theirTargets);
-    this->badForTheir[Piece::QUEEN] &= ~(ourKings | ourQueens);
+    this->badForWhite[Piece::QUEEN] = badForAllOfUs | this->blackPawnTargets | blackMinorTargets | this->blackRookTargets | ((blackRoyalTargets) & ~this->whiteTargets);
+    this->badForWhite[Piece::QUEEN] &= ~(theirKings | theirQueens);
+    this->badForBlack[Piece::QUEEN] = badForAllOfThem | this->whitePawnTargets | whiteMinorTargets | this->whiteRookTargets | ((whiteRoyalTargets) & ~this->blackTargets);
+    this->badForBlack[Piece::QUEEN] &= ~(ourKings | ourQueens);
 
-    this->badForOur[Piece::KING] = this->theirTargets;
-    this->badForTheir[Piece::KING] = this->ourTargets;
+    this->badForWhite[Piece::KING] = this->blackTargets;
+    this->badForBlack[Piece::KING] = this->whiteTargets;
   }
 };
 
