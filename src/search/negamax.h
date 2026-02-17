@@ -17,6 +17,7 @@
 #include "../game/Utils.h"
 #include "../game/movegen/movegen.h"
 #include "../game/Threats.h"
+#include "../game/CreateThreats.h"
 #include "../eval/Evaluator.h"
 #include "../eval/ColoredEvaluation.h"
 
@@ -243,7 +244,8 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
   assert(!thread->position_.history_.empty() && "qsearch requires history to have at least one move");
   const Move lastMove = thread->position_.history_.back().move;
   assert(lastMove.from < 64 && lastMove.to < 64);
-  Threats threats(thread->position_.pieceBitboards_, thread->position_.colorBitboards_);
+  Threats threats;
+  create_threats(thread->position_.pieceBitboards_, thread->position_.colorBitboards_, &threats);
   for (ExtMove* move = moves; move < end; ++move) {
     if (move->move == entry.bestMove) {
       move->score = kMaxEval;
@@ -515,7 +517,8 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   }
 
   // Add score to each move.
-  Threats threats(thread->position_.pieceBitboards_, thread->position_.colorBitboards_);
+  Threats threats;
+  create_threats(thread->position_.pieceBitboards_, thread->position_.colorBitboards_, &threats);
   const Move lastMove = SEARCH_TYPE == SearchType::ROOT ? kNullMove : thread->position_.history_.back().move;
   // ±16000: best move from transposition table
   // +8000: is capture
