@@ -5,6 +5,7 @@
 
 #include "Utils.h"
 #include "Move.h"
+#include "MakeMove.h"
 
 namespace ChessEngine {
 

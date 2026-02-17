@@ -73,6 +73,32 @@ struct Threats {
   Bitboard badForWhite[7];
   Bitboard badForBlack[7];
 
+  void clear_() {
+    whitePawnTargets = 0;
+    whiteKnightTargets = 0;
+    whiteBishopTargets = 0;
+    whiteRookTargets = 0;
+    whiteQueenTargets = 0;
+    whiteKingTargets = 0;
+
+    blackPawnTargets = 0;
+    blackKnightTargets = 0;
+    blackBishopTargets = 0;
+    blackRookTargets = 0;
+    blackQueenTargets = 0;
+    blackKingTargets = 0;
+
+    whiteTargets = 0;
+    whiteDoubleTargets = 0;
+    blackTargets = 0;
+    blackDoubleTargets = 0;
+
+    for (int i = 0; i < 7; ++i) {
+      badForWhite[i] = 0;
+      badForBlack[i] = 0;
+    }
+  }
+
   template<Color US>
   Bitboard badForOur(Piece piece) const {
     if constexpr (US == Color::WHITE) {

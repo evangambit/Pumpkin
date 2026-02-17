@@ -1,6 +1,7 @@
 #ifndef MOVEGEN_H
 #define MOVEGEN_H
 
+#include "../MakeMove.h"
 #include "../Position.h"
 #include "../Geometry.h"
 
