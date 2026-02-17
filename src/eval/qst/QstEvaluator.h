@@ -11,6 +11,7 @@
 #include "../OrientedBitboard.h"
 #include "../../game/Utils.h"
 #include "../../game/Threats.h"
+#include "../../game/CreateThreats.h"
 #include "../PawnAnalysis.h"
 
 namespace ChessEngine {
@@ -560,7 +561,8 @@ struct QstEvaluator : public EvaluatorInterface {
     doubledPawns.contribute(features[Q_DOUBLED_PAWNS_US], &early, &late);
     doubledPawns.contribute<-1>(flip_vertically(features[Q_DOUBLED_PAWNS_THEM]), &early, &late);
 
-    Threats threats(pos.pieceBitboards_, pos.colorBitboards_);
+    Threats threats;
+    create_threats(pos.pieceBitboards_, pos.colorBitboards_, &threats);
     features[Q_BAD_FOR_PAWN_US] = orient<US>(threats.badForOur<US>(Piece::PAWN));
     features[Q_BAD_FOR_PAWN_THEM] = orient<US>(threats.badForOur<THEM>(Piece::PAWN));
     features[Q_BAD_FOR_KNIGHT_US] = orient<US>(threats.badForOur<US>(Piece::KNIGHT));

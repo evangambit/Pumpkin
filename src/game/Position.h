@@ -14,6 +14,7 @@
 #include "Geometry.h"
 #include "Move.h"
 #include "Utils.h"
+#include "Threats.h"
 #include "../StringUtils.h"
 
 namespace ChessEngine {
@@ -35,24 +36,6 @@ extern uint64_t kZorbristTurn;
 void print_zorbrist_debug(uint64_t actual, uint64_t expected);
 
 void initialize_zorbrist();
-
-template<typename T, size_t NUM_BOARDS, typename INDEX_TYPE>
-struct TypeSafeArray {
-  void fill(const T& value) {
-    std::fill_n(values_, NUM_BOARDS, value);
-  }
-
-  inline T& operator[](INDEX_TYPE index) {
-    return values_[index];
-  }
-
-  inline const T& operator[](INDEX_TYPE index) const {
-    return values_[index];
-  }
-
- private:
-  T values_[NUM_BOARDS];
-};
 
 class Position {
  public:
