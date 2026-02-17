@@ -61,28 +61,6 @@ struct Threats {
   Bitboard badForWhite[7];
   Bitboard badForBlack[7];
 
-  // template<ColoredPiece cp>
-  // Bitboard targets() const {
-  //   constexpr bool isOurColor = (cp2color(cp) == Color::WHITE);
-  //   constexpr Piece piece = cp2p(cp);
-  //   switch (piece) {
-  //     case Piece::PAWN:
-  //       return isOurColor ? whitePawnTargets : blackPawnTargets;
-  //     case Piece::KNIGHT:
-  //       return isOurColor ? whiteKnightTargets : blackKnightTargets;
-  //     case Piece::BISHOP:
-  //       return isOurColor ? whiteBishopTargets : blackBishopTargets;
-  //     case Piece::ROOK:
-  //       return isOurColor ? whiteRookTargets : blackRookTargets;
-  //     case Piece::QUEEN:
-  //       return isOurColor ? whiteQueenTargets : blackQueenTargets;
-  //     case Piece::KING:
-  //       return isOurColor ? whiteKingTargets : blackKingTargets;
-  //     case Piece::NO_PIECE:
-  //       return kEmptyBitboard;
-  //   }
-  // }
-
   template<Color US>
   Bitboard badForOur(Piece piece) const {
     if constexpr (US == Color::WHITE) {
@@ -104,39 +82,39 @@ struct Threats {
   }
 
   // TODO: bishops can attack one square through our own pawns.
-  Threats(const Position& pos) {
+  Threats(const TypeSafeArray<Bitboard, kNumColoredPieces, ColoredPiece>& pieceBitboards, const TypeSafeArray<Bitboard, Color::NUM_COLORS, Color>& colorBitboards) {
     constexpr Direction kForward = Direction::NORTH;
     constexpr Direction kForwardRight = (kForward == Direction::NORTH ? Direction::NORTH_EAST : Direction::SOUTH_WEST);
     constexpr Direction kForwardLeft = (kForward == Direction::NORTH ? Direction::NORTH_WEST : Direction::SOUTH_EAST);
     constexpr Direction kBackwardRight = (kForward == Direction::NORTH ? Direction::SOUTH_WEST : Direction::NORTH_EAST);
     constexpr Direction kBackwardLeft = (kForward == Direction::NORTH ? Direction::SOUTH_EAST : Direction::NORTH_WEST);
 
-    const SafeSquare ourKingSq = lsb_i_promise_board_is_not_empty(pos.pieceBitboards_[coloredPiece<Color::WHITE, Piece::KING>()]);
-    const SafeSquare theirKingSq = lsb_i_promise_board_is_not_empty(pos.pieceBitboards_[coloredPiece<Color::BLACK, Piece::KING>()]);
+    const SafeSquare ourKingSq = lsb_i_promise_board_is_not_empty(pieceBitboards[coloredPiece<Color::WHITE, Piece::KING>()]);
+    const SafeSquare theirKingSq = lsb_i_promise_board_is_not_empty(pieceBitboards[coloredPiece<Color::BLACK, Piece::KING>()]);
 
-    const Bitboard everyone = pos.colorBitboards_[Color::WHITE] | pos.colorBitboards_[Color::BLACK];
+    const Bitboard everyone = colorBitboards[Color::WHITE] | colorBitboards[Color::BLACK];
 
-    const Bitboard ourRooklikePieces = pos.pieceBitboards_[coloredPiece<Color::WHITE, Piece::ROOK>()] | pos.pieceBitboards_[coloredPiece<Color::WHITE, Piece::QUEEN>()];
-    const Bitboard theirRooklikePieces = pos.pieceBitboards_[coloredPiece<Color::BLACK, Piece::ROOK>()] | pos.pieceBitboards_[coloredPiece<Color::BLACK, Piece::QUEEN>()];
-    const Bitboard ourBishoplikePieces = pos.pieceBitboards_[coloredPiece<Color::WHITE, Piece::BISHOP>()] | pos.pieceBitboards_[coloredPiece<Color::WHITE, Piece::QUEEN>()];
-    const Bitboard theirBishoplikePieces = pos.pieceBitboards_[coloredPiece<Color::BLACK, Piece::BISHOP>()] | pos.pieceBitboards_[coloredPiece<Color::BLACK, Piece::QUEEN>()];
+    const Bitboard ourRooklikePieces = pieceBitboards[coloredPiece<Color::WHITE, Piece::ROOK>()] | pieceBitboards[coloredPiece<Color::WHITE, Piece::QUEEN>()];
+    const Bitboard theirRooklikePieces = pieceBitboards[coloredPiece<Color::BLACK, Piece::ROOK>()] | pieceBitboards[coloredPiece<Color::BLACK, Piece::QUEEN>()];
+    const Bitboard ourBishoplikePieces = pieceBitboards[coloredPiece<Color::WHITE, Piece::BISHOP>()] | pieceBitboards[coloredPiece<Color::WHITE, Piece::QUEEN>()];
+    const Bitboard theirBishoplikePieces = pieceBitboards[coloredPiece<Color::BLACK, Piece::BISHOP>()] | pieceBitboards[coloredPiece<Color::BLACK, Piece::QUEEN>()];
 
-    Bitboard ourPawn1 = shift<kForwardRight>(pos.pieceBitboards_[coloredPiece<Color::WHITE, Piece::PAWN>()]);
-    Bitboard ourPawn2 = shift<kForwardLeft>(pos.pieceBitboards_[coloredPiece<Color::WHITE, Piece::PAWN>()]);
-    Bitboard theirPawn1 = shift<kBackwardRight>(pos.pieceBitboards_[coloredPiece<Color::BLACK, Piece::PAWN>()]);
-    Bitboard theirPawn2 = shift<kBackwardLeft>(pos.pieceBitboards_[coloredPiece<Color::BLACK, Piece::PAWN>()]);
+    Bitboard ourPawn1 = shift<kForwardRight>(pieceBitboards[coloredPiece<Color::WHITE, Piece::PAWN>()]);
+    Bitboard ourPawn2 = shift<kForwardLeft>(pieceBitboards[coloredPiece<Color::WHITE, Piece::PAWN>()]);
+    Bitboard theirPawn1 = shift<kBackwardRight>(pieceBitboards[coloredPiece<Color::BLACK, Piece::PAWN>()]);
+    Bitboard theirPawn2 = shift<kBackwardLeft>(pieceBitboards[coloredPiece<Color::BLACK, Piece::PAWN>()]);
 
-    const Bitboard ourKnights = pos.pieceBitboards_[coloredPiece<Color::WHITE, Piece::KNIGHT>()];
-    const Bitboard ourBishops = pos.pieceBitboards_[coloredPiece<Color::WHITE, Piece::BISHOP>()];
-    const Bitboard ourRooks = pos.pieceBitboards_[coloredPiece<Color::WHITE, Piece::ROOK>()];
-    const Bitboard ourQueens = pos.pieceBitboards_[coloredPiece<Color::WHITE, Piece::QUEEN>()];
-    const Bitboard ourKings = pos.pieceBitboards_[coloredPiece<Color::WHITE, Piece::KING>()];
+    const Bitboard ourKnights = pieceBitboards[coloredPiece<Color::WHITE, Piece::KNIGHT>()];
+    const Bitboard ourBishops = pieceBitboards[coloredPiece<Color::WHITE, Piece::BISHOP>()];
+    const Bitboard ourRooks = pieceBitboards[coloredPiece<Color::WHITE, Piece::ROOK>()];
+    const Bitboard ourQueens = pieceBitboards[coloredPiece<Color::WHITE, Piece::QUEEN>()];
+    const Bitboard ourKings = pieceBitboards[coloredPiece<Color::WHITE, Piece::KING>()];
 
-    const Bitboard theirKnights = pos.pieceBitboards_[coloredPiece<Color::BLACK, Piece::KNIGHT>()];
-    const Bitboard theirBishops = pos.pieceBitboards_[coloredPiece<Color::BLACK, Piece::BISHOP>()];
-    const Bitboard theirRooks = pos.pieceBitboards_[coloredPiece<Color::BLACK, Piece::ROOK>()];
-    const Bitboard theirQueens = pos.pieceBitboards_[coloredPiece<Color::BLACK, Piece::QUEEN>()];
-    const Bitboard theirKings = pos.pieceBitboards_[coloredPiece<Color::BLACK, Piece::KING>()];
+    const Bitboard theirKnights = pieceBitboards[coloredPiece<Color::BLACK, Piece::KNIGHT>()];
+    const Bitboard theirBishops = pieceBitboards[coloredPiece<Color::BLACK, Piece::BISHOP>()];
+    const Bitboard theirRooks = pieceBitboards[coloredPiece<Color::BLACK, Piece::ROOK>()];
+    const Bitboard theirQueens = pieceBitboards[coloredPiece<Color::BLACK, Piece::QUEEN>()];
+    const Bitboard theirKings = pieceBitboards[coloredPiece<Color::BLACK, Piece::KING>()];
 
     // In general we assume "sane" positions -- no more than 2 knights, 2 bishops, 2 rooks, 1 queen (on each side).
 
@@ -243,8 +221,8 @@ struct Threats {
     this->badForWhite[Piece::PAWN] |= (ourPawn1 ^ ourPawn2) & (theirPawn1 | theirPawn2) & (this->blackDoubleTargets & ~this->whiteDoubleTargets);
     this->badForBlack[Piece::PAWN] |= (theirPawn1 ^ theirPawn2) & (ourPawn1 | ourPawn2) & (this->whiteDoubleTargets & ~this->blackDoubleTargets);
 
-    this->badForWhite[Piece::PAWN] &= ~pos.colorBitboards_[Color::BLACK];
-    this->badForBlack[Piece::PAWN] &= ~pos.colorBitboards_[Color::WHITE];
+    this->badForWhite[Piece::PAWN] &= ~colorBitboards[Color::BLACK];
+    this->badForBlack[Piece::PAWN] &= ~colorBitboards[Color::WHITE];
 
     // We exclude the piece being considered as a valid defender, since "badForWhite" is frequently used to answer
     // the question "is it okay to move here?", and you can't keep defending a square if you move to it!
