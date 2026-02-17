@@ -45,8 +45,6 @@ With nodes/move
     -pgnout tournament/a.pgn \
     -openings file=/Users/morganredding/Downloads/Unique_110225/Unique_v110225.pgn plies=12
 
-```
-
 # pgn2fen
 
     sh build.sh p2f src/PgnsToFensMain.cpp  -O3 -DNDEBUG
@@ -57,11 +55,11 @@ Randomly drop 90% of lines (better position diversity).
 
 Data comes from https://huggingface.co/datasets/official-stockfish/fishtest_pgns
 
-## Perf Analysis
+# Perf Analysis
 
 /usr/local/go/bin/go install github.com/google/pprof@latest
 
-    sh build.sh uci src/uci.cpp $(find src/ -name "*.cpp" | grep -Ev "([Tt]ests?|uci|main|make_tables|pgns2fens)\\.cpp") -DNDEBUG -O3 $(pkg-config --cflags --libs libprofiler)
+    sh build.sh uci src/uci/main.cpp $(pkg-config --cflags --libs libprofiler)
 
     CPUPROFILE=/tmp/prof.out ./uci "move e2e4 c7c5 g1f3 d7d6" "go depth 8" "lazyquit"
 
