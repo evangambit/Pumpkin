@@ -11,6 +11,16 @@ namespace ChessEngine {
 
 struct SimpleEvaluator : public EvaluatorInterface {
    ColoredEvaluation<Color::WHITE> evaluate_white(const Position& pos) override {
+    if ((pos.pieceBitboards_[ColoredPiece::WHITE_PAWN] | pos.pieceBitboards_[ColoredPiece::BLACK_PAWN]) == kEmptyBitboard) {
+      int whiteMinor = std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_KNIGHT] | pos.pieceBitboards_[ColoredPiece::WHITE_BISHOP]);
+      int blackMinor = std::popcount(pos.pieceBitboards_[ColoredPiece::BLACK_KNIGHT] | pos.pieceBitboards_[ColoredPiece::BLACK_BISHOP]);
+      int whiteMajor = std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_ROOK] | pos.pieceBitboards_[ColoredPiece::WHITE_QUEEN]);
+      int blackMajor = std::popcount(pos.pieceBitboards_[ColoredPiece::BLACK_ROOK] | pos.pieceBitboards_[ColoredPiece::BLACK_QUEEN]);
+      if (whiteMajor + blackMajor == 0 && whiteMinor <= 1 && blackMinor <= 1) {
+        // No pawns, no major pieces, and <= 1 minor. Almost certainly a draw.
+        return ColoredEvaluation<Color::WHITE>(0);
+      }
+    }
     ColoredEvaluation<Color::WHITE> totalEval(0);
     for (int i = 0; i < kNumColoredPieces; ++i) {
       totalEval = ColoredEvaluation<Color::WHITE>(totalEval.value + kPieceValues[i].value * std::popcount(pos.pieceBitboards_[ColoredPiece(i)]));

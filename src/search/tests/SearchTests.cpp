@@ -15,7 +15,7 @@ template<Color TURN>
 std::pair<NegamaxResult<TURN>, std::vector<std::pair<Move, Evaluation>>> search(Position pos, std::unordered_set<Move> permittedMoves, int depth = 2, int multiPV = 1) {
   std::shared_ptr<TranspositionTable> tt = std::make_shared<TranspositionTable>(10'000);
   std::atomic<bool> stopFlag(false);
-  Thread thread(0, pos, 1, permittedMoves, tt.get());
+  Thread thread(0, pos, multiPV, permittedMoves, tt.get());
 
   std::array<Frame, 20> frames;
   NegamaxResult<TURN> result = negamax<TURN, SearchType::ROOT>(
@@ -194,7 +194,7 @@ TEST_F(SearchTest, FiftyMoveRuleDetection) {
   Position pos("k7/P7/8/8/8/K1B5/8/8 w - - 98 120");
   pos.set_listener(std::make_shared<SimpleEvaluator>());
   // With depth > 0, should detect fifty move rule and return draw
-  NegamaxResult<Color::WHITE> result = search<Color::WHITE>(pos, {}).first;
+  NegamaxResult<Color::WHITE> result = search<Color::WHITE>(pos, {}, 2).first;
   
   // Position should be evaluated as draw due to fifty move rule
   // (after any move, fifty move rule kicks in)
@@ -344,7 +344,7 @@ TEST_F(MultiPVTest, MultiPVReturnsTopNMoves) {
   int multiPV = 3;
   std::shared_ptr<TranspositionTable> tt = std::make_shared<TranspositionTable>(10'000);
   pos.set_listener(evaluator);
-  auto result = search<Color::WHITE>(pos, {});
+  auto result = search<Color::WHITE>(pos, {}, 1, multiPV);
   
   // Should have exactly multiPV moves in primaryVariations_
   EXPECT_EQ(result.second.size(), multiPV);
