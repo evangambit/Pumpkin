@@ -243,7 +243,7 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
   assert(!thread->position_.history_.empty() && "qsearch requires history to have at least one move");
   const Move lastMove = thread->position_.history_.back().move;
   assert(lastMove.from < 64 && lastMove.to < 64);
-  Threats<TURN> threats(thread->position_);
+  Threats threats(thread->position_);
   for (ExtMove* move = moves; move < end; ++move) {
     if (move->move == entry.bestMove) {
       move->score = kMaxEval;
@@ -258,7 +258,7 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
 
     move->score = kQMoveOrderingPieceValue[cp2p(move->capture)];
     move->score -= value_or_zero(
-      ((threats.badForOur[move->piece] & bb(move->move.to)) > 0),
+      ((threats.badForOur<TURN>(move->piece) & bb(move->move.to)) > 0),
       kQMoveOrderingPieceValue[move->piece]
     );
 
@@ -515,15 +515,11 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   }
 
   // Add score to each move.
-  Threats<TURN> threats(thread->position_);
+  Threats threats(thread->position_);
   const Move lastMove = SEARCH_TYPE == SearchType::ROOT ? kNullMove : thread->position_.history_.back().move;
-  /**
-  ±16000: best move from transposition table
-  +8000: is capture
-  
-  deltas for ranking captures can range from -4000 to 4000
-
-   */
+  // ±16000: best move from transposition table
+  // +8000: is capture
+  // deltas for ranking captures can range from -4000 to 4000
   constexpr Evaluation kMoveOrderingPieceValue[Piece::NUM_PIECES] = {
     0,    // NO_PIECE
     100,  // PAWN
@@ -543,7 +539,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     // taking a piece that is defended.
     move->score += kMoveOrderingPieceValue[cp2p(thread->position_.tiles_[move->move.to])];
     move->score -= value_or_zero(
-      ((threats.badForOur[move->piece] & bb(move->move.to)) > 0)
+      ((threats.badForOur<TURN>(move->piece) & bb(move->move.to)) > 0)
       &&
       move->capture != ColoredPiece::NO_COLORED_PIECE
     , kMoveOrderingPieceValue[move->piece]);
@@ -553,13 +549,13 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
 
     // Penalize non-capture moves that move to a defended square.
     move->score -= value_or_zero(
-      ((threats.badForOur[move->piece] & bb(move->move.to)) > 0)
+      ((threats.badForOur<TURN>(move->piece) & bb(move->move.to)) > 0)
       &&
       move->capture == ColoredPiece::NO_COLORED_PIECE
     , 200);
     // Bonus for moving a piece that is under attack.
     move->score += value_or_zero(
-      ((threats.badForOur[move->piece] & bb(move->move.from)) > 0)
+      ((threats.badForOur<TURN>(move->piece) & bb(move->move.from)) > 0)
     , 50);
 
     // Prioritize moves that caused a beta cutoff in a similar position, in response to a similar move.
