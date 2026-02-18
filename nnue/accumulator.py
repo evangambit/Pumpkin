@@ -9,6 +9,24 @@ import torch
 from torch import nn
 from features import kMaxNumOnesInInput
 
+
+class SumBag(nn.Module):
+  """
+  Similar to EmbeddingBag but without the actual embedding lookup. Instead,
+  we assume you've already done the embedding lookup and are passing in the values directly.
+  """
+  def forward(self, values: torch.Tensor, lengths: torch.Tensor):
+    assert values.dim() == 2
+    assert lengths.dim() == 1
+    assert lengths.sum() == values.shape[0]
+    indicies = torch.repeat_interleave(
+        torch.arange(len(lengths), device=values.device), 
+        lengths
+    )
+    out = torch.zeros(len(lengths), values.shape[1], device=values.device, dtype=values.dtype)
+    out.index_add_(0, indicies, values)    
+    return out
+
 class Emb(nn.Module):
   def __init__(self, dout):
     super().__init__()
@@ -20,6 +38,7 @@ class Emb(nn.Module):
     self.files = nn.Parameter(torch.randn(1, 1, 8, dout) * s)
     self.tiles = nn.Parameter(torch.randn(12, 8, 8, dout) * s)
     self.zeros = nn.Parameter(torch.zeros(1, dout), requires_grad=False)
+    self.bagger = SumBag()
   
   def zero_(self):
     with torch.no_grad():
@@ -37,9 +56,9 @@ class Emb(nn.Module):
     tiles = self.tiles + self.pieces + self.ranks + self.files
     return torch.cat([tiles.reshape(768, -1), self.zeros], dim=0)
   
-  def forward(self, x):
-    assert len(x.shape) == 2
-    assert x.shape[1] == kMaxNumOnesInInput, f"x.shape={x.shape}"
+  def forward(self, values, lengths):
     w = self.weight()
     flipped = self.flip_vertical(w)
-    return w[x.to(torch.int32)].sum(1), flipped[x.to(torch.int32)].sum(1)
+    a = self.bagger(w[values.to(torch.int64)], lengths.to(torch.int64))
+    b = self.bagger(flipped[values.to(torch.int64)], lengths.to(torch.int64))
+    return a, b

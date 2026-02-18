@@ -42,7 +42,8 @@ void process(
   WriterI16& evalWriter,
   WriterI8& pieceCountWriter,
   QstEvaluator& qstEvaluator,
-  WriterI16& sparseNnueInputWriter
+  std::ofstream& sparseNnueValueWriter,
+  std::ofstream& sparseNnueLengthWriter
   ) {
   if (line.size() != 4 && line.size() != 2) {
     std::cout << "error: line has " << line.size() << " elements" << std::endl;
@@ -82,7 +83,8 @@ void process(
     if (pos.turn_ == Color::BLACK) {
       features.flip_();
     }
-    sparseNnueInputWriter.write_row(features.onIndices);
+    sparseNnueValueWriter.write(reinterpret_cast<const char*>(features.onIndices), sizeof(features.onIndices[0]) * features.length);
+    sparseNnueLengthWriter.write(reinterpret_cast<const char*>(&features.length), sizeof(features.length));
   }
 
   int16_t wdl[3];
@@ -142,7 +144,9 @@ int main(int argc, char *argv[]) {
   WriterB qstInputWriter(outpath + "-qst", { Q_NUM_FEATURES * 64 });
   WriterI16 evalWriter(outpath + "-eval", { 3 });
   WriterI8 pieceCountWriter(outpath + "-piece-counts", { 10 });
-  WriterI16 sparseNnueInputWriter(outpath + "-nnue", { NNUE::MAX_NUM_ONES_IN_INPUT });
+  
+  std::ofstream sparseNnueValueWriter(outpath + "-nnue-sparse-values", std::ios::binary);
+  std::ofstream sparseNnueLengthWriter(outpath + "-nnue-sparse-lengths", std::ios::binary);
 
   std::chrono::time_point<std::chrono::system_clock> startTime = std::chrono::system_clock::now();
 
@@ -155,13 +159,16 @@ int main(int argc, char *argv[]) {
       continue;
     }
     std::vector<std::string> parts = split(line, '|');
-    process(parts, qstInputWriter, evalWriter, pieceCountWriter, qstEvaluator, sparseNnueInputWriter);
+    process(parts, qstInputWriter, evalWriter, pieceCountWriter, qstEvaluator, sparseNnueValueWriter, sparseNnueLengthWriter);
 
     if ((++counter) % 100'000 == 0) {
       double ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime).count();
       std::cout << "Finished " << counter / 1000 << "k in " << ms / 1000 << " seconds" << std::endl;
     }
   }
+
+  sparseNnueValueWriter.close();
+  sparseNnueLengthWriter.close();
 
   std::cout << "Completed " << counter << " positions." << std::endl;
 

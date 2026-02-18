@@ -73,7 +73,7 @@ constexpr int16_t NNUE_INPUT_DIM = NF_COUNT * 64;
 
 struct Features {
   uint16_t length;
-  int16_t onIndices[MAX_NUM_ONES_IN_INPUT];
+  uint16_t onIndices[MAX_NUM_ONES_IN_INPUT];
   Features() : length(0) {
     std::fill_n(onIndices, MAX_NUM_ONES_IN_INPUT, NNUE_INPUT_DIM);
   }
