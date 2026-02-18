@@ -13,7 +13,25 @@ namespace NNUE {
 
 double randn(double stddev = 1.0);
 
-int16_t feature_index(ChessEngine::SafeColoredPiece piece, unsigned square);
+enum NnueFeatureBitmapType {
+  NF_WHITE_PAWN,
+  NF_WHITE_KNIGHT,
+  NF_WHITE_BISHOP,
+  NF_WHITE_ROOK,
+  NF_WHITE_QUEEN,
+  NF_WHITE_KING,
+  NF_BLACK_PAWN,
+  NF_BLACK_KNIGHT,
+  NF_BLACK_BISHOP,
+  NF_BLACK_ROOK,
+  NF_BLACK_QUEEN,
+  NF_BLACK_KING,
+  NF_COUNT
+};
+
+NnueFeatureBitmapType cp2nfbt(ChessEngine::ColoredPiece cp);
+
+int16_t feature_index(NnueFeatureBitmapType feature, unsigned square);
 
 int16_t flip_feature_index(int16_t index);
 

@@ -30,8 +30,26 @@ double randn(double stddev) {
   return u * s * stddev;
 }
 
-int16_t feature_index(ChessEngine::SafeColoredPiece piece, unsigned square) {
-  return piece * 64 + square;
+NnueFeatureBitmapType cp2nfbt(ChessEngine::ColoredPiece cp) {
+  switch (cp) {
+    case ChessEngine::ColoredPiece::WHITE_PAWN: return NF_WHITE_PAWN;
+    case ChessEngine::ColoredPiece::WHITE_KNIGHT: return NF_WHITE_KNIGHT;
+    case ChessEngine::ColoredPiece::WHITE_BISHOP: return NF_WHITE_BISHOP;
+    case ChessEngine::ColoredPiece::WHITE_ROOK: return NF_WHITE_ROOK;
+    case ChessEngine::ColoredPiece::WHITE_QUEEN: return NF_WHITE_QUEEN;
+    case ChessEngine::ColoredPiece::WHITE_KING: return NF_WHITE_KING;
+    case ChessEngine::ColoredPiece::BLACK_PAWN: return NF_BLACK_PAWN;
+    case ChessEngine::ColoredPiece::BLACK_KNIGHT: return NF_BLACK_KNIGHT;
+    case ChessEngine::ColoredPiece::BLACK_BISHOP: return NF_BLACK_BISHOP;
+    case ChessEngine::ColoredPiece::BLACK_ROOK: return NF_BLACK_ROOK;
+    case ChessEngine::ColoredPiece::BLACK_QUEEN: return NF_BLACK_QUEEN;
+    case ChessEngine::ColoredPiece::BLACK_KING: return NF_BLACK_KING;
+    default: return NF_COUNT;
+  }
+}
+
+int16_t feature_index(NnueFeatureBitmapType feature, unsigned square) {
+  return feature * 64 + square;
 }
 
 int16_t flip_feature_index(int16_t index) {
@@ -46,9 +64,9 @@ Features pos2features(const struct ChessEngine::Position& pos) {
   Features features;
   for (unsigned i = 0; i < 64; ++i) {
     ChessEngine::SafeSquare sq = ChessEngine::SafeSquare(i);
-    ChessEngine::ColoredPiece piece = pos.tiles_[sq];
-    if (piece != ChessEngine::ColoredPiece::NO_COLORED_PIECE) {
-      features.addFeature(feature_index(to_safe_colored_piece(piece), sq));
+    NnueFeatureBitmapType piece = cp2nfbt(pos.tiles_[sq]);
+    if (piece != NF_COUNT) {
+      features.addFeature(feature_index(piece, sq));
     }
   }
   if (pos.currentState_.castlingRights & ChessEngine::kCastlingRights_WhiteKing) {
