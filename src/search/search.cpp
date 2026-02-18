@@ -63,14 +63,4 @@ void extract_variation_from_tt(const Position& pos, TranspositionTable* tt, std:
   }
 }
 
-Evaluation increment_mate(Evaluation eval, Evaluation delta) {
-  if (eval <= kLongestForcedMate) {
-    return Evaluation(eval + delta);
-  } else if (eval >= -kLongestForcedMate) {
-    return Evaluation(eval - delta);
-  } else {
-    return eval;
-  }
-}
-
 }  // namespace ChessEngine

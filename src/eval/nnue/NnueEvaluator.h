@@ -58,7 +58,6 @@ struct NnueEvaluator : public EvaluatorInterface {
     return ColoredEvaluation<Color::BLACK>(eval);
   }
 
-  // TODO: get rid of WDL, stop using doubles.
   Evaluation _evaluate(const Position& pos) {
     if ((pos.pieceBitboards_[ColoredPiece::WHITE_PAWN] | pos.pieceBitboards_[ColoredPiece::BLACK_PAWN]) == kEmptyBitboard) {
       int whiteMinor = std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_KNIGHT] | pos.pieceBitboards_[ColoredPiece::WHITE_BISHOP]);

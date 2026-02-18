@@ -28,7 +28,7 @@
 
 #ifndef IS_PRINT_NODE
 #define IS_PRINT_NODE 0
-// #define IS_PRINT_NODE (SEARCH_TYPE == SearchType::ROOT)
+// #define IS_PRINT_NODE (frame->hash == hash=17514753775184410351ULL && SEARCH_TYPE == SearchType::NORMAL_SEARCH)
 // #define IS_PRINT_NODE (plyFromRoot == 0 || frame->hash == 15932567610229845462ULL || frame->hash == 15427882709703266013ULL)
 // #define IS_PRINT_NODE (thread->position_.currentState_.hash == 412260009870427727ULL)
 #endif
@@ -161,22 +161,57 @@ constexpr Evaluation kQMoveOrderingPieceValue[Piece::NUM_PIECES] = {
   20000 // KING
 };
 
+// kCheckmate -> -kCheckmate - 1
+template<Color TURN>
+ColoredEvaluation<opposite_color<TURN>()> to_parent_eval(ColoredEvaluation<TURN> childEval) {
+  if (childEval.value < kLongestForcedMate) {
+    return ColoredEvaluation<opposite_color<TURN>()>(-childEval.value - 1);
+  } else if (childEval.value > -kLongestForcedMate) {
+    return ColoredEvaluation<opposite_color<TURN>()>(-childEval.value + 1);
+  }
+  return -childEval;
+}
+
+template<Color TURN>
+ColoredEvaluation<opposite_color<TURN>()> to_child_eval(ColoredEvaluation<TURN> parentEval) {
+  if (parentEval.value < kLongestForcedMate && parentEval.value > kCheckmate) {
+    return ColoredEvaluation<opposite_color<TURN>()>(-(parentEval.value + 1));
+  } else if (parentEval.value > -kLongestForcedMate && parentEval.value < -kCheckmate) {
+    return ColoredEvaluation<opposite_color<TURN>()>(-(parentEval.value - 1));
+  }
+  return -parentEval;
+}
+
 template<Color TURN>
 NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, ColoredEvaluation<TURN> beta, int plyFromRoot, int quiescenceDepth, Frame *frame, std::atomic<bool> *stopThinking) {
-  // Prevent stack overflow - return static eval if we've gone too deep
-  if (quiescenceDepth >= kMaxQuiescenceDepth) {
-    return NegamaxResult<TURN>(kNullMove, evaluate<TURN>(thread->position_.evaluator_, thread->position_));
-  }
-
   frame->hash = thread->position_.currentState_.hash;
   if (IS_PRINT_QNODE) {
     std::cout << repeat("  ", plyFromRoot) << "Quiescence search called: alpha=" << alpha.value << " beta=" << beta.value << " plyFromRoot=" << plyFromRoot << " quiescenceDepth=" << quiescenceDepth << " history" << thread->position_.history_ << std::endl;
+  }
+
+  // This can happen when we've already found a checkmate in a previous sibling node.
+  if (alpha >= beta) {
+    if (IS_PRINT_QNODE) {
+      std::cout << repeat("  ", plyFromRoot) << "Alpha-beta window is invalid (alpha >= beta). Returning beta." << std::endl;
+    }
+    return NegamaxResult<TURN>(kNullMove, beta);
+  }
+
+  // Prevent stack overflow - return static eval if we've gone too deep
+  if (quiescenceDepth >= kMaxQuiescenceDepth) {
+    if (IS_PRINT_QNODE) {
+      std::cout << repeat("  ", plyFromRoot) << "Max quiescence depth reached, returning static evaluation." << std::endl;
+    }
+    return NegamaxResult<TURN>(kNullMove, evaluate<TURN>(thread->position_.evaluator_, thread->position_));
   }
 
   // Transposition Table probe
   TTEntry entry;
   uint64_t key = thread->position_.currentState_.hash;
   if (thread->tt_->probe(key, entry)) {
+    if (IS_PRINT_QNODE) {
+      std::cout << repeat("  ", plyFromRoot) << "qTT hit: move=" << entry.bestMove.uci() << " value=" << entry.value << " depth=" << entry.depth << " bound=" << bound_type_to_string(entry.bound) << " hash=" << key << std::endl;
+    }
     if (entry.bound == BoundType::EXACT) {
       return NegamaxResult<TURN>(entry.bestMove, ColoredEvaluation<TURN>(entry.value).clamp_(alpha, beta));
     } else if (entry.bound == BoundType::LOWER && entry.value >= beta.value) {
@@ -204,19 +239,15 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
   // Validate move count is within bounds
   assert(end >= moves && end <= moves + kMaxNumMoves);
 
-  if (IS_PRINT_QNODE) {
-    std::cout << "  " << thread->position_.fen() << std::endl;
-    for (ExtMove* m = moves; m != end; ++m) {
-      std::cout << "  QMove: " << m->move.uci() << std::endl;
-    }
-  }
-
   constexpr ColoredPiece enemyKing = coloredPiece<opposite_color<TURN>(), Piece::KING>();
   constexpr ColoredPiece moverKing = coloredPiece<TURN, Piece::KING>();
   const bool inCheck = can_enemy_attack<TURN>(
     thread->position_,
     lsb_i_promise_board_is_not_empty(thread->position_.pieceBitboards_[moverKing])
   );
+  if (IS_PRINT_QNODE) {
+    std::cout << repeat("  ", plyFromRoot) << "In check: " << inCheck << "; numMoves = " << (end - moves) << std::endl;
+  }
   if (moves == end && inCheck) {
     if (IS_PRINT_QNODE) {
       std::cout << repeat("  ", plyFromRoot) << "Checkmate detected in quiescence search." << std::endl;
@@ -306,7 +337,7 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
     }
     make_move<TURN>(&thread->position_, move->move);
     if (IS_PRINT_QNODE) {
-      std::cout << repeat("  ", plyFromRoot) << "Position after move: " << thread->position_.fen() << std::endl;
+      std::cout << repeat("  ", plyFromRoot) << "Position after move: " << thread->position_.fen() << " (hash=" << thread->position_.currentState_.hash << ")" << std::endl;
     }
 
     // Move generation can sometimes generate illegal en passant moves.
@@ -327,14 +358,10 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
     if (IS_PRINT_QNODE) {
       std::cout << repeat("  ", plyFromRoot) << "Calling qsearch recursively." << std::endl;
     }
-    ColoredEvaluation<TURN> eval = -qsearch<opposite_color<TURN>()>(thread, -beta, -alpha, plyFromRoot + 1, quiescenceDepth + 1, frame + 1, stopThinking).evaluation;
-    if (eval.value < kLongestForcedMate) {
-      eval.value += 1;
-    } else if (eval.value > -kLongestForcedMate) {
-      eval.value -= 1;
-    }
+    auto foo = qsearch<opposite_color<TURN>()>(thread, to_child_eval(beta), to_child_eval(alpha), plyFromRoot + 1, quiescenceDepth + 1, frame + 1, stopThinking).evaluation;
+    ColoredEvaluation<TURN> eval = to_parent_eval(foo);
     if (IS_PRINT_QNODE) {
-      std::cout << repeat("  ", plyFromRoot) << "Eval from recursive qsearch: " << eval.value << std::endl;
+      std::cout << repeat("  ", plyFromRoot) << "Eval from recursive qsearch: " << eval.value << "( from " << foo.value << ")" << std::endl;
     }
     undo<TURN>(&thread->position_);
     if (eval > bestResult.evaluation) {
@@ -359,6 +386,9 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
   if (bestResult.evaluation <= originalAlpha) bound = BoundType::UPPER;
   else if (bestResult.evaluation >= beta) bound = BoundType::LOWER;
 
+  if (IS_PRINT_QNODE) {
+    std::cout << repeat("  ", plyFromRoot) << "Storing in qTT: move=" << bestResult.bestMove.uci() << " eval=" << bestResult.evaluation.value << " bound=" << bound_type_to_string(bound) << " hash=" << thread->position_.currentState_.hash << " fen=" << thread->position_.fen() << std::endl;
+  }
   thread->tt_->store(
     thread->position_.currentState_.hash,
     bestResult.bestMove,
@@ -368,12 +398,16 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
   );
 
   if (IS_PRINT_QNODE) {
-    std::cout << repeat("  ", plyFromRoot) << "Quiescence search returning: bestMove=" << bestResult.bestMove.uci() << " eval=" << bestResult.evaluation.value << std::endl;
+    std::cout << repeat("  ", plyFromRoot) << "Quiescence search returning: bestMove=" << bestResult.bestMove.uci() << " eval=" << bestResult.evaluation.value << " hash=" << thread->position_.currentState_.hash << " fen=" << thread->position_.fen() << std::endl;
   }
 
   return bestResult;
 }
 
+/**
+ * Note: if you set stopThinking to true, there is no guarantee that this will return a sensible/valid result.
+ * In practice, you will likely want to re-search with depth=1 and stopThinking=false to get a valid move.
+ */
 template<Color TURN, SearchType SEARCH_TYPE>
 NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> alpha, ColoredEvaluation<TURN> beta, int plyFromRoot, Frame *frame, std::atomic<bool> *stopThinking) {
   assert(thread->position_.turn_ == TURN);
@@ -384,19 +418,28 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   const uint64_t key = thread->position_.currentState_.hash;
   frame->hash = key;
 
-  // Check for immediate cutoffs based on mate distance.
-  Evaluation lowestPossibleEvaluation = kCheckmate + plyFromRoot;
-  if (SEARCH_TYPE != SearchType::ROOT && lowestPossibleEvaluation >= beta.value) {
+  if (alpha >= beta) {
+    if (IS_PRINT_QNODE) {
+      std::cout << repeat("  ", plyFromRoot) << "Alpha-beta window is invalid (alpha >= beta). Returning beta." << std::endl;
+    }
     return NegamaxResult<TURN>(kNullMove, beta);
   }
-  Evaluation highestPossibleEvaluation = -kCheckmate - plyFromRoot;
-  if (SEARCH_TYPE != SearchType::ROOT && highestPossibleEvaluation <= alpha.value) {
-    return NegamaxResult<TURN>(kNullMove, alpha);
-  }
 
-  if (IS_PRINT_NODE) {
-    std::cout << repeat("  ", plyFromRoot) << "Probing TT with key " << thread->position_.currentState_.hash << std::endl;
-  }
+  // // Check for immediate cutoffs based on mate distance.
+  // Evaluation lowestPossibleEvaluation = kCheckmate + plyFromRoot;
+  // if (SEARCH_TYPE != SearchType::ROOT && lowestPossibleEvaluation >= beta.value) {
+  //   if (IS_PRINT_NODE) {
+  //     std::cout << repeat("  ", plyFromRoot) << "Returning (Cutoff based on mate distance: lowestPossibleEvaluation=" << lowestPossibleEvaluation << " highestPossibleEvaluation=" << kCheckmate - plyFromRoot << ")" << std::endl;
+  //   }
+  //   return NegamaxResult<TURN>(kNullMove, beta);
+  // }
+  // Evaluation highestPossibleEvaluation = -kCheckmate - plyFromRoot;
+  // if (SEARCH_TYPE != SearchType::ROOT && highestPossibleEvaluation <= alpha.value) {
+  //   if (IS_PRINT_NODE) {
+  //     std::cout << repeat("  ", plyFromRoot) << "Returning (Cutoff based on mate distance: lowestPossibleEvaluation=" << lowestPossibleEvaluation << " highestPossibleEvaluation=" << highestPossibleEvaluation << ")" << std::endl;
+  //   }
+  //   return NegamaxResult<TURN>(kNullMove, alpha);
+  // }
 
   // Transposition Table probe
   TTEntry entry;
@@ -404,17 +447,17 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     if (SEARCH_TYPE != SearchType::ROOT) {
       if (entry.bound == BoundType::EXACT) {
         if (IS_PRINT_NODE) {
-          std::cout << repeat("  ", plyFromRoot) << "TT Hit: EXACT" << std::endl;
+          std::cout << repeat("  ", plyFromRoot) << "Returning (TT Hit: EXACT; eval=" << entry.bestMove << " " << entry.value << ")" << std::endl;
         }
         return NegamaxResult<TURN>(entry.bestMove, ColoredEvaluation<TURN>(entry.value).clamp_(alpha, beta));
       } else if (entry.bound == BoundType::LOWER && entry.value >= beta.value) {
         if (IS_PRINT_NODE) {
-          std::cout << repeat("  ", plyFromRoot) << "TT Hit: LOWER" << std::endl;
+          std::cout << repeat("  ", plyFromRoot) << "Returning (TT Hit: LOWER)" << std::endl;
         }
         return NegamaxResult<TURN>(entry.bestMove, beta);
       } else if (entry.bound == BoundType::UPPER && entry.value <= alpha.value) {
         if (IS_PRINT_NODE) {
-          std::cout << repeat("  ", plyFromRoot) << "TT Hit: UPPER" << std::endl;
+          std::cout << repeat("  ", plyFromRoot) << "Returning (TT Hit: UPPER)" << std::endl;
         }
         return NegamaxResult<TURN>(entry.bestMove, alpha);
       }
@@ -425,17 +468,17 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
 
   if (SEARCH_TYPE != SearchType::ROOT && stopThinking->load()) {
     if (IS_PRINT_NODE) {
-      std::cout << repeat("  ", plyFromRoot) << "Search stopped externally." << std::endl;
+      std::cout << repeat("  ", plyFromRoot) << "Returning (Search stopped externally)." << std::endl;
     }
-    return NegamaxResult<TURN>(kNullMove, ColoredEvaluation<TURN>(0).clamp_(originalAlpha, beta));
+    return NegamaxResult<TURN>(entry.bestMove, ColoredEvaluation<TURN>(0).clamp_(originalAlpha, beta));
   }
 
   // TODO: We need to check this *after* we do the checkmate test above, since you can win on the 50th move.
   if (thread->position_.is_fifty_move_rule()) {
     if (IS_PRINT_NODE) {
-      std::cout << repeat("  ", plyFromRoot) << "Fifty-move rule draw detected." << std::endl;
+      std::cout << repeat("  ", plyFromRoot) << "Returning (Fifty-move rule draw detected)." << std::endl;
     }
-    return NegamaxResult<TURN>(kNullMove, ColoredEvaluation<TURN>(std::max(originalAlpha.value, std::min(beta.value, Evaluation(0)))));
+    return NegamaxResult<TURN>(kNullMove, ColoredEvaluation<TURN>(Evaluation(0)).clamp_(originalAlpha, beta));
   }
 
   thread->nodeCount_++;
@@ -444,14 +487,11 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   }
 
   if (depth == 0) {
+    auto r = qsearch(thread, alpha, beta, plyFromRoot, 0, frame, stopThinking);
     if (IS_PRINT_NODE) {
-      std::cout << repeat("  ", plyFromRoot) << "Entering quiescence search." << std::endl;
+      std::cout << repeat("  ", plyFromRoot) << "Returning from quiescence search: " << r << std::endl;
     }
-    return qsearch(thread, alpha, beta, plyFromRoot, 0, frame, stopThinking);
-  }
-
-  if (IS_PRINT_NODE) {
-    std::cout << repeat("  ", plyFromRoot) << "Generating moves." << std::endl;
+    return r;
   }
 
   ExtMove moves[kMaxNumMoves];
@@ -464,9 +504,6 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
 
 
   if (SEARCH_TYPE == SearchType::ROOT) {
-    if (IS_PRINT_NODE) {
-      std::cout << repeat("  ", plyFromRoot) << "Filtering moves" << std::endl;
-    }
     // If there are permitted moves, filter the move list to only include those moves.
     if (!thread->permittedMoves_.empty()) {
       ExtMove* writePtr = moves;
@@ -479,11 +516,6 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     }
   }
 
-  if (IS_PRINT_NODE) {
-    std::cout << repeat("  ", plyFromRoot) << "Checking for checkmate/stalemate/fifty-move rule." << std::endl;
-  }
-
-
   constexpr ColoredPiece enemyKing = coloredPiece<opposite_color<TURN>(), Piece::KING>();
   if (moves == end) {
     constexpr ColoredPiece moverKing = coloredPiece<TURN, Piece::KING>();
@@ -493,14 +525,14 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     );
     if (inCheck) {
       if (IS_PRINT_NODE) {
-        std::cout << repeat("  ", plyFromRoot) << "Checkmate detected." << std::endl;
+        std::cout << repeat("  ", plyFromRoot) << "Returning (Checkmate detected)." << std::endl;
       }
-      return NegamaxResult<TURN>(kNullMove, ColoredEvaluation<TURN>(kCheckmate));
+      return NegamaxResult<TURN>(kNullMove, ColoredEvaluation<TURN>(kCheckmate).clamp_(originalAlpha, beta));
     } else {
       if (IS_PRINT_NODE) {
-        std::cout << repeat("  ", plyFromRoot) << "Stalemate detected." << std::endl;
+        std::cout << repeat("  ", plyFromRoot) << "Returning (Stalemate detected)." << std::endl;
       }
-      return NegamaxResult<TURN>(kNullMove, ColoredEvaluation<TURN>(std::max(originalAlpha.value, std::min(beta.value, Evaluation(0)))));
+      return NegamaxResult<TURN>(kNullMove, ColoredEvaluation<TURN>(Evaluation(0)).clamp_(originalAlpha, beta));
     }
   }
 
@@ -510,10 +542,6 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     NegamaxResult<TURN> result = negamax<TURN, SEARCH_TYPE>(thread, depth - 2, alpha, beta, plyFromRoot, frame, stopThinking);
     entry.bestMove = result.bestMove;
     entry.value = result.evaluation.value;
-  }
-
-  if (IS_PRINT_NODE) {
-    std::cout << repeat("  ", plyFromRoot) << "Ordering moves." << std::endl;
   }
 
   // Add score to each move.
@@ -585,14 +613,11 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     for (ExtMove* m = moves; m != end; ++m) {
       std::cout << m->move.uci() << "(" << m->score << ") ";
     }
+    std::cout << std::endl;
   }
 
   if (SEARCH_TYPE == SearchType::ROOT) {
     thread->primaryVariations_.clear();
-  }
-
-  if (IS_PRINT_NODE) {
-    std::cout << repeat("  ", plyFromRoot) << "Searching moves." << std::endl;
   }
 
   // We use kMinEval instead of alpha so that we still get a best move, even if all moves fail low.
@@ -615,14 +640,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
       }
       continue;
     }
-    if (IS_PRINT_NODE) {
-      std::cout << repeat("  ", plyFromRoot) << "Making move " << move->move.uci() << std::endl;
-      make_move<TURN>(&thread->position_, move->move);
-      std::cout << repeat("  ", plyFromRoot) << "hash after move: " << thread->position_.currentState_.hash << std::endl;
-      std::cout << repeat("  ", plyFromRoot) << "history: " << thread->position_.history_ << std::endl;
-    } else {
-      make_move<TURN>(&thread->position_, move->move);
-    }
+    make_move<TURN>(&thread->position_, move->move);
 
     constexpr ColoredPiece moverKing = coloredPiece<TURN, Piece::KING>();
     const bool inCheck = can_enemy_attack<TURN>(
@@ -649,7 +667,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     }
 
     if (IS_PRINT_NODE) {
-      std::cout << repeat("  ", plyFromRoot) << "Recursing with childDepth=" << childDepth << " (hash=" << thread->position_.currentState_.hash << ")" << std::endl;
+      std::cout << repeat("  ", plyFromRoot) << "Recursing with childDepth=" << childDepth << " (hash=" << thread->position_.currentState_.hash << "; move=" << move->move.uci() << ")" << std::endl;
     }
 
     if (move->move != moves[0].move && (SEARCH_TYPE != SearchType::ROOT || thread->multiPV_ == 1)) {
@@ -663,33 +681,34 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
 
       // Null window search (possibly with reduced depth).
       if (SEARCH_TYPE != SearchType::NULL_WINDOW_SEARCH) {
-        eval = -negamax<opposite_color<TURN>(), SearchType::NULL_WINDOW_SEARCH>(thread, std::max(childDepth - reduction, 0), -(alpha + 1), -alpha, plyFromRoot + 1, frame + 1, stopThinking).evaluation;
-        if (eval.value > alpha.value) {
-          eval = -negamax<opposite_color<TURN>(), SearchType::NORMAL_SEARCH>(thread, childDepth, -beta, -alpha, plyFromRoot + 1, frame + 1, stopThinking).evaluation;
-        }
+        // eval = to_parent_eval(negamax<opposite_color<TURN>(), SearchType::NULL_WINDOW_SEARCH>(thread, std::max(childDepth - reduction, 0), to_child_eval(alpha + 1), to_child_eval(alpha), plyFromRoot + 1, frame + 1, stopThinking).evaluation);
+        // if (eval.value > alpha.value) {
+        //   if (IS_PRINT_NODE) {
+        //     std::cout << repeat("  ", plyFromRoot) << "Null window search failed; doing full window search." << std::endl;
+        //   }
+        //   eval = to_parent_eval(negamax<opposite_color<TURN>(), SearchType::NORMAL_SEARCH>(thread, childDepth, to_child_eval(beta), to_child_eval(alpha), plyFromRoot + 1, frame + 1, stopThinking).evaluation);
+        // }
+        eval = to_parent_eval(negamax<opposite_color<TURN>(), SearchType::NORMAL_SEARCH>(thread, childDepth, to_child_eval(beta), to_child_eval(alpha), plyFromRoot + 1, frame + 1, stopThinking).evaluation);
       } else {
-        eval = -negamax<opposite_color<TURN>(), SearchType::NULL_WINDOW_SEARCH>(thread, childDepth, -beta, -alpha, plyFromRoot + 1, frame + 1, stopThinking).evaluation;
+        eval = to_parent_eval(negamax<opposite_color<TURN>(), SearchType::NORMAL_SEARCH>(thread, childDepth, to_child_eval(beta), to_child_eval(alpha), plyFromRoot + 1, frame + 1, stopThinking).evaluation);
       }
     } else {
       // Simple, full-window, full-depth search. Used for the first move in non-root search.
       // In the root node, we use this when multiPV==1, since we don't care about the exact
       // evaluation of moves that aren't the best move.
-      eval = -negamax<opposite_color<TURN>(), SearchType::NORMAL_SEARCH>(thread, childDepth, -beta, -alpha, plyFromRoot + 1, frame + 1, stopThinking).evaluation;
+      eval = to_parent_eval(negamax<opposite_color<TURN>(), SearchType::NORMAL_SEARCH>(thread, childDepth, to_child_eval(beta), to_child_eval(alpha), plyFromRoot + 1, frame + 1, stopThinking).evaluation);
     }
 
     if (IS_PRINT_NODE) {
-      std::cout << repeat("  ", plyFromRoot) << "Move " << move->move.uci() << " has evaluation " << eval.value << std::endl;
-    }
-
-    // We adjust mate scores to reflect the distance to mate here, rather than when we return kCheckmate. The
-    // reason is that otherwise our transposition table scores will reflect the conditions in which they happened
-    // to be computed, which wouldn't be accurate if they're being probed further from the root. An alternative
-    // solution is to adjust scores before storing them in the transposition table (and unadjusting after probing
-    // /them), but this seems simpler.
-    if (eval.value < kLongestForcedMate) {
-      eval.value += 1;
-    } else if (eval.value > -kLongestForcedMate) {
-      eval.value -= 1;
+      std::cout << repeat("  ", plyFromRoot) << "Move " << move->move.uci() << " has evaluation ";
+      if (eval <= alpha) {
+        std::cout << "≤" << alpha.value;
+      } else if (eval >= beta) {
+        std::cout << "≥" << beta.value;
+      } else {
+        std::cout << "=" << eval.value;
+      }
+      std::cout << " (" << alpha.value << " ≤ " << eval.value << " ≤ " << beta.value << ") " << thread->position_.history_ << std::endl;
     }
 
     undo<TURN>(&thread->position_);
@@ -772,7 +791,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   bestResult.evaluation.clamp_(originalAlpha, beta);
 
   if (IS_PRINT_NODE) {
-    std::cout << repeat("  ", plyFromRoot) << "Storing in TT: depth=" << depth << " move=" << bestResult.bestMove.uci() << " eval=" << bestResult.evaluation.value << " bound=" << bound_type_to_string(bound) << std::endl;
+    std::cout << repeat("  ", plyFromRoot) << "Storing in TT: depth=" << depth << " move=" << bestResult.bestMove.uci() << " eval=" << bestResult.evaluation.value << " bound=" << bound_type_to_string(bound) << " hash=" << thread->position_.currentState_.hash << " fen=" << thread->position_.fen() << std::endl;
   }
   thread->tt_->store(
     thread->position_.currentState_.hash,

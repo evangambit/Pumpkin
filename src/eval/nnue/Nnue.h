@@ -328,7 +328,7 @@ inline void concat_and_matmul(const Matrix<HEIGHT, COMBINED_WIDTH>& mat, const V
     for (size_t j = 0; j < WIDTH2; ++j) {
       sum += static_cast<int32_t>(mat.data[i * COMBINED_WIDTH + WIDTH1 + j]) * static_cast<int32_t>(vec2.data[j]);
     }
-    out->data[i] = static_cast<int16_t>(sum >> SCALE_SHIFT);
+    out->data[i] = static_cast<int16_t>(std::max(-(1 << 15), std::min(static_cast<int32_t>(1 << 15) - 1, sum >> SCALE_SHIFT)));
   }
 }
 

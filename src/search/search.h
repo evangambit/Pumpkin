@@ -110,7 +110,7 @@ SearchResult<TURN> search(Thread* thread, std::atomic<bool> *stopThinking, std::
     &neverStopThinking  // Guarantee we always search at least depth 1 before stopping.
   );
   if (result.bestMove == kNullMove) {
-    std::cout << "Error: Search did not find a move." << std::endl;
+    std::cout << "Error: Search did not find a move. " << thread->position_.currentState_.hash << std::endl;
     exit(1);
   }
   SearchResult<TURN> searchResult = negamax_result_to_search_result<TURN>(result, thread);
@@ -131,15 +131,15 @@ SearchResult<TURN> search(Thread* thread, std::atomic<bool> *stopThinking, std::
       &thread->frames_[0],
       stopThinking
     );
-    if (result.bestMove == kNullMove) {
-      std::cout << "Error: Search did not find a move." << result << std::endl;
-      exit(1);
-    }
     searchResult = negamax_result_to_search_result<TURN>(result, thread);
     if (stopThinking->load()) {
       // Primary variations may be incomplete or invalid if the search was stopped.
       // Fallback to the last completed search result, which is guaranteed to be valid.
       searchResult = lastResult;
+    }
+    if (result.bestMove == kNullMove) {
+      std::cout << "Error: Search did not find a move." << result << " (" << thread->position_.currentState_.hash << ")" << std::endl;
+      exit(1);
     }
     lastResult = searchResult;
     if (onDepthCompleted != nullptr) {
