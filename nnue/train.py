@@ -11,7 +11,7 @@ import datetime
 
 import torch.utils.data as tdata
 from sharded_matrix import ShardedLoader
-from ShardedMatricesIterableDataset import ShardedMatricesIterableDataset
+from ShardedMatricesIterableDataset import ShardedMatricesIterableDataset, SingleShardedMatrixIterator, DynamicShardedMatrixIterator
 from features import board2x, x2board, kMaxNumOnesInInput
 from accumulator import Emb
 from nnue_model import NNUE
@@ -88,17 +88,27 @@ device = torch.device('mps' if torch.backends.mps.is_available() else 'cuda' if 
 
 print("Loading dataset...")
 dataset = ShardedMatricesIterableDataset(
-  f'data/x-nnue',
-  f'data/x-eval',
-  f'data/x-piece-counts',
-  chunk_size=CHUNK_SIZE,
+  DynamicShardedMatrixIterator(f'data/x-nnue-sparse', chunk_size=CHUNK_SIZE),
+  SingleShardedMatrixIterator(f'data/x-eval', chunk_size=CHUNK_SIZE),
+  SingleShardedMatrixIterator(f'data/x-piece-counts', chunk_size=CHUNK_SIZE),
 )
-evaluate_data_quality(dataset)
+# evaluate_data_quality(dataset)
 
 
 print(f'Dataset loaded with {len(dataset) * CHUNK_SIZE} rows.')
 
-dataloader = tdata.DataLoader(dataset, batch_size=BATCH_SIZE//CHUNK_SIZE, shuffle=False, num_workers=0, pin_memory=True, drop_last=True)
+def collate_fn(rows):
+  features, labels, piece_counts = zip(*rows)
+  values, lengths = zip(*features)
+  values = torch.from_numpy(np.concatenate(values))
+  lengths = torch.from_numpy(np.concatenate(lengths))
+  labels = torch.from_numpy(np.stack(labels))
+  piece_counts = torch.from_numpy(np.stack(piece_counts))
+  labels = labels.reshape(labels.shape[0] * labels.shape[1], *labels.shape[2:])
+  piece_counts = piece_counts.reshape(piece_counts.shape[0] * piece_counts.shape[1], *piece_counts.shape[2:])
+  return values, lengths, labels, piece_counts
+
+dataloader = tdata.DataLoader(dataset, batch_size=BATCH_SIZE//CHUNK_SIZE, shuffle=False, num_workers=0, pin_memory=True, drop_last=True, collate_fn=collate_fn)
 
 print("Creating model...")
  # [512, 128]
@@ -117,7 +127,7 @@ def warmup_length(beta, c = 2.0):
 NUM_EPOCHS = 1
 steps_per_epoch = len(dataloader)
 total_steps = NUM_EPOCHS * steps_per_epoch
-warmup_steps = warmup_length(0.999) # AdamW's beta is 0.999.
+warmup_steps = warmup_length(0.9) # AdamW's beta is 0.999.
 assert warmup_steps < total_steps // 10, "You probably made a mistake."
 
 scheduler = CosineAnnealingWithWarmup(
@@ -145,16 +155,15 @@ for epoch in range(NUM_EPOCHS):
     # Update learning rate
     scheduler.step()
     
-    batch = [v.reshape((BATCH_SIZE,) + v.shape[2:]).to(device) for v in batch]
-
-    x, y_white_perspective, piece_counts = batch
+    batch = [x.to(device) for x in batch]
+    values, lengths, y_white_perspective, piece_counts = batch
     y_white_perspective = y_white_perspective.float() / 1000.0
 
     win_mover_perspective = y_white_perspective[:,0]
     draw_mover_perspective = y_white_perspective[:,1]
     lose_mover_perspective = y_white_perspective[:,2]
 
-    output, layers = model(x)
+    output, layers = model(values, lengths)
 
     penalty = 0.0
     for layer_output in layers:

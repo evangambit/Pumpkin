@@ -1,6 +1,29 @@
 import numpy as np
 import torch.utils.data as tdata
+from torch import nn
 from sharded_matrix import ShardedLoader
+
+class DynamicShardedMatrixIterator:
+  def __init__(self, path, chunk_size=1):
+    self.path = path
+    self.chunk_size = chunk_size
+    with open(path + "-lengths", "rb") as f:
+      f.seek(0, 2)
+      self._length = f.tell() // 2
+
+  def __iter__(self):
+    self.values_file = open(self.path + "-values", "rb")
+    self.lengths_file = open(self.path + "-lengths", "rb")
+    while True:
+      length_bytes = self.lengths_file.read(self.chunk_size * 2)
+      if not length_bytes:
+        break
+      lengths = np.frombuffer(length_bytes, dtype=np.int16)
+      values = np.frombuffer(self.values_file.read(lengths.sum() * 2), dtype=np.int16)
+      yield values, lengths
+  
+  def __len__(self):
+    return self._length // self.chunk_size
 
 class SingleShardedMatrixIterator:
   def __init__(self, xpath, chunk_size=1):
@@ -29,9 +52,9 @@ class SingleShardedMatrixIterator:
     return self.X.num_rows // self.chunk_size
 
 class ShardedMatricesIterableDataset(tdata.IterableDataset):
-  def __init__(self, *paths, chunk_size=1):
+  def __init__(self, *iterators):
     super().__init__()
-    self.iterators = [SingleShardedMatrixIterator(p, chunk_size=chunk_size) for p in paths]
+    self.iterators = iterators
   
   def __iter__(self):
     its = [iter(it) for it in self.iterators]

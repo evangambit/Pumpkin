@@ -26,15 +26,14 @@ class NNUE(nn.Module):
         nn.init.zeros_(layer.bias)
     self.mlp = nn.Sequential(*layers)
 
-  def embed(self, x):
-    assert len(x.shape) == 2
-    z_us, z_them = self.emb(x)
+  def embed(self, values, lengths):
+    z_us, z_them = self.emb(values, lengths)
     return torch.cat([z_us, z_them], dim=1)
 
 
-  def forward(self, x):
+  def forward(self, values, lengths):
     # Turn is 1 for white to move, -1 for black to move
-    z = self.embed(x)
+    z = self.embed(values, lengths)
     layers = []
     for layer in self.mlp:
       z = layer(z)
