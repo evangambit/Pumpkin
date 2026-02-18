@@ -26,6 +26,7 @@ enum NnueFeatureBitmapType {
   NF_BLACK_ROOK,
   NF_BLACK_QUEEN,
   NF_BLACK_KING,
+  // NF_HANGING_PIECES,
   NF_COUNT
 };
 
@@ -66,14 +67,15 @@ enum SpecialFeatures : int16_t {
   BLACK_ROOK_ON_A8 = 576,
   BLACK_QUEEN_ON_A8 = 640,
   BLACK_KING_ON_A8 = 704,
-  INPUT_DIM = 768,
 };
+
+constexpr int16_t NNUE_INPUT_DIM = NF_COUNT * 64;
 
 struct Features {
   uint16_t length;
   int16_t onIndices[MAX_NUM_ONES_IN_INPUT];
   Features() : length(0) {
-    std::fill_n(onIndices, MAX_NUM_ONES_IN_INPUT, SpecialFeatures::INPUT_DIM);
+    std::fill_n(onIndices, MAX_NUM_ONES_IN_INPUT, NNUE_INPUT_DIM);
   }
   void addFeature(uint16_t index) {
     onIndices[length++] = static_cast<uint16_t>(index);
