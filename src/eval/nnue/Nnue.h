@@ -333,8 +333,8 @@ inline void concat_and_matmul(const Matrix<HEIGHT, COMBINED_WIDTH>& mat, const V
 }
 
 struct Nnue {
-  bool x[INPUT_DIM];
-  Vector<EMBEDDING_DIM> embWeights[INPUT_DIM];
+  bool x[NNUE_INPUT_DIM];
+  Vector<EMBEDDING_DIM> embWeights[NNUE_INPUT_DIM];
   Vector<EMBEDDING_DIM> whiteAcc;
   Vector<EMBEDDING_DIM> blackAcc;
 
@@ -347,7 +347,7 @@ struct Nnue {
   Vector<OUTPUT_DIM> output;
 
   Nnue() {
-    std::fill_n(x, INPUT_DIM, false);
+    std::fill_n(x, NNUE_INPUT_DIM, false);
     whiteAcc.setZero();
     blackAcc.setZero();
     layer1.setZero();
@@ -373,13 +373,13 @@ struct Nnue {
   }
 
   void clear_accumulator() {
-    std::fill_n(x, INPUT_DIM, false);
+    std::fill_n(x, NNUE_INPUT_DIM, false);
     whiteAcc.setZero();
     blackAcc.setZero();
   }
 
   void randn_() {
-    for (size_t i = 0; i < INPUT_DIM; ++i) {
+    for (size_t i = 0; i < NNUE_INPUT_DIM; ++i) {
       embWeights[i].randn_();
     }
     layer1.randn_();
@@ -389,7 +389,7 @@ struct Nnue {
   }
 
   void compute_acc_from_scratch(const ChessEngine::Position& pos) {
-    std::fill_n(x, INPUT_DIM, false);
+    std::fill_n(x, NNUE_INPUT_DIM, false);
     whiteAcc.setZero();
     blackAcc.setZero();
     Features features = pos2features(pos);
@@ -402,9 +402,9 @@ struct Nnue {
   }
 
   void load(std::istream& in) {
-    Matrix<INPUT_DIM, EMBEDDING_DIM> emb;
+    Matrix<NNUE_INPUT_DIM, EMBEDDING_DIM> emb;
     emb.load_from_stream(in);
-    for (size_t i = 0; i < INPUT_DIM; ++i) {
+    for (size_t i = 0; i < NNUE_INPUT_DIM; ++i) {
       embWeights[i].load_from_row(emb, i);
     }
     layer1.load_from_stream(in);
@@ -420,7 +420,7 @@ struct Nnue {
   }
 
   void use_debug_weights() {
-    for (size_t i = 0; i < INPUT_DIM; ++i) {
+    for (size_t i = 0; i < NNUE_INPUT_DIM; ++i) {
       embWeights[i].setZero();
       embWeights[i].data[i] = static_cast<int16_t>(1);
     }
@@ -444,7 +444,7 @@ struct Nnue {
 
   std::shared_ptr<Nnue> clone() const {
     std::shared_ptr<Nnue> copy = std::make_shared<Nnue>();
-    for (size_t i = 0; i < INPUT_DIM; ++i) {
+    for (size_t i = 0; i < NNUE_INPUT_DIM; ++i) {
       copy->embWeights[i] = this->embWeights[i];
     }
     copy->layer1 = this->layer1;
