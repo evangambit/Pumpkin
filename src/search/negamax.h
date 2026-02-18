@@ -175,9 +175,9 @@ ColoredEvaluation<opposite_color<TURN>()> to_parent_eval(ColoredEvaluation<TURN>
 template<Color TURN>
 ColoredEvaluation<opposite_color<TURN>()> to_child_eval(ColoredEvaluation<TURN> parentEval) {
   if (parentEval.value < kLongestForcedMate && parentEval.value > kCheckmate) {
-    return ColoredEvaluation<opposite_color<TURN>()>(-(parentEval.value + 1));
+    return ColoredEvaluation<opposite_color<TURN>()>(-parentEval.value + 1);
   } else if (parentEval.value > -kLongestForcedMate && parentEval.value < -kCheckmate) {
-    return ColoredEvaluation<opposite_color<TURN>()>(-(parentEval.value - 1));
+    return ColoredEvaluation<opposite_color<TURN>()>(-parentEval.value - 1);
   }
   return -parentEval;
 }
