@@ -128,14 +128,14 @@ TEST_F(SearchTest, ThreadConstructor) {
 }
 
 TEST_F(SearchTest, NegamaxFindsBackRankMateIn1) {
-  Position pos("6k1/5ppp/8/8/3Q4/8/8/4K3 w - - 0 1");
+  Position pos("6k1/1RK3p1/1P3pPp/5P1P/8/8/8/8 w - - 0 1");
   auto evaluator = std::make_shared<SimpleEvaluator>();
   std::unordered_set<Move> permittedMoves;
   NegamaxResult<Color::WHITE> result = search<Color::WHITE>(pos, permittedMoves).first;
   
-  // The best move should be Qd4d8#.
-  EXPECT_EQ(result.bestMove.from, SafeSquare::SD4);
-  EXPECT_EQ(result.bestMove.to, SafeSquare::SD8);
+  // The best move should be Rd4d8#.
+  EXPECT_EQ(int(result.bestMove.from), int(SafeSquare::SB7));
+  EXPECT_EQ(int(result.bestMove.to), int(SafeSquare::SB8));
   // Evaluation should indicate checkmate
   EXPECT_EQ(result.evaluation, ColoredEvaluation<Color::WHITE>(-kCheckmate - 1));  // Mate in 1 ply.
 }
@@ -187,6 +187,15 @@ TEST_F(SearchTest, CheckmateDetectionDepth1) {
   EXPECT_EQ(result.bestMove.from, SafeSquare::SD4);
   EXPECT_EQ(result.bestMove.to, SafeSquare::SD8);
 }
+
+// TEST_F(SearchTest, CheckmateIn3Moves) {
+//   Position pos("8/7R/2r5/8/P3n3/8/3nk1PP/1R4K1 b - - 1 1");
+//   pos.set_listener(std::make_shared<SimpleEvaluator>());
+//   NegamaxResult<Color::WHITE> result = search<Color::WHITE>(pos, {}, 4).first;
+//   EXPECT_EQ(result.evaluation, ColoredEvaluation<Color::WHITE>(-kCheckmate - 5));  // Mate in 5 ply.
+//   EXPECT_EQ(int(result.bestMove.from), int(SafeSquare::SD2));
+//   EXPECT_EQ(int(result.bestMove.to), int(SafeSquare::SF3));
+// }
 
 // Test fifty move rule detection
 TEST_F(SearchTest, FiftyMoveRuleDetection) {

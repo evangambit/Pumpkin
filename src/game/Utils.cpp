@@ -23,33 +23,6 @@ std::string eval2str(Evaluation eval) {
   return std::to_string(eval);
 }
 
-Evaluation child_eval_to_parent_eval(Evaluation eval) {
-  eval *= -1;
-  if (eval <= kQLongestForcedMate) {
-    eval += 1;
-  }
-  if (eval >= -kQLongestForcedMate) {
-    eval -= 1;
-  }
-  return eval;
-}
-
-/*
- * Parent has mate in 2
- * Only interested in children with mate in 1
- */
-
-Evaluation parent_eval_to_child_eval(Evaluation eval) {
-  eval *= -1;
-  if (eval <= kQLongestForcedMate && eval > kMinEval) {
-    eval -= 1;
-  }
-  if (eval >= -kQLongestForcedMate && eval < kMaxEval) {
-    eval += 1;
-  }
-  return eval;
-}
-
 void assert_valid_color(Color color) {
   assert(color == Color::WHITE || color == Color::BLACK);
 }

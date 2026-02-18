@@ -21,6 +21,7 @@ class PositionTask : public Task {
       invalid(join(command, " "));
       return;
     }
+    std::shared_ptr<EvaluatorInterface> evaluator = state->position.evaluator_;
     size_t i;
     if (command[1] == "startpos") {
       state->position = Position("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
@@ -33,6 +34,7 @@ class PositionTask : public Task {
       invalid(join(command, " "));
       return;
     }
+    state->position.set_listener(evaluator->clone());
     if (i == command.size()) {
       return;
     }
