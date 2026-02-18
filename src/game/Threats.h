@@ -108,6 +108,11 @@ struct Threats {
     }
   }
 
+  // Takes advantage of the fact that badForWhite and badForBlack live next to each other in memory.
+  Bitboard badForCp(ColoredPiece cp) const {
+    return badForWhite[cp - 1];
+  }
+
   template<ColoredPiece cp>
   Bitboard badFor() const {
     constexpr Color color = cp2color(cp);
