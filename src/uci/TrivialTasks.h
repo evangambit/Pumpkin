@@ -247,6 +247,7 @@ class SetEvaluatorTask : public Task {
           return;
         }
         nnue_model->load(f);
+        std::cout << "Model loaded successfully." << std::endl;
       } else {
         std::istringstream f(std::string(model_bin, model_bin_len));
         nnue_model->load(f);

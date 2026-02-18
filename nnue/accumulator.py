@@ -30,13 +30,14 @@ class SumBag(nn.Module):
 class Emb(nn.Module):
   def __init__(self, dout):
     super().__init__()
-    din = 768
+    k = 13
+    din = k * 8 * 8
 
     s = (1.0 / kMaxNumOnesInInput) ** 0.5    
-    self.pieces = nn.Parameter(torch.randn(12, 1, 1, dout) * s)
-    self.ranks = nn.Parameter(torch.randn(1, 8, 1, dout) * s)
-    self.files = nn.Parameter(torch.randn(1, 1, 8, dout) * s)
-    self.tiles = nn.Parameter(torch.randn(12, 8, 8, dout) * s)
+    self.pieces = nn.Parameter(torch.randn(k, 1, 1, dout) * s)
+    self.ranks = nn.Parameter(torch.randn(k, 8, 1, dout) * s)
+    self.files = nn.Parameter(torch.randn(k, 1, 8, dout) * s)
+    self.tiles = nn.Parameter(torch.randn(k, 8, 8, dout) * s)
     self.zeros = nn.Parameter(torch.zeros(1, dout), requires_grad=False)
     self.bagger = SumBag()
   
@@ -54,7 +55,7 @@ class Emb(nn.Module):
 
   def weight(self):
     tiles = self.tiles + self.pieces + self.ranks + self.files
-    return torch.cat([tiles.reshape(768, -1), self.zeros], dim=0)
+    return torch.cat([tiles.reshape(13 * 8 * 8, -1), self.zeros], dim=0)
   
   def forward(self, values, lengths):
     w = self.weight()

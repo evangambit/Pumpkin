@@ -1,5 +1,8 @@
 #include "Utils.h"
 
+#include "../../game/Threats.h"
+#include "../../game/CreateThreats.h"
+
 #include <cstdint>
 #include <algorithm>
 #include <cmath>
@@ -44,7 +47,9 @@ NnueFeatureBitmapType cp2nfbt(ChessEngine::ColoredPiece cp) {
     case ChessEngine::ColoredPiece::BLACK_ROOK: return NF_BLACK_ROOK;
     case ChessEngine::ColoredPiece::BLACK_QUEEN: return NF_BLACK_QUEEN;
     case ChessEngine::ColoredPiece::BLACK_KING: return NF_BLACK_KING;
-    default: return NF_COUNT;
+    default: {
+      throw std::invalid_argument("Invalid ColoredPiece");
+    }
   }
 }
 
@@ -61,12 +66,18 @@ int16_t flip_feature_index(int16_t index) {
 }
 
 Features pos2features(const struct ChessEngine::Position& pos) {
+  ChessEngine::Threats threats;
+  ChessEngine::create_threats(pos.pieceBitboards_, pos.colorBitboards_, &threats);
   Features features;
   for (unsigned i = 0; i < 64; ++i) {
     ChessEngine::SafeSquare sq = ChessEngine::SafeSquare(i);
-    NnueFeatureBitmapType piece = cp2nfbt(pos.tiles_[sq]);
-    if (piece != NF_COUNT) {
-      features.addFeature(feature_index(piece, sq));
+    ChessEngine::ColoredPiece cp = pos.tiles_[sq];
+    if (cp == ChessEngine::ColoredPiece::NO_COLORED_PIECE) {
+      continue;
+    }
+    features.addFeature(feature_index(cp2nfbt(cp), sq));
+    if (threats.badForCp(cp) & bb(sq)) {
+      features.addFeature(feature_index(NF_HANGING_PIECES, sq));
     }
   }
   if (pos.currentState_.castlingRights & ChessEngine::kCastlingRights_WhiteKing) {

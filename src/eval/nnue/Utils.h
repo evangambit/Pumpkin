@@ -26,7 +26,7 @@ enum NnueFeatureBitmapType {
   NF_BLACK_ROOK,
   NF_BLACK_QUEEN,
   NF_BLACK_KING,
-  // NF_HANGING_PIECES,
+  NF_HANGING_PIECES,
   NF_COUNT
 };
 
@@ -41,7 +41,7 @@ constexpr int EMBEDDING_DIM = 512;
 constexpr int HIDDEN1_DIM = 8;
 constexpr int OUTPUT_DIM = 1;
 
-constexpr int MAX_NUM_ONES_IN_INPUT = 32 + 4;
+constexpr int MAX_NUM_ONES_IN_INPUT = 32 + 4 + 32;
 
 enum SpecialFeatures : int16_t {
   // It is impossible for a pawn to be on the first or last rank, so we can
@@ -70,6 +70,7 @@ enum SpecialFeatures : int16_t {
 };
 
 constexpr int16_t NNUE_INPUT_DIM = NF_COUNT * 64;
+static_assert(NF_COUNT == 13);
 
 struct Features {
   uint16_t length;
