@@ -24,7 +24,7 @@ struct WDL {
 struct NnueEvaluator : public EvaluatorInterface {
   std::shared_ptr<Nnue> nnue_model;
 
-  Bitboard lastPieceBitboards[SafeColoredPiece::S_BLACK_KING + 1];
+  Bitboard lastPieceBitboards[NF_COUNT];
 
   NnueEvaluator(std::shared_ptr<Nnue> model) : nnue_model(model) {
     this->empty();
@@ -33,7 +33,7 @@ struct NnueEvaluator : public EvaluatorInterface {
   // Board listener
   void empty() override {
     nnue_model->clear_accumulator();
-    std::fill_n(lastPieceBitboards, SafeColoredPiece::S_BLACK_KING + 1, kEmptyBitboard);
+    std::fill_n(lastPieceBitboards, NF_COUNT, kEmptyBitboard);
   }
   void place_piece(ColoredPiece cp, SafeSquare square) override {
   }
@@ -73,20 +73,60 @@ struct NnueEvaluator : public EvaluatorInterface {
       Vector<1024> accCopy = nnue_model->whiteAcc;
     #endif
 
-    for (SafeColoredPiece cp = SafeColoredPiece::S_WHITE_PAWN; cp <= SafeColoredPiece::S_BLACK_KING; cp = SafeColoredPiece(cp + 1)) {
-      const Bitboard oldBitboard = lastPieceBitboards[cp];
-      const Bitboard newBitboard = pos.pieceBitboards_[to_colored_piece(cp)];
+    for (NnueFeatureBitmapType i = static_cast<NnueFeatureBitmapType>(0); i < NF_COUNT; i = static_cast<NnueFeatureBitmapType>(i + 1)) {
+      const Bitboard oldBitboard = lastPieceBitboards[i];
+      Bitboard newBitboard;
+      switch (i) {
+        case NF_WHITE_PAWN:
+          newBitboard = pos.pieceBitboards_[ColoredPiece::WHITE_PAWN];
+          break;
+        case NF_WHITE_KNIGHT:
+          newBitboard = pos.pieceBitboards_[ColoredPiece::WHITE_KNIGHT];
+          break;
+        case NF_WHITE_BISHOP:
+          newBitboard = pos.pieceBitboards_[ColoredPiece::WHITE_BISHOP];
+          break;
+        case NF_WHITE_ROOK:
+          newBitboard = pos.pieceBitboards_[ColoredPiece::WHITE_ROOK];
+          break;
+        case NF_WHITE_QUEEN:
+          newBitboard = pos.pieceBitboards_[ColoredPiece::WHITE_QUEEN];
+          break;
+        case NF_WHITE_KING:
+          newBitboard = pos.pieceBitboards_[ColoredPiece::WHITE_KING];
+          break;
+        case NF_BLACK_PAWN:
+          newBitboard = pos.pieceBitboards_[ColoredPiece::BLACK_PAWN];
+          break;
+        case NF_BLACK_KNIGHT:
+          newBitboard = pos.pieceBitboards_[ColoredPiece::BLACK_KNIGHT];
+          break;
+        case NF_BLACK_BISHOP:
+          newBitboard = pos.pieceBitboards_[ColoredPiece::BLACK_BISHOP];
+          break;
+        case NF_BLACK_ROOK:
+          newBitboard = pos.pieceBitboards_[ColoredPiece::BLACK_ROOK];
+          break;
+        case NF_BLACK_QUEEN:
+          newBitboard = pos.pieceBitboards_[ColoredPiece::BLACK_QUEEN];
+          break;
+        case NF_BLACK_KING:
+          newBitboard = pos.pieceBitboards_[ColoredPiece::BLACK_KING];
+          break;
+        default:
+          std::cerr << "Invalid NnueFeatureBitmapType: " << i << std::endl;
+      }
       Bitboard diff = oldBitboard & ~newBitboard;
       while (diff) {
         const SafeSquare sq = pop_lsb_i_promise_board_is_not_empty(diff);
-        nnue_model->decrement(feature_index(cp, sq));
+        nnue_model->decrement(feature_index(i, sq));
       }
       diff = ~oldBitboard & newBitboard;
       while (diff) {
         const SafeSquare sq = pop_lsb_i_promise_board_is_not_empty(diff);
-        nnue_model->increment(feature_index(cp, sq));
+        nnue_model->increment(feature_index(i, sq));
       }
-      lastPieceBitboards[cp] = newBitboard;
+      lastPieceBitboards[i] = newBitboard;
     }
 
     if (((pos.currentState_.castlingRights & kCastlingRights_WhiteKing) > 0) != nnue_model->x[WHITE_KINGSIDE_CASTLING_RIGHT]) {
