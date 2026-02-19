@@ -151,9 +151,6 @@ struct NnueEvaluator : public EvaluatorInterface {
         return Evaluation(0);
       }
     }
-    #ifndef NDEBUG
-      Vector<1024> accCopy = nnue_model->whiteAcc;
-    #endif
 
     // TODO: pass this into _evaluate.
     Threats threats;
@@ -208,6 +205,7 @@ struct NnueEvaluator : public EvaluatorInterface {
     int16_t score = eval[0];
 
     #ifndef NDEBUG
+      Vector<512> accCopy = nnue_model->whiteAcc;
       nnue_model->compute_acc_from_scratch(pos);
       int16_t score2 = nnue_model->forward(pos.turn_)[0];
       if (score != score2) {
