@@ -33,6 +33,28 @@ enum NnueFeatureBitmapType {
 static_assert(NF_COUNT % 2 == 0, "NF_COUNT must be even");
 static_assert(NF_COUNT / 2 == NF_BLACK_PAWN, "Half of the features must be for black pieces and half for white pieces");
 
+inline std::string nnue_feature_to_string(NnueFeatureBitmapType feature) {
+  switch (feature) {
+    case NF_WHITE_PAWN: return "White Pawn";
+    case NF_WHITE_KNIGHT: return "White Knight";
+    case NF_WHITE_BISHOP: return "White Bishop";
+    case NF_WHITE_ROOK: return "White Rook";
+    case NF_WHITE_QUEEN: return "White Queen";
+    case NF_WHITE_KING: return "White King";
+    case NF_WHITE_HANGING_PIECES: return "White Hanging Pieces";
+    case NF_BLACK_PAWN: return "Black Pawn";
+    case NF_BLACK_KNIGHT: return "Black Knight";
+    case NF_BLACK_BISHOP: return "Black Bishop";
+    case NF_BLACK_ROOK: return "Black Rook";
+    case NF_BLACK_QUEEN: return "Black Queen";
+    case NF_BLACK_KING: return "Black King";
+    case NF_BLACK_HANGING_PIECES: return "Black Hanging Pieces";
+    default:
+      std::cerr << "Invalid NnueFeatureBitmapType: " << feature << std::endl;
+      return "Invalid Feature";
+  }
+}
+
 NnueFeatureBitmapType cp2nfbt(ChessEngine::ColoredPiece cp);
 
 int16_t feature_index(NnueFeatureBitmapType feature, unsigned square);
