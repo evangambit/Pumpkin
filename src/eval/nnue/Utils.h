@@ -20,15 +20,18 @@ enum NnueFeatureBitmapType {
   NF_WHITE_ROOK,
   NF_WHITE_QUEEN,
   NF_WHITE_KING,
+  NF_WHITE_HANGING_PIECES,
   NF_BLACK_PAWN,
   NF_BLACK_KNIGHT,
   NF_BLACK_BISHOP,
   NF_BLACK_ROOK,
   NF_BLACK_QUEEN,
   NF_BLACK_KING,
-  NF_HANGING_PIECES,
+  NF_BLACK_HANGING_PIECES,
   NF_COUNT
 };
+static_assert(NF_COUNT % 2 == 0, "NF_COUNT must be even");
+static_assert(NF_COUNT / 2 == NF_BLACK_PAWN, "Half of the features must be for black pieces and half for white pieces");
 
 NnueFeatureBitmapType cp2nfbt(ChessEngine::ColoredPiece cp);
 
@@ -41,6 +44,7 @@ constexpr int EMBEDDING_DIM = 512;
 constexpr int HIDDEN1_DIM = 8;
 constexpr int OUTPUT_DIM = 1;
 
+// 32 pieces, 4 castling rights, and 32 hanging pieces.
 constexpr int MAX_NUM_ONES_IN_INPUT = 32 + 4 + 32;
 
 enum SpecialFeatures : int16_t {
@@ -70,7 +74,6 @@ enum SpecialFeatures : int16_t {
 };
 
 constexpr int16_t NNUE_INPUT_DIM = NF_COUNT * 64;
-static_assert(NF_COUNT == 13);
 
 struct Features {
   uint16_t length;

@@ -59,7 +59,7 @@ int16_t feature_index(NnueFeatureBitmapType feature, unsigned square) {
 
 int16_t flip_feature_index(int16_t index) {
   // Flip the board position vertically (rank 8 <-> rank 1, etc.) and swap colors.
-  int16_t piece_type = (((index / 64) + 6) % 12) * 64;
+  int16_t piece_type = (((index / 64) + (NF_COUNT / 2)) % NF_COUNT) * 64;
   int16_t square = index % 64;
   int16_t flipped_square = (7 - (square / 8)) * 8 + (square % 8);
   return piece_type + flipped_square;
@@ -77,7 +77,11 @@ Features pos2features(const struct ChessEngine::Position& pos) {
     }
     features.addFeature(feature_index(cp2nfbt(cp), sq));
     if (threats.badForCp(cp) & bb(sq)) {
-      features.addFeature(feature_index(NF_HANGING_PIECES, sq));
+      if (cp2color(cp) == ChessEngine::Color::WHITE) {
+        features.addFeature(feature_index(NF_WHITE_HANGING_PIECES, sq));
+      } else {
+        features.addFeature(feature_index(NF_BLACK_HANGING_PIECES, sq));
+      }
     }
   }
   if (pos.currentState_.castlingRights & ChessEngine::kCastlingRights_WhiteKing) {
