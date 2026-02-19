@@ -6,6 +6,7 @@
 #include <cstring>
 
 #include <string>
+#include <sstream>
 #include <vector>
 #include <algorithm>
 #include <memory>
@@ -27,6 +28,8 @@ struct PositionState {
 };
 
 std::ostream& operator<<(std::ostream& stream, const PositionState& state);
+struct Position;
+std::ostream& operator<<(std::ostream& stream, const Position& pos);
 
 extern uint64_t kZorbristNumbers[kNumColoredPieces][kNumSquares];
 extern uint64_t kZorbristCastling[16];
@@ -127,6 +130,12 @@ class Position {
   }
   inline void decrement_piece_map(SafeColoredPiece cp, SafeSquare sq) {
     this->evaluator_->remove_piece(cp, sq);
+  }
+
+  inline std::string to_string() const {
+    std::stringstream ss;
+    ss << *this;
+    return ss.str();
   }
 
   void assert_valid_state() const;

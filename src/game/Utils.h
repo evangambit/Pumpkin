@@ -182,8 +182,6 @@ char colored_piece_to_char(ColoredPiece cp);
 
 char piece_to_char(Piece piece);
 
-std::vector<std::string> split(const std::string& text, char delimiter);
-
 template<class T>
 std::ostream& operator<<(std::ostream& stream, const std::vector<T>& vec) {
   if (vec.size() == 0) {
