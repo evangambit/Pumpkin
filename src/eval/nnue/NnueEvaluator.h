@@ -73,6 +73,10 @@ struct NnueEvaluator : public EvaluatorInterface {
       Vector<1024> accCopy = nnue_model->whiteAcc;
     #endif
 
+    // TODO: pass this into _evaluate.
+    Threats threats;
+    create_threats(pos.pieceBitboards_, pos.colorBitboards_, &threats);
+
     for (NnueFeatureBitmapType i = static_cast<NnueFeatureBitmapType>(0); i < NF_COUNT; i = static_cast<NnueFeatureBitmapType>(i + 1)) {
       const Bitboard oldBitboard = lastPieceBitboards[i];
       Bitboard newBitboard;
@@ -113,15 +117,14 @@ struct NnueEvaluator : public EvaluatorInterface {
         case NF_BLACK_KING:
           newBitboard = pos.pieceBitboards_[ColoredPiece::BLACK_KING];
           break;
-        case NF_HANGING_PIECES:
-          Threats threats;
-          create_threats(pos.pieceBitboards_, pos.colorBitboards_, &threats);
+        case NF_WHITE_HANGING_PIECES:
           newBitboard = threats.badForCp(ColoredPiece::WHITE_PAWN) & pos.pieceBitboards_[ColoredPiece::WHITE_PAWN];
           newBitboard |= threats.badForCp(ColoredPiece::WHITE_KNIGHT) & pos.pieceBitboards_[ColoredPiece::WHITE_KNIGHT];
           newBitboard |= threats.badForCp(ColoredPiece::WHITE_BISHOP) & pos.pieceBitboards_[ColoredPiece::WHITE_BISHOP];
           newBitboard |= threats.badForCp(ColoredPiece::WHITE_ROOK) & pos.pieceBitboards_[ColoredPiece::WHITE_ROOK];
           newBitboard |= threats.badForCp(ColoredPiece::WHITE_QUEEN) & pos.pieceBitboards_[ColoredPiece::WHITE_QUEEN];
           newBitboard |= threats.badForCp(ColoredPiece::WHITE_KING) & pos.pieceBitboards_[ColoredPiece::WHITE_KING];
+        case NF_BLACK_HANGING_PIECES:
           newBitboard |= threats.badForCp(ColoredPiece::BLACK_PAWN) & pos.pieceBitboards_[ColoredPiece::BLACK_PAWN];
           newBitboard |= threats.badForCp(ColoredPiece::BLACK_KNIGHT) & pos.pieceBitboards_[ColoredPiece::BLACK_KNIGHT];
           newBitboard |= threats.badForCp(ColoredPiece::BLACK_BISHOP) & pos.pieceBitboards_[ColoredPiece::BLACK_BISHOP];
