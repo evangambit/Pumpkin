@@ -11,7 +11,7 @@
     << "Actual:\n" << bstr(actual) \
     << "Expected:\n" << bstr(expected)
 
-    namespace ChessEngine {
+namespace ChessEngine {
 
 class GeometryTest : public ::testing::Test {
  protected:

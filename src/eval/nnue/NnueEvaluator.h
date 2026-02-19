@@ -15,6 +15,88 @@ using namespace ChessEngine;
 
 namespace NNUE {
 
+inline Bitboard nnue_feature_to_bitboard(NnueFeatureBitmapType feature, const Position& pos, const Threats& threats) {
+  switch (feature) {
+    case NF_WHITE_PAWN:
+      return pos.pieceBitboards_[ColoredPiece::WHITE_PAWN];
+      break;
+    case NF_WHITE_KNIGHT:
+      return pos.pieceBitboards_[ColoredPiece::WHITE_KNIGHT];
+      break;
+    case NF_WHITE_BISHOP:
+      return pos.pieceBitboards_[ColoredPiece::WHITE_BISHOP];
+      break;
+    case NF_WHITE_ROOK:
+      return pos.pieceBitboards_[ColoredPiece::WHITE_ROOK];
+      break;
+    case NF_WHITE_QUEEN:
+      return pos.pieceBitboards_[ColoredPiece::WHITE_QUEEN];
+      break;
+    case NF_WHITE_KING:
+      return pos.pieceBitboards_[ColoredPiece::WHITE_KING];
+      break;
+    case NF_BLACK_PAWN:
+      return pos.pieceBitboards_[ColoredPiece::BLACK_PAWN];
+      break;
+    case NF_BLACK_KNIGHT:
+      return pos.pieceBitboards_[ColoredPiece::BLACK_KNIGHT];
+      break;
+    case NF_BLACK_BISHOP:
+      return pos.pieceBitboards_[ColoredPiece::BLACK_BISHOP];
+      break;
+    case NF_BLACK_ROOK:
+      return pos.pieceBitboards_[ColoredPiece::BLACK_ROOK];
+      break;
+    case NF_BLACK_QUEEN:
+      return pos.pieceBitboards_[ColoredPiece::BLACK_QUEEN];
+      break;
+    case NF_BLACK_KING:
+      return pos.pieceBitboards_[ColoredPiece::BLACK_KING];
+      break;
+    case NF_WHITE_HANGING_PIECES: {
+      Bitboard newBitboard = threats.badForCp(ColoredPiece::WHITE_PAWN) & pos.pieceBitboards_[ColoredPiece::WHITE_PAWN];
+      newBitboard |= threats.badForCp(ColoredPiece::WHITE_KNIGHT) & pos.pieceBitboards_[ColoredPiece::WHITE_KNIGHT];
+      newBitboard |= threats.badForCp(ColoredPiece::WHITE_BISHOP) & pos.pieceBitboards_[ColoredPiece::WHITE_BISHOP];
+      newBitboard |= threats.badForCp(ColoredPiece::WHITE_ROOK) & pos.pieceBitboards_[ColoredPiece::WHITE_ROOK];
+      newBitboard |= threats.badForCp(ColoredPiece::WHITE_QUEEN) & pos.pieceBitboards_[ColoredPiece::WHITE_QUEEN];
+      newBitboard |= threats.badForCp(ColoredPiece::WHITE_KING) & pos.pieceBitboards_[ColoredPiece::WHITE_KING];
+      return newBitboard;
+    }
+    case NF_BLACK_HANGING_PIECES: {
+      Bitboard newBitboard = threats.badForCp(ColoredPiece::BLACK_PAWN) & pos.pieceBitboards_[ColoredPiece::BLACK_PAWN];
+      newBitboard |= threats.badForCp(ColoredPiece::BLACK_KNIGHT) & pos.pieceBitboards_[ColoredPiece::BLACK_KNIGHT];
+      newBitboard |= threats.badForCp(ColoredPiece::BLACK_BISHOP) & pos.pieceBitboards_[ColoredPiece::BLACK_BISHOP];
+      newBitboard |= threats.badForCp(ColoredPiece::BLACK_ROOK) & pos.pieceBitboards_[ColoredPiece::BLACK_ROOK];
+      newBitboard |= threats.badForCp(ColoredPiece::BLACK_QUEEN) & pos.pieceBitboards_[ColoredPiece::BLACK_QUEEN];
+      newBitboard |= threats.badForCp(ColoredPiece::BLACK_KING) & pos.pieceBitboards_[ColoredPiece::BLACK_KING];
+      return newBitboard;
+    }
+    default:
+      std::cerr << "Invalid NnueFeatureBitmapType: " << feature << std::endl;
+  }
+  return kEmptyBitboard;
+}
+
+std::string diff_bstr(Bitboard oldb, Bitboard newb) {
+  std::string result;
+  for (int y = 0; y < 8; ++y) {
+    for (int x = 0; x < 8; ++x) {
+      int i = y * 8 + x;
+      char c;
+      if ((oldb & bb(i)) && !(newb & bb(i))) {
+        c = '-';
+      } else if (!(oldb & bb(i)) && (newb & bb(i))) {
+        c = '+';
+      } else {
+        c = '.';
+      }
+      result += c;
+    }
+    result += '\n';
+  }
+  return result;
+}
+
 struct WDL {
   double win;
   double draw;
@@ -79,62 +161,7 @@ struct NnueEvaluator : public EvaluatorInterface {
 
     for (NnueFeatureBitmapType i = static_cast<NnueFeatureBitmapType>(0); i < NF_COUNT; i = static_cast<NnueFeatureBitmapType>(i + 1)) {
       const Bitboard oldBitboard = lastPieceBitboards[i];
-      Bitboard newBitboard;
-      switch (i) {
-        case NF_WHITE_PAWN:
-          newBitboard = pos.pieceBitboards_[ColoredPiece::WHITE_PAWN];
-          break;
-        case NF_WHITE_KNIGHT:
-          newBitboard = pos.pieceBitboards_[ColoredPiece::WHITE_KNIGHT];
-          break;
-        case NF_WHITE_BISHOP:
-          newBitboard = pos.pieceBitboards_[ColoredPiece::WHITE_BISHOP];
-          break;
-        case NF_WHITE_ROOK:
-          newBitboard = pos.pieceBitboards_[ColoredPiece::WHITE_ROOK];
-          break;
-        case NF_WHITE_QUEEN:
-          newBitboard = pos.pieceBitboards_[ColoredPiece::WHITE_QUEEN];
-          break;
-        case NF_WHITE_KING:
-          newBitboard = pos.pieceBitboards_[ColoredPiece::WHITE_KING];
-          break;
-        case NF_BLACK_PAWN:
-          newBitboard = pos.pieceBitboards_[ColoredPiece::BLACK_PAWN];
-          break;
-        case NF_BLACK_KNIGHT:
-          newBitboard = pos.pieceBitboards_[ColoredPiece::BLACK_KNIGHT];
-          break;
-        case NF_BLACK_BISHOP:
-          newBitboard = pos.pieceBitboards_[ColoredPiece::BLACK_BISHOP];
-          break;
-        case NF_BLACK_ROOK:
-          newBitboard = pos.pieceBitboards_[ColoredPiece::BLACK_ROOK];
-          break;
-        case NF_BLACK_QUEEN:
-          newBitboard = pos.pieceBitboards_[ColoredPiece::BLACK_QUEEN];
-          break;
-        case NF_BLACK_KING:
-          newBitboard = pos.pieceBitboards_[ColoredPiece::BLACK_KING];
-          break;
-        case NF_WHITE_HANGING_PIECES:
-          newBitboard = threats.badForCp(ColoredPiece::WHITE_PAWN) & pos.pieceBitboards_[ColoredPiece::WHITE_PAWN];
-          newBitboard |= threats.badForCp(ColoredPiece::WHITE_KNIGHT) & pos.pieceBitboards_[ColoredPiece::WHITE_KNIGHT];
-          newBitboard |= threats.badForCp(ColoredPiece::WHITE_BISHOP) & pos.pieceBitboards_[ColoredPiece::WHITE_BISHOP];
-          newBitboard |= threats.badForCp(ColoredPiece::WHITE_ROOK) & pos.pieceBitboards_[ColoredPiece::WHITE_ROOK];
-          newBitboard |= threats.badForCp(ColoredPiece::WHITE_QUEEN) & pos.pieceBitboards_[ColoredPiece::WHITE_QUEEN];
-          newBitboard |= threats.badForCp(ColoredPiece::WHITE_KING) & pos.pieceBitboards_[ColoredPiece::WHITE_KING];
-        case NF_BLACK_HANGING_PIECES:
-          newBitboard |= threats.badForCp(ColoredPiece::BLACK_PAWN) & pos.pieceBitboards_[ColoredPiece::BLACK_PAWN];
-          newBitboard |= threats.badForCp(ColoredPiece::BLACK_KNIGHT) & pos.pieceBitboards_[ColoredPiece::BLACK_KNIGHT];
-          newBitboard |= threats.badForCp(ColoredPiece::BLACK_BISHOP) & pos.pieceBitboards_[ColoredPiece::BLACK_BISHOP];
-          newBitboard |= threats.badForCp(ColoredPiece::BLACK_ROOK) & pos.pieceBitboards_[ColoredPiece::BLACK_ROOK];
-          newBitboard |= threats.badForCp(ColoredPiece::BLACK_QUEEN) & pos.pieceBitboards_[ColoredPiece::BLACK_QUEEN];
-          newBitboard |= threats.badForCp(ColoredPiece::BLACK_KING) & pos.pieceBitboards_[ColoredPiece::BLACK_KING];
-          break;
-        default:
-          std::cerr << "Invalid NnueFeatureBitmapType: " << i << std::endl;
-      }
+      const Bitboard newBitboard = nnue_feature_to_bitboard(i, pos, threats);
       Bitboard diff = oldBitboard & ~newBitboard;
       while (diff) {
         const SafeSquare sq = pop_lsb_i_promise_board_is_not_empty(diff);
