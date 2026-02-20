@@ -11,6 +11,7 @@
 #include <memory>
 
 #include "Geometry.h"
+#include "Threats.h"
 #include "Utils.h"
 #include "Move.h"
 #include "../StringUtils.h"
@@ -24,8 +25,8 @@ struct EvaluatorInterface {
   virtual ~EvaluatorInterface() = default;
 
   // Evaluation methods
-  virtual ColoredEvaluation<Color::WHITE> evaluate_white(const Position& pos) = 0;
-  virtual ColoredEvaluation<Color::BLACK> evaluate_black(const Position& pos) = 0;
+  virtual ColoredEvaluation<Color::WHITE> evaluate_white(const Position& pos, const Threats& threats) = 0;
+  virtual ColoredEvaluation<Color::BLACK> evaluate_black(const Position& pos, const Threats& threats) = 0;
   virtual std::shared_ptr<EvaluatorInterface> clone() const = 0;
   virtual size_t num_features() const { return 0; }
   virtual std::string to_string() const = 0;
@@ -43,10 +44,10 @@ struct EvaluatorInterface {
 
 struct DummyEvaluator : public EvaluatorInterface {
 
-  virtual ColoredEvaluation<Color::WHITE> evaluate_white(const Position& pos) override {
+  virtual ColoredEvaluation<Color::WHITE> evaluate_white(const Position& pos, const Threats& threats) override {
     return ColoredEvaluation<Color::WHITE>(0);
   }
-  virtual ColoredEvaluation<Color::BLACK> evaluate_black(const Position& pos) override {
+  virtual ColoredEvaluation<Color::BLACK> evaluate_black(const Position& pos, const Threats& threats) override {
     return ColoredEvaluation<Color::BLACK>(0);
   }
   virtual std::shared_ptr<EvaluatorInterface> clone() const override {

@@ -114,7 +114,9 @@ struct EvalTask : public Task {
       ez_make_move(&pos, move);
     }
     if (!printAllChildren) {
-      ColoredEvaluation<WHITE> eval = evaluate<WHITE>(pos.evaluator_, pos);
+      Threats threats;
+      create_threats(pos.pieceBitboards_, pos.colorBitboards_, &threats);
+      ColoredEvaluation<WHITE> eval = evaluate<WHITE>(pos.evaluator_, pos, threats);
       std::cout << eval.value << " (white) (" << pos.evaluator_->to_string() << ")" << std::endl;
       return;
     }
@@ -127,10 +129,12 @@ struct EvalTask : public Task {
     }
     for (ExtMove* move = moves; move != end; ++move) {
       ez_make_move(&pos, move->move);
+      Threats threats;
+      create_threats(pos.pieceBitboards_, pos.colorBitboards_, &threats);
       if (pos.turn_ == Color::BLACK) {
-        move->score = -evaluate<BLACK>(pos.evaluator_, pos).value;
+        move->score = -evaluate<BLACK>(pos.evaluator_, pos, threats).value;
       } else {
-        move->score = evaluate<WHITE>(pos.evaluator_, pos).value;
+        move->score = evaluate<WHITE>(pos.evaluator_, pos, threats).value;
       }
       ez_undo(&pos);
     }

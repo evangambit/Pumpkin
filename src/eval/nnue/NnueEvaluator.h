@@ -120,14 +120,14 @@ struct NnueEvaluator : public EvaluatorInterface {
 
   // EvaluatorInterface
 
-  ColoredEvaluation<Color::WHITE> evaluate_white(const Position& pos) override {
+  ColoredEvaluation<Color::WHITE> evaluate_white(const Position& pos, const Threats& threats) override {
     assert(pos.turn_ == Color::WHITE);
-    Evaluation eval = _evaluate(pos);
+    Evaluation eval = _evaluate(pos, threats);
     return ColoredEvaluation<Color::WHITE>(eval);
   }
-  ColoredEvaluation<Color::BLACK> evaluate_black(const Position& pos) override {
+  ColoredEvaluation<Color::BLACK> evaluate_black(const Position& pos, const Threats& threats) override {
     assert(pos.turn_ == Color::BLACK);
-    Evaluation eval = _evaluate(pos);
+    Evaluation eval = _evaluate(pos, threats);
     return ColoredEvaluation<Color::BLACK>(eval);
   }
 
@@ -156,14 +156,10 @@ struct NnueEvaluator : public EvaluatorInterface {
     }
   }
 
-  Evaluation _evaluate(const Position& pos) {
+  Evaluation _evaluate(const Position& pos, const Threats& threats) {
     if (_is_material_draw(pos)) {
       return Evaluation(0);
     }
-
-    // TODO: pass this into _evaluate.
-    Threats threats;
-    create_threats(pos.pieceBitboards_, pos.colorBitboards_, &threats);
 
     for (NnueFeatureBitmapType i = static_cast<NnueFeatureBitmapType>(0); i < NF_COUNT; i = static_cast<NnueFeatureBitmapType>(i + 1)) {
       const Bitboard oldBitboard = lastPieceBitboards[i];

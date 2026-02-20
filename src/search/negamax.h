@@ -137,11 +137,11 @@ struct NegamaxResult {
 };
 
 template<Color TURN>
-ColoredEvaluation<TURN> evaluate(std::shared_ptr<EvaluatorInterface> evaluator, const Position& pos) {
+ColoredEvaluation<TURN> evaluate(std::shared_ptr<EvaluatorInterface> evaluator, const Position& pos, const Threats& threats) {
   if constexpr (TURN == Color::WHITE) {
-    return ColoredEvaluation<TURN>(evaluator->evaluate_white(pos));
+    return ColoredEvaluation<TURN>(evaluator->evaluate_white(pos, threats));
   } else {
-    return ColoredEvaluation<TURN>(evaluator->evaluate_black(pos));
+    return ColoredEvaluation<TURN>(evaluator->evaluate_black(pos, threats));
   }
 }
 
@@ -202,7 +202,9 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
     if (IS_PRINT_QNODE) {
       std::cout << repeat("  ", plyFromRoot) << "Max quiescence depth reached, returning static evaluation." << std::endl;
     }
-    return NegamaxResult<TURN>(kNullMove, evaluate<TURN>(thread->position_.evaluator_, thread->position_));
+    Threats threats;
+    create_threats(thread->position_.pieceBitboards_, thread->position_.colorBitboards_, &threats);
+    return NegamaxResult<TURN>(kNullMove, evaluate<TURN>(thread->position_.evaluator_, thread->position_, threats).clamp_(alpha, beta));
   }
 
   // Transposition Table probe
@@ -258,7 +260,9 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
     std::cout << repeat("  ", plyFromRoot) << "Comparing static evaluation to alpha/beta" << std::endl;
   }
 
-  NegamaxResult<TURN> bestResult(kNullMove, evaluate<TURN>(thread->position_.evaluator_, thread->position_).clamp_(alpha, beta));
+  Threats threats;
+  create_threats(thread->position_.pieceBitboards_, thread->position_.colorBitboards_, &threats);
+  NegamaxResult<TURN> bestResult(kNullMove, evaluate<TURN>(thread->position_.evaluator_, thread->position_, threats).clamp_(alpha, beta));
   if (IS_PRINT_QNODE) {
     std::cout << repeat("  ", plyFromRoot) << "Static evaluation: " << bestResult.evaluation.value << " (hash = " << frame->hash << ")" << std::endl;
   }
@@ -275,8 +279,6 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
   assert(!thread->position_.history_.empty() && "qsearch requires history to have at least one move");
   const Move lastMove = thread->position_.history_.back().move;
   assert(lastMove.from < 64 && lastMove.to < 64);
-  Threats threats;
-  create_threats(thread->position_.pieceBitboards_, thread->position_.colorBitboards_, &threats);
   for (ExtMove* move = moves; move < end; ++move) {
     if (move->move == entry.bestMove) {
       move->score = kMaxEval;
