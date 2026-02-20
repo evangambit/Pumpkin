@@ -27,7 +27,7 @@
 With time control (40 moves / 60 seconds):
 
     ~/bin/cutechess-cli \
-    -engine cmd=uci name=NewNNUE arg="evaluator nnue" \
+    -engine cmd=uci name=NewNNUE arg="evaluator nnue hanging-1d.bin" \
     -engine cmd=old name=OldNNUE arg="evaluator nnue" \
     -each tc=40/60 proto=uci \
     -rounds 10 \

@@ -215,7 +215,6 @@ struct NnueEvaluator : public EvaluatorInterface {
     if (std::is_same<T, int16_t>::value) {
       score = eval[0];
     } else {
-      std::cout << "Raw eval: " << eval[0] << " " << pos.history_ << std::endl;
       const int64_t v = std::round(eval[0] * (1 << SCALE_SHIFT));
       const int64_t maxVal = (1 << 15) - 1;
       const int64_t minVal = -(1 << 15);
@@ -224,7 +223,6 @@ struct NnueEvaluator : public EvaluatorInterface {
 
     #ifndef NDEBUG
       Evaluation score2 = this->from_scratch(pos);
-      std::cout << "Raw eva2: " << eval[0] << " " << pos.history_ << std::endl;
       bool mismatch;
       if (std::is_same<T, int16_t>::value) {
         mismatch = score != score2;
