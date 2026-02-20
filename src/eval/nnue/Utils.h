@@ -108,9 +108,9 @@ int16_t flip_feature_index(int16_t index);
 
 // Shift used for int16_t fixed-point scaling.
 constexpr int SCALE_SHIFT = 8;
-constexpr int EMBEDDING_DIM = 1;
-constexpr int HIDDEN1_DIM = 1;
-// constexpr int OUTPUT_DIM = 1;
+constexpr int EMBEDDING_DIM = 512;
+constexpr int HIDDEN1_DIM = 8;
+constexpr int OUTPUT_DIM = 1;
 
 // 32 pieces, 4 castling rights, and 32 hanging pieces.
 constexpr int MAX_NUM_ONES_IN_INPUT = 32 + 4 + 32;

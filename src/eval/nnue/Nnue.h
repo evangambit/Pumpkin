@@ -77,12 +77,6 @@ struct Matrix {
         }
       }
     }
-
-    for (size_t i = 0; i < std::min<int64_t>(64, WIDTH * HEIGHT); ++i) {
-      std::cout << data[i] << " ";
-    }
-    std::cout << std::endl;
-
     delete[] buffer;
   }
 
@@ -249,9 +243,9 @@ struct Vector {
     return *this;
   }
 
-  void clip_(int16_t minVal, int16_t maxVal) {
+  void clip_(T minVal, T maxVal) {
     for (size_t i = 0; i < DIM; ++i) {
-      data[i] = std::max(minVal, std::min(data[i], maxVal));
+      data[i] = std::max<T>(minVal, std::min<T>(data[i], maxVal));
     }
   }
 
@@ -389,9 +383,9 @@ struct Nnue {
   Vector<HIDDEN1_DIM, T> bias1;
   Vector<HIDDEN1_DIM, T> hidden1;
 
-  // Matrix<OUTPUT_DIM, HIDDEN1_DIM, T> layer2;
-  // Vector<OUTPUT_DIM, T> bias2;
-  // Vector<OUTPUT_DIM, T> output;
+  Matrix<OUTPUT_DIM, HIDDEN1_DIM, T> layer2;
+  Vector<OUTPUT_DIM, T> bias2;
+  Vector<OUTPUT_DIM, T> output;
 
   Nnue() {
     std::fill_n(x, NNUE_INPUT_DIM, false);
@@ -399,9 +393,9 @@ struct Nnue {
     blackAcc.setZero();
     layer1.setZero();
     bias1.setZero();
-    // layer2.setZero();
-    // bias2.setZero();
-    // output.setZero();
+    layer2.setZero();
+    bias2.setZero();
+    output.setZero();
     this->clear_accumulator();
   }
 
@@ -431,8 +425,8 @@ struct Nnue {
     }
     layer1.randn_();
     bias1.randn_();
-    // layer2.randn_();
-    // bias2.randn_();
+    layer2.randn_();
+    bias2.randn_();
   }
 
   void compute_acc_from_scratch(const ChessEngine::Position& pos) {
@@ -456,8 +450,8 @@ struct Nnue {
     }
     layer1.load_from_stream(in);
     bias1.load_from_stream(in);
-    // layer2.load_from_stream(in);
-    // bias2.load_from_stream(in);
+    layer2.load_from_stream(in);
+    bias2.load_from_stream(in);
 
     // Verify that the entire file has been read
     char dummy;
@@ -473,8 +467,8 @@ struct Nnue {
     }
     layer1.randn_();
     bias1.randn_();
-    // layer2.randn_();
-    // bias2.randn_();
+    layer2.randn_();
+    bias2.randn_();
   }
 
   T *forward(ChessEngine::Color sideToMove) {
@@ -482,12 +476,11 @@ struct Nnue {
     const Vector<EMBEDDING_DIM, T>& opponent = sideToMove == ChessEngine::Color::WHITE ? blackAcc : whiteAcc;
     concat_and_matmul<HIDDEN1_DIM, EMBEDDING_DIM * 2, EMBEDDING_DIM, EMBEDDING_DIM>(layer1, mover, opponent, &hidden1);
     hidden1 += bias1;
-    // hidden1.clip_(0, 1 << SCALE_SHIFT);
+    hidden1.clip_(0, 1 << SCALE_SHIFT);
 
-    // matmul(layer2, hidden1, &output);
-    // output += bias2;
-    // return output.data_ptr();
-    return hidden1.data_ptr();
+    matmul(layer2, hidden1, &output);
+    output += bias2;
+    return output.data_ptr();
   }
 
   std::shared_ptr<Nnue> clone() const {
@@ -497,8 +490,8 @@ struct Nnue {
     }
     copy->layer1 = this->layer1;
     copy->bias1 = this->bias1;
-    // copy->layer2 = this->layer2;
-    // copy->bias2 = this->bias2;
+    copy->layer2 = this->layer2;
+    copy->bias2 = this->bias2;
     return copy;
   }
 };
