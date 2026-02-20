@@ -70,6 +70,21 @@ TEST_F(PawnAnalysisTests, DoubledPawns) {
   }
 }
 
+TEST_F(PawnAnalysisTests, FilesWithoutPawns) {
+  {
+    Position pos = Position::init();
+    PawnAnalysis<Color::WHITE> analysis(pos);
+    EXPECT_EQ(analysis.filesWithoutOurPawns, kEmptyBitboard);
+    EXPECT_EQ(analysis.filesWithoutTheirPawns, kEmptyBitboard);
+  }
+  {
+    Position pos("8/8/8/2p1p3/8/8/8/8 w - - 0 1");
+    PawnAnalysis<Color::WHITE> analysis(pos);
+    EXPECT_BB_EQ(analysis.filesWithoutOurPawns, kUniverse);
+    EXPECT_BB_EQ(analysis.filesWithoutTheirPawns, kFiles[0] | kFiles[1] | kFiles[3] | kFiles[5] | kFiles[6] | kFiles[7]);
+  }
+}
+
 TEST_F(PawnAnalysisTests, Outposts) {
   {
     Position pos = Position::init();
