@@ -489,7 +489,7 @@ struct QstEvaluator : public EvaluatorInterface {
   OrientedBitboard features[Q_NUM_FEATURES];
 
   template<Color US>
-  ColoredEvaluation<US> evaluate(const Position& pos) {
+  ColoredEvaluation<US> evaluate(const Position& pos, const Threats& threats) {
     constexpr Color THEM = opposite_color<US>();
     constexpr Direction kForward = US == Color::WHITE ? Direction::NORTH : Direction::SOUTH;
     constexpr Direction kBackward = US == Color::WHITE ? Direction::SOUTH : Direction::NORTH;
@@ -561,8 +561,6 @@ struct QstEvaluator : public EvaluatorInterface {
     doubledPawns.contribute(features[Q_DOUBLED_PAWNS_US], &early, &late);
     doubledPawns.contribute<-1>(flip_vertically(features[Q_DOUBLED_PAWNS_THEM]), &early, &late);
 
-    Threats threats;
-    create_threats(pos.pieceBitboards_, pos.colorBitboards_, &threats);
     features[Q_BAD_FOR_PAWN_US] = orient<US>(threats.badForOur<US>(Piece::PAWN));
     features[Q_BAD_FOR_PAWN_THEM] = orient<US>(threats.badForOur<THEM>(Piece::PAWN));
     features[Q_BAD_FOR_KNIGHT_US] = orient<US>(threats.badForOur<US>(Piece::KNIGHT));
@@ -667,12 +665,12 @@ struct QstEvaluator : public EvaluatorInterface {
     return ColoredEvaluation<US>(eval / 18);
   }
 
-  ColoredEvaluation<Color::WHITE> evaluate_white(const Position& pos) override {
-    return evaluate<Color::WHITE>(pos);
+  ColoredEvaluation<Color::WHITE> evaluate_white(const Position& pos, const Threats& threats) override {
+    return evaluate<Color::WHITE>(pos, threats);
   }
 
-  ColoredEvaluation<Color::BLACK> evaluate_black(const Position& pos) override {
-    return evaluate<Color::BLACK>(pos);
+  ColoredEvaluation<Color::BLACK> evaluate_black(const Position& pos, const Threats& threats) override {
+    return evaluate<Color::BLACK>(pos, threats);
   }
 
   std::shared_ptr<EvaluatorInterface> clone() const override {
