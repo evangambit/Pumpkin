@@ -52,14 +52,19 @@ class Emb(nn.Module):
     # Flip the pieces (White <-> Black) and the ranks.
     return x.flip(1).roll(Emb.k // 2, dims=0)
 
-  def weight(self):
-    tiles = self.tiles + self.pieces + self.ranks + self.files
-    return torch.cat([tiles.reshape(Emb.k * 8 * 8, -1), self.zeros], dim=0)
+
+  def weight(self, merged_tiles):
+    return torch.cat([merged_tiles.reshape(Emb.k * 8 * 8, -1), self.zeros], dim=0)
+
+  def flipped_weight(self, merged_tiles):
+    flipped_tiles = self.flip_vertical(merged_tiles)
+    return torch.cat([flipped_tiles.reshape(Emb.k * 8 * 8, -1), self.zeros], dim=0)
   
   def forward(self, values, lengths):
-    w = self.weight()
-    flipped = self.flip_vertical(w)
+    merged_tiles = self.tiles + self.pieces + self.ranks + self.files
+    w = self.weight(merged_tiles)
+    flipped = self.flipped_weight(merged_tiles)
     a = self.bagger(w[values.to(torch.int64)], lengths.to(torch.int64))
     b = self.bagger(flipped[values.to(torch.int64)], lengths.to(torch.int64))
     return a, b
-Emb.k = 14
+Emb.k = 24

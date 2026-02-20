@@ -378,8 +378,8 @@ TEST_F(NNUETest, NnueClone) {
 TEST_F(NNUETest, SpecialFeaturesEnumValues) {
   EXPECT_EQ(SpecialFeatures::WHITE_KINGSIDE_CASTLING_RIGHT, 0);
   EXPECT_EQ(SpecialFeatures::WHITE_QUEENSIDE_CASTLING_RIGHT, 1);
-  EXPECT_EQ(SpecialFeatures::BLACK_KINGSIDE_CASTLING_RIGHT, 440);
-  EXPECT_EQ(SpecialFeatures::BLACK_QUEENSIDE_CASTLING_RIGHT, 441);
+  EXPECT_EQ(SpecialFeatures::BLACK_KINGSIDE_CASTLING_RIGHT, 504);
+  EXPECT_EQ(SpecialFeatures::BLACK_QUEENSIDE_CASTLING_RIGHT, 505);
 }
 
 // Test multiple increments and decrements

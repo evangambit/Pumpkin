@@ -9,6 +9,8 @@
 #include "Utils.h"
 
 #include "../../game/Position.h"
+#include "../../game/Threats.h"
+#include "../../game/CreateThreats.h"
 #include "../Evaluator.h"
 
 using namespace ChessEngine;
@@ -19,58 +21,52 @@ inline Bitboard nnue_feature_to_bitboard(NnueFeatureBitmapType feature, const Po
   switch (feature) {
     case NF_WHITE_PAWN:
       return pos.pieceBitboards_[ColoredPiece::WHITE_PAWN];
-      break;
     case NF_WHITE_KNIGHT:
       return pos.pieceBitboards_[ColoredPiece::WHITE_KNIGHT];
-      break;
     case NF_WHITE_BISHOP:
       return pos.pieceBitboards_[ColoredPiece::WHITE_BISHOP];
-      break;
     case NF_WHITE_ROOK:
       return pos.pieceBitboards_[ColoredPiece::WHITE_ROOK];
-      break;
     case NF_WHITE_QUEEN:
       return pos.pieceBitboards_[ColoredPiece::WHITE_QUEEN];
-      break;
     case NF_WHITE_KING:
       return pos.pieceBitboards_[ColoredPiece::WHITE_KING];
-      break;
+    case NF_WHITE_HANGING_PAWNS: 
+      return threats.badForCp(ColoredPiece::WHITE_PAWN) & pos.pieceBitboards_[ColoredPiece::WHITE_PAWN];
+    case NF_WHITE_HANGING_KNIGHTS:
+      return threats.badForCp(ColoredPiece::WHITE_KNIGHT) & pos.pieceBitboards_[ColoredPiece::WHITE_KNIGHT];
+    case NF_WHITE_HANGING_BISHOPS:
+      return threats.badForCp(ColoredPiece::WHITE_BISHOP) & pos.pieceBitboards_[ColoredPiece::WHITE_BISHOP];
+    case NF_WHITE_HANGING_ROOKS:
+      return threats.badForCp(ColoredPiece::WHITE_ROOK) & pos.pieceBitboards_[ColoredPiece::WHITE_ROOK];
+    case NF_WHITE_HANGING_QUEENS:
+      return threats.badForCp(ColoredPiece::WHITE_QUEEN) & pos.pieceBitboards_[ColoredPiece::WHITE_QUEEN];
+    case NF_WHITE_HANGING_KINGS:
+      return threats.badForCp(ColoredPiece::WHITE_KING) & pos.pieceBitboards_[ColoredPiece::WHITE_KING];
     case NF_BLACK_PAWN:
       return pos.pieceBitboards_[ColoredPiece::BLACK_PAWN];
-      break;
     case NF_BLACK_KNIGHT:
       return pos.pieceBitboards_[ColoredPiece::BLACK_KNIGHT];
-      break;
     case NF_BLACK_BISHOP:
       return pos.pieceBitboards_[ColoredPiece::BLACK_BISHOP];
-      break;
     case NF_BLACK_ROOK:
       return pos.pieceBitboards_[ColoredPiece::BLACK_ROOK];
-      break;
     case NF_BLACK_QUEEN:
       return pos.pieceBitboards_[ColoredPiece::BLACK_QUEEN];
-      break;
     case NF_BLACK_KING:
       return pos.pieceBitboards_[ColoredPiece::BLACK_KING];
-      break;
-    case NF_WHITE_HANGING_PIECES: {
-      Bitboard newBitboard = threats.badForCp(ColoredPiece::WHITE_PAWN) & pos.pieceBitboards_[ColoredPiece::WHITE_PAWN];
-      newBitboard |= threats.badForCp(ColoredPiece::WHITE_KNIGHT) & pos.pieceBitboards_[ColoredPiece::WHITE_KNIGHT];
-      newBitboard |= threats.badForCp(ColoredPiece::WHITE_BISHOP) & pos.pieceBitboards_[ColoredPiece::WHITE_BISHOP];
-      newBitboard |= threats.badForCp(ColoredPiece::WHITE_ROOK) & pos.pieceBitboards_[ColoredPiece::WHITE_ROOK];
-      newBitboard |= threats.badForCp(ColoredPiece::WHITE_QUEEN) & pos.pieceBitboards_[ColoredPiece::WHITE_QUEEN];
-      newBitboard |= threats.badForCp(ColoredPiece::WHITE_KING) & pos.pieceBitboards_[ColoredPiece::WHITE_KING];
-      return newBitboard;
-    }
-    case NF_BLACK_HANGING_PIECES: {
-      Bitboard newBitboard = threats.badForCp(ColoredPiece::BLACK_PAWN) & pos.pieceBitboards_[ColoredPiece::BLACK_PAWN];
-      newBitboard |= threats.badForCp(ColoredPiece::BLACK_KNIGHT) & pos.pieceBitboards_[ColoredPiece::BLACK_KNIGHT];
-      newBitboard |= threats.badForCp(ColoredPiece::BLACK_BISHOP) & pos.pieceBitboards_[ColoredPiece::BLACK_BISHOP];
-      newBitboard |= threats.badForCp(ColoredPiece::BLACK_ROOK) & pos.pieceBitboards_[ColoredPiece::BLACK_ROOK];
-      newBitboard |= threats.badForCp(ColoredPiece::BLACK_QUEEN) & pos.pieceBitboards_[ColoredPiece::BLACK_QUEEN];
-      newBitboard |= threats.badForCp(ColoredPiece::BLACK_KING) & pos.pieceBitboards_[ColoredPiece::BLACK_KING];
-      return newBitboard;
-    }
+    case NF_BLACK_HANGING_PAWNS:
+      return threats.badForCp(ColoredPiece::BLACK_PAWN) & pos.pieceBitboards_[ColoredPiece::BLACK_PAWN];
+    case NF_BLACK_HANGING_KNIGHTS:
+      return threats.badForCp(ColoredPiece::BLACK_KNIGHT) & pos.pieceBitboards_[ColoredPiece::BLACK_KNIGHT];
+    case NF_BLACK_HANGING_BISHOPS:
+      return threats.badForCp(ColoredPiece::BLACK_BISHOP) & pos.pieceBitboards_[ColoredPiece::BLACK_BISHOP];
+    case NF_BLACK_HANGING_ROOKS:
+      return threats.badForCp(ColoredPiece::BLACK_ROOK) & pos.pieceBitboards_[ColoredPiece::BLACK_ROOK];
+    case NF_BLACK_HANGING_QUEENS:
+      return threats.badForCp(ColoredPiece::BLACK_QUEEN) & pos.pieceBitboards_[ColoredPiece::BLACK_QUEEN];
+    case NF_BLACK_HANGING_KINGS:
+      return threats.badForCp(ColoredPiece::BLACK_KING) & pos.pieceBitboards_[ColoredPiece::BLACK_KING];
     default:
       std::cerr << "Invalid NnueFeatureBitmapType: " << feature << std::endl;
   }
@@ -97,18 +93,13 @@ std::string diff_bstr(Bitboard oldb, Bitboard newb) {
   return result;
 }
 
-struct WDL {
-  double win;
-  double draw;
-  double loss;
-};
-
+template<typename T>
 struct NnueEvaluator : public EvaluatorInterface {
-  std::shared_ptr<Nnue> nnue_model;
+  std::shared_ptr<Nnue<T>> nnue_model;
 
   Bitboard lastPieceBitboards[NF_COUNT];
 
-  NnueEvaluator(std::shared_ptr<Nnue> model) : nnue_model(model) {
+  NnueEvaluator(std::shared_ptr<Nnue<T>> model) : nnue_model(model) {
     this->empty();
   }
 
@@ -140,16 +131,34 @@ struct NnueEvaluator : public EvaluatorInterface {
     return ColoredEvaluation<Color::BLACK>(eval);
   }
 
-  Evaluation _evaluate(const Position& pos) {
+  bool _is_material_draw(const Position& pos) const {
     if ((pos.pieceBitboards_[ColoredPiece::WHITE_PAWN] | pos.pieceBitboards_[ColoredPiece::BLACK_PAWN]) == kEmptyBitboard) {
       int whiteMinor = std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_KNIGHT] | pos.pieceBitboards_[ColoredPiece::WHITE_BISHOP]);
       int blackMinor = std::popcount(pos.pieceBitboards_[ColoredPiece::BLACK_KNIGHT] | pos.pieceBitboards_[ColoredPiece::BLACK_BISHOP]);
       int whiteMajor = std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_ROOK] | pos.pieceBitboards_[ColoredPiece::WHITE_QUEEN]);
       int blackMajor = std::popcount(pos.pieceBitboards_[ColoredPiece::BLACK_ROOK] | pos.pieceBitboards_[ColoredPiece::BLACK_QUEEN]);
-      if (whiteMajor + blackMajor == 0 && whiteMinor <= 1 && blackMinor <= 1) {
-        // No pawns, no major pieces, and <= 1 minor. Almost certainly a draw.
-        return Evaluation(0);
-      }
+      return whiteMajor + blackMajor == 0 && whiteMinor <= 1 && blackMinor <= 1;
+    }
+    return false;
+  }
+
+  // Very slow, but useful for testing (to ensure that incremental updates are correct).
+  Evaluation from_scratch(const Position& pos) const {
+    nnue_model->compute_acc_from_scratch(pos);
+    T score = nnue_model->forward(pos.turn_)[0];
+    if (std::is_same<T, int16_t>::value) {
+      return Evaluation(score);
+    } else {
+      const int64_t v = std::round(score * (1 << SCALE_SHIFT));
+      const int64_t maxVal = (1 << 15) - 1;
+      const int64_t minVal = -(1 << 15);
+      return Evaluation(static_cast<int16_t>(std::max(minVal, std::min(maxVal, v))));
+    }
+  }
+
+  Evaluation _evaluate(const Position& pos) {
+    if (_is_material_draw(pos)) {
+      return Evaluation(0);
     }
 
     // TODO: pass this into _evaluate.
@@ -201,17 +210,32 @@ struct NnueEvaluator : public EvaluatorInterface {
       }
     }
 
-    int16_t *eval = nnue_model->forward(pos.turn_);
-    int16_t score = eval[0];
+    T *eval = nnue_model->forward(pos.turn_);
+    int16_t score;
+    if (std::is_same<T, int16_t>::value) {
+      score = eval[0];
+    } else {
+      std::cout << "Raw eval: " << eval[0] << " " << pos.history_ << std::endl;
+      const int64_t v = std::round(eval[0] * (1 << SCALE_SHIFT));
+      const int64_t maxVal = (1 << 15) - 1;
+      const int64_t minVal = -(1 << 15);
+      score = static_cast<int16_t>(std::max(minVal, std::min(maxVal, v)));
+    }
 
     #ifndef NDEBUG
-      Vector<512> accCopy = nnue_model->whiteAcc;
-      nnue_model->compute_acc_from_scratch(pos);
-      int16_t score2 = nnue_model->forward(pos.turn_)[0];
-      if (score != score2) {
-        std::cerr << "NNUE evaluation mismatch: " << score << " vs " << score2 << std::endl;
-        accCopy.print_diff(nnue_model->whiteAcc);
-        throw std::runtime_error("NNUE evaluation mismatch");
+      Evaluation score2 = this->from_scratch(pos);
+      std::cout << "Raw eva2: " << eval[0] << " " << pos.history_ << std::endl;
+      bool mismatch;
+      if (std::is_same<T, int16_t>::value) {
+        mismatch = score != score2;
+      } else {
+        // Allow a small tolerance for floating point differences.
+        mismatch = std::abs(score - score2) > 1;
+      }
+      if (mismatch) {
+        std::cerr << "Score mismatch! Incremental: " << score << ", from scratch: " << score2 << std::endl;
+        std::cerr << "Position: " << pos.fen() << std::endl;
+        exit(1);
       }
     #endif
 
@@ -222,7 +246,11 @@ struct NnueEvaluator : public EvaluatorInterface {
     return std::make_shared<NnueEvaluator>(this->nnue_model->clone());
   }
   std::string to_string() const override {
-    return "NnueEvaluator";
+    if (std::is_same<T, int16_t>::value) {
+      return "NNUE Evaluator (int16_t)";
+    } else {
+      return "NNUE Evaluator (float)";
+    }
   }
 };
 

@@ -18,7 +18,7 @@
 namespace ChessEngine {
 
 class SelfPlayTask : public Task {
-  uint64_t nodeLimit_ = 10'000'000;
+  uint64_t nodeLimit_ = 1'000'000;
  public:
   SelfPlayTask(std::deque<std::string> command) : isRunning(false), thread(nullptr) {
     if (command.size() > 1) {

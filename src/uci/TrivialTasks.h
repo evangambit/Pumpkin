@@ -237,7 +237,7 @@ class SetEvaluatorTask : public Task {
       state->position.set_listener(std::make_shared<PieceSquareEvaluator>());
       std::cout << "Evaluator set to pst." << std::endl;
     } else if (evaluatorName == "nnue") {
-      std::shared_ptr<NNUE::Nnue> nnue_model = std::make_shared<NNUE::Nnue>();
+      std::shared_ptr<NNUE::Nnue<int16_t>> nnue_model = std::make_shared<NNUE::Nnue<int16_t>>();
       if (command.size() > 0) {
         std::string modelFile = command.at(0);
         command.pop_front();
@@ -252,7 +252,25 @@ class SetEvaluatorTask : public Task {
         std::istringstream f(std::string(model_bin, model_bin_len));
         nnue_model->load(f);
       }
-      state->position.set_listener(std::make_shared<NNUE::NnueEvaluator>(nnue_model));
+      state->position.set_listener(std::make_shared<NNUE::NnueEvaluator<int16_t>>(nnue_model));
+      std::cout << "Evaluator set to nnue." << std::endl;
+    } else if (evaluatorName == "nnuef") {
+      std::shared_ptr<NNUE::Nnue<float>> nnue_model = std::make_shared<NNUE::Nnue<float>>();
+      if (command.size() > 0) {
+        std::string modelFile = command.at(0);
+        command.pop_front();
+        std::ifstream f(modelFile, std::ios::binary);
+        if (!f) {
+          std::cout << "Error: could not open model file \"" << modelFile << "\"" << std::endl;
+          return;
+        }
+        nnue_model->load(f);
+        std::cout << "Model loaded successfully." << std::endl;
+      } else {
+        std::istringstream f(std::string(model_bin, model_bin_len));
+        nnue_model->load(f);
+      }
+      state->position.set_listener(std::make_shared<NNUE::NnueEvaluator<float>>(nnue_model));
       std::cout << "Evaluator set to nnue." << std::endl;
     } else if (evaluatorName == "qst") {
       auto qst = std::make_shared<QstEvaluator>();

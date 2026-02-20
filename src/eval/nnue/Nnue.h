@@ -13,13 +13,14 @@
 
 namespace NNUE {
 
-template <size_t HEIGHT, size_t WIDTH>
+template <size_t HEIGHT, size_t WIDTH, typename T>
 struct Matrix {
   static_assert(WIDTH > 0 && HEIGHT > 0, "Matrix dimensions must be greater than zero");
-  int16_t *data;
+  static_assert(std::is_same<T, int16_t>::value || std::is_same<T, float>::value, "Matrix type must be int16_t or float");
+  T *data;
 
   Matrix() {
-    data = new int16_t[HEIGHT * WIDTH];
+    data = new T[HEIGHT * WIDTH];
     setZero();
   }
 
@@ -28,13 +29,13 @@ struct Matrix {
   }
 
   Matrix& operator=(const Matrix& other) {
-    std::memcpy(data, other.data, HEIGHT * WIDTH * sizeof(int16_t));
+    std::memcpy(data, other.data, HEIGHT * WIDTH * sizeof(T));
     return *this;
   }
 
   Matrix(const Matrix& other) {
-    data = new int16_t[HEIGHT * WIDTH];
-    std::memcpy(data, other.data, HEIGHT * WIDTH * sizeof(int16_t));
+    data = new T[HEIGHT * WIDTH];
+    std::memcpy(data, other.data, HEIGHT * WIDTH * sizeof(T));
   }
 
   Matrix& operator=(Matrix&& other) noexcept {
@@ -47,7 +48,7 @@ struct Matrix {
   }
 
   void setZero() {
-    std::fill(data, data + HEIGHT * WIDTH, int16_t(0));
+    std::fill(data, data + HEIGHT * WIDTH, T(0));
   }
 
   void load_from_stream(std::istream& in) {
@@ -69,27 +70,20 @@ struct Matrix {
     in.read(reinterpret_cast<char*>(buffer), sizeof(float) * rows * cols);
     for (size_t i = 0; i < HEIGHT; ++i) {
       for (size_t j = 0; j < WIDTH; ++j) {
-        data[i * WIDTH + j] = static_cast<int16_t>(buffer[i * WIDTH + j] * (1 << SCALE_SHIFT));
+        if (std::is_same<T, float>::value) {
+          data[i * WIDTH + j] = buffer[i * WIDTH + j];
+        } else {
+          data[i * WIDTH + j] = static_cast<T>(buffer[i * WIDTH + j] * (1 << SCALE_SHIFT));
+        }
       }
     }
-    delete[] buffer;
-  }
 
-  friend std::ostream& operator<<(std::ostream& os, const Matrix<HEIGHT, WIDTH>& mat) {
-    for (size_t i = 0; i < std::min(HEIGHT, size_t(5)); ++i) {
-      for (size_t j = 0; j < std::min(WIDTH, size_t(5)); ++j) {
-        os << mat.data[i * WIDTH + j] << " ";
-      }
-      if (WIDTH > 5) {
-        os << "...";
-      }
-      os << std::endl;
+    for (size_t i = 0; i < std::min<int64_t>(64, WIDTH * HEIGHT); ++i) {
+      std::cout << data[i] << " ";
     }
-    if (HEIGHT > 5) {
-      os << "...";
-    }
-    std::cout << "( max: " << mat.max() << ", min: " << mat.min() << " )" << std::endl;
-    return os;
+    std::cout << std::endl;
+
+    delete[] buffer;
   }
 
   int16_t max() const {
@@ -115,12 +109,12 @@ struct Matrix {
   void randn_() {
     for (size_t i = 0; i < HEIGHT; ++i) {
       for (size_t j = 0; j < WIDTH; ++j) {
-        data[i * WIDTH + j] = static_cast<int16_t>(randn());
+        data[i * WIDTH + j] = static_cast<T>(randn());
       }
     }
   }
 
-  bool operator==(const Matrix<HEIGHT, WIDTH>& other) const {
+  bool operator==(const Matrix<HEIGHT, WIDTH, T>& other) const {
     for (size_t i = 0; i < HEIGHT * WIDTH; ++i) {
       if (data[i] != other.data[i]) {
         return false;
@@ -139,13 +133,32 @@ struct Matrix {
   }
 };
 
-template<size_t DIM>
+template<size_t HEIGHT, size_t WIDTH, typename T>
+inline std::ostream& operator<<(std::ostream& os, const Matrix<HEIGHT, WIDTH, T>& mat) {
+  for (size_t i = 0; i < std::min(HEIGHT, size_t(5)); ++i) {
+    for (size_t j = 0; j < std::min(WIDTH, size_t(5)); ++j) {
+      os << mat.data[i * WIDTH + j] << " ";
+    }
+    if (WIDTH > 5) {
+      os << "...";
+    }
+    os << std::endl;
+  }
+  if (HEIGHT > 5) {
+    os << "...";
+  }
+  std::cout << "( max: " << mat.max() << ", min: " << mat.min() << " )" << std::endl;
+  return os;
+}
+
+template<size_t DIM, typename T>
 struct Vector {
   static_assert(DIM > 0, "Vector dimension must be greater than zero");
-  int16_t *data;
+  static_assert(std::is_same<T, int16_t>::value || std::is_same<T, float>::value, "Vector type must be int16_t or float");
+  T *data;
 
   Vector() {
-    data = new int16_t[DIM];
+    data = new T[DIM];
     setZero();
   }
 
@@ -154,13 +167,13 @@ struct Vector {
   }
 
   Vector& operator=(const Vector& other) {
-    std::memcpy(data, other.data, DIM * sizeof(int16_t));
+    std::memcpy(data, other.data, DIM * sizeof(T));
     return *this;
   }
 
   Vector(const Vector& other) {
-    data = new int16_t[DIM];
-    std::memcpy(data, other.data, DIM * sizeof(int16_t));
+    data = new T[DIM];
+    std::memcpy(data, other.data, DIM * sizeof(T));
   }
 
   Vector& operator=(Vector&& other) noexcept {
@@ -173,11 +186,11 @@ struct Vector {
   }
 
   void setZero() {
-    std::fill(data, data + DIM, int16_t(0));
+    std::fill(data, data + DIM, T(0));
   }
 
   template<size_t HEIGHT>
-  void load_from_row(const Matrix<HEIGHT, DIM>& mat, size_t rowIndex) {
+  void load_from_row(const Matrix<HEIGHT, DIM, T>& mat, size_t rowIndex) {
     if (rowIndex >= HEIGHT) {
       throw std::runtime_error("Row index out of bounds");
     }
@@ -214,18 +227,22 @@ struct Vector {
     float buffer[DIM];
     in.read(reinterpret_cast<char*>(buffer), sizeof(float) * size);
     for (size_t i = 0; i < DIM; ++i) {
-      data[i] = static_cast<int16_t>(buffer[i] * (1 << SCALE_SHIFT));
+      if (std::is_same<T, float>::value) {
+        data[i] = buffer[i];
+      } else {
+        data[i] = static_cast<T>(buffer[i] * (1 << SCALE_SHIFT));
+      }
     }
   }
 
-  Vector<DIM>& operator+=(const Vector< DIM >& other) {
+  Vector<DIM, T>& operator+=(const Vector< DIM, T >& other) {
     for (size_t i = 0; i < DIM; ++i) {
       data[i] += other.data[i];
     }
     return *this;
   }
 
-  Vector<DIM>& operator-=(const Vector< DIM >& other) {
+  Vector<DIM, T>& operator-=(const Vector<DIM, T>& other) {
     for (size_t i = 0; i < DIM; ++i) {
       data[i] -= other.data[i];
     }
@@ -240,26 +257,15 @@ struct Vector {
 
   void randn_() {
     for (size_t i = 0; i < DIM; ++i) {
-      data[i] = static_cast<int16_t>(randn());
+      data[i] = static_cast<T>(randn());
     }
   }
 
-  int16_t* data_ptr() {
+  T* data_ptr() {
     return &data[0];
   }
 
-  friend std::ostream& operator<<(std::ostream& os, const Vector<DIM>& vec) {
-    for (size_t i = 0; i < std::min(DIM, size_t(10)); ++i) {
-      os << vec.data[i] << " ";
-    }
-    if (DIM > 10) {
-      os << "...";
-    }
-    os << std::endl;
-    return os;
-  }
-
-  bool operator==(const Vector<DIM>& other) const {
+  bool operator==(const Vector<DIM, T>& other) const {
     for (size_t i = 0; i < DIM; ++i) {
       if (data[i] != other.data[i]) {
         return false;
@@ -286,15 +292,15 @@ struct Vector {
     return true;
   }
 
-  Vector<DIM> operator-(const Vector<DIM>& other) const {
-    Vector<DIM> result;
+  Vector<DIM, T> operator-(const Vector<DIM, T>& other) const {
+    Vector<DIM, T> result;
     for (size_t i = 0; i < DIM; ++i) {
       result.data[i] = this->data[i] - other.data[i];
     }
     return result;
   }
 
-  void print_diff(const Vector<DIM>& other) const {
+  void print_diff(const Vector<DIM, T>& other) const {
     for (size_t i = 0; i < DIM; ++i) {
       if (this->data[i] != other.data[i]) {
         std::cout << "Index " << i << ": " << this->data[i] << " vs " << other.data[i] << std::endl;
@@ -303,8 +309,31 @@ struct Vector {
   }
 };
 
+template<size_t DIM, typename T>
+inline std::ostream& operator<<(std::ostream& os, const Vector<DIM, T>& vec) {
+  for (size_t i = 0; i < std::min(DIM, size_t(10)); ++i) {
+    os << vec.data[i] << " ";
+  }
+  if (DIM > 10) {
+    os << "...";
+  }
+  os << std::endl;
+  return os;
+}
+
 template<size_t HEIGHT, size_t WIDTH>
-inline void matmul(Matrix<HEIGHT, WIDTH>& mat, const Vector<WIDTH>& vec, Vector<HEIGHT>* out) {
+inline void matmul(Matrix<HEIGHT, WIDTH, float>& mat, const Vector<WIDTH, float>& vec, Vector<HEIGHT, float>* out) {
+  for (size_t i = 0; i < HEIGHT; ++i) {
+    float sum = 0;
+    for (size_t j = 0; j < WIDTH; ++j) {
+      sum += mat.data[i * WIDTH + j] * vec.data[j];
+    }
+    out->data[i] = sum;
+  }
+}
+
+template<size_t HEIGHT, size_t WIDTH>
+inline void matmul(Matrix<HEIGHT, WIDTH, int16_t>& mat, const Vector<WIDTH, int16_t>& vec, Vector<HEIGHT, int16_t>* out) {
   for (size_t i = 0; i < HEIGHT; ++i) {
     int32_t sum = 0;
     for (size_t j = 0; j < WIDTH; ++j) {
@@ -319,7 +348,7 @@ inline void matmul(Matrix<HEIGHT, WIDTH>& mat, const Vector<WIDTH>& vec, Vector<
  * Performs matmul(mat, concat(vec1, vec2)), where concat(vec1, vec2) is the concatenation of the two vectors.
  */
 template<size_t HEIGHT, size_t COMBINED_WIDTH, size_t WIDTH1, size_t WIDTH2>
-inline void concat_and_matmul(const Matrix<HEIGHT, COMBINED_WIDTH>& mat, const Vector<WIDTH1>& vec1, const Vector<WIDTH2>& vec2, Vector<HEIGHT>* out) {
+inline void concat_and_matmul(const Matrix<HEIGHT, COMBINED_WIDTH, int16_t>& mat, const Vector<WIDTH1, int16_t>& vec1, const Vector<WIDTH2, int16_t>& vec2, Vector<HEIGHT, int16_t>* out) {
   static_assert(WIDTH1 + WIDTH2 == COMBINED_WIDTH, "Matrix width must match the sum of the two vector widths");
   for (size_t i = 0; i < HEIGHT; ++i) {
     int32_t sum = 0;
@@ -334,19 +363,35 @@ inline void concat_and_matmul(const Matrix<HEIGHT, COMBINED_WIDTH>& mat, const V
   }
 }
 
+template<size_t HEIGHT, size_t COMBINED_WIDTH, size_t WIDTH1, size_t WIDTH2>
+inline void concat_and_matmul(const Matrix<HEIGHT, COMBINED_WIDTH, float>& mat, const Vector<WIDTH1, float>& vec1, const Vector<WIDTH2, float>& vec2, Vector<HEIGHT, float>* out) {
+  static_assert(WIDTH1 + WIDTH2 == COMBINED_WIDTH, "Matrix width must match the sum of the two vector widths");
+  for (size_t i = 0; i < HEIGHT; ++i) {
+    float sum = 0;
+    for (size_t j = 0; j < WIDTH1; ++j) {
+      sum += mat.data[i * COMBINED_WIDTH + j] * vec1.data[j];
+    }
+    for (size_t j = 0; j < WIDTH2; ++j) {
+      sum += mat.data[i * COMBINED_WIDTH + WIDTH1 + j] * vec2.data[j];
+    }
+    out->data[i] = sum;
+  }
+}
+
+template<typename T>
 struct Nnue {
   bool x[NNUE_INPUT_DIM];
-  Vector<EMBEDDING_DIM> embWeights[NNUE_INPUT_DIM];
-  Vector<EMBEDDING_DIM> whiteAcc;
-  Vector<EMBEDDING_DIM> blackAcc;
+  Vector<EMBEDDING_DIM, T> embWeights[NNUE_INPUT_DIM];
+  Vector<EMBEDDING_DIM, T> whiteAcc;
+  Vector<EMBEDDING_DIM, T> blackAcc;
 
-  Matrix<HIDDEN1_DIM, EMBEDDING_DIM * 2> layer1;
-  Vector<HIDDEN1_DIM> bias1;
-  Vector<HIDDEN1_DIM> hidden1;
+  Matrix<HIDDEN1_DIM, EMBEDDING_DIM * 2, T> layer1;
+  Vector<HIDDEN1_DIM, T> bias1;
+  Vector<HIDDEN1_DIM, T> hidden1;
 
-  Matrix<OUTPUT_DIM, HIDDEN1_DIM> layer2;
-  Vector<OUTPUT_DIM> bias2;
-  Vector<OUTPUT_DIM> output;
+  // Matrix<OUTPUT_DIM, HIDDEN1_DIM, T> layer2;
+  // Vector<OUTPUT_DIM, T> bias2;
+  // Vector<OUTPUT_DIM, T> output;
 
   Nnue() {
     std::fill_n(x, NNUE_INPUT_DIM, false);
@@ -354,21 +399,21 @@ struct Nnue {
     blackAcc.setZero();
     layer1.setZero();
     bias1.setZero();
-    layer2.setZero();
-    bias2.setZero();
-    output.setZero();
+    // layer2.setZero();
+    // bias2.setZero();
+    // output.setZero();
     this->clear_accumulator();
   }
 
   void increment(size_t index) {
-    assert(!x[index]);
+    ASSERT(!x[index], "Feature index " << index << "(" << nnue_feature_to_string(NnueFeatureBitmapType(index / 64)) << ", " << (index % 64) << ") is already set");
     x[index] = true;
     whiteAcc += embWeights[index];
     blackAcc += embWeights[flip_feature_index(index)];
   }
 
   void decrement(size_t index) {
-    assert(x[index]);
+    ASSERT(x[index], "Feature index " << index << "(" << nnue_feature_to_string(NnueFeatureBitmapType(index / 64)) << ", " << (index % 64) << ") is not set");
     x[index] = false;
     whiteAcc -= embWeights[index];
     blackAcc -= embWeights[flip_feature_index(index)];
@@ -386,8 +431,8 @@ struct Nnue {
     }
     layer1.randn_();
     bias1.randn_();
-    layer2.randn_();
-    bias2.randn_();
+    // layer2.randn_();
+    // bias2.randn_();
   }
 
   void compute_acc_from_scratch(const ChessEngine::Position& pos) {
@@ -404,15 +449,15 @@ struct Nnue {
   }
 
   void load(std::istream& in) {
-    Matrix<NNUE_INPUT_DIM, EMBEDDING_DIM> emb;
+    Matrix<NNUE_INPUT_DIM, EMBEDDING_DIM, T> emb;
     emb.load_from_stream(in);
     for (size_t i = 0; i < NNUE_INPUT_DIM; ++i) {
       embWeights[i].load_from_row(emb, i);
     }
     layer1.load_from_stream(in);
     bias1.load_from_stream(in);
-    layer2.load_from_stream(in);
-    bias2.load_from_stream(in);
+    // layer2.load_from_stream(in);
+    // bias2.load_from_stream(in);
 
     // Verify that the entire file has been read
     char dummy;
@@ -428,20 +473,21 @@ struct Nnue {
     }
     layer1.randn_();
     bias1.randn_();
-    layer2.randn_();
-    bias2.randn_();
+    // layer2.randn_();
+    // bias2.randn_();
   }
 
-  int16_t *forward(ChessEngine::Color sideToMove) {
-    const Vector<EMBEDDING_DIM>& mover = sideToMove == ChessEngine::Color::WHITE ? whiteAcc : blackAcc;
-    const Vector<EMBEDDING_DIM>& opponent = sideToMove == ChessEngine::Color::WHITE ? blackAcc : whiteAcc;
+  T *forward(ChessEngine::Color sideToMove) {
+    const Vector<EMBEDDING_DIM, T>& mover = sideToMove == ChessEngine::Color::WHITE ? whiteAcc : blackAcc;
+    const Vector<EMBEDDING_DIM, T>& opponent = sideToMove == ChessEngine::Color::WHITE ? blackAcc : whiteAcc;
     concat_and_matmul<HIDDEN1_DIM, EMBEDDING_DIM * 2, EMBEDDING_DIM, EMBEDDING_DIM>(layer1, mover, opponent, &hidden1);
     hidden1 += bias1;
-    hidden1.clip_(0, 1 << SCALE_SHIFT);
+    // hidden1.clip_(0, 1 << SCALE_SHIFT);
 
-    matmul(layer2, hidden1, &output);
-    output += bias2;
-    return output.data_ptr();
+    // matmul(layer2, hidden1, &output);
+    // output += bias2;
+    // return output.data_ptr();
+    return hidden1.data_ptr();
   }
 
   std::shared_ptr<Nnue> clone() const {
@@ -451,8 +497,8 @@ struct Nnue {
     }
     copy->layer1 = this->layer1;
     copy->bias1 = this->bias1;
-    copy->layer2 = this->layer2;
-    copy->bias2 = this->bias2;
+    // copy->layer2 = this->layer2;
+    // copy->bias2 = this->bias2;
     return copy;
   }
 };
