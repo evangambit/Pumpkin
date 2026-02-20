@@ -77,10 +77,45 @@ Features pos2features(const struct ChessEngine::Position& pos) {
     }
     features.addFeature(feature_index(cp2nfbt(cp), sq));
     if (threats.badForCp(cp) & bb(sq)) {
-      if (cp2color(cp) == ChessEngine::Color::WHITE) {
-        features.addFeature(feature_index(NF_WHITE_HANGING_PIECES, sq));
-      } else {
-        features.addFeature(feature_index(NF_BLACK_HANGING_PIECES, sq));
+      switch(cp) {
+        case ChessEngine::ColoredPiece::WHITE_PAWN:
+          features.addFeature(feature_index(NF_WHITE_HANGING_PAWNS, sq));
+          break;
+        case ChessEngine::ColoredPiece::WHITE_KNIGHT:
+          features.addFeature(feature_index(NF_WHITE_HANGING_KNIGHTS, sq));
+          break;
+        case ChessEngine::ColoredPiece::WHITE_BISHOP:
+          features.addFeature(feature_index(NF_WHITE_HANGING_BISHOPS, sq));
+          break;
+        case ChessEngine::ColoredPiece::WHITE_ROOK:
+          features.addFeature(feature_index(NF_WHITE_HANGING_ROOKS, sq));
+          break;
+        case ChessEngine::ColoredPiece::WHITE_QUEEN:
+          features.addFeature(feature_index(NF_WHITE_HANGING_QUEENS, sq));
+          break;
+        case ChessEngine::ColoredPiece::WHITE_KING:
+          features.addFeature(feature_index(NF_WHITE_HANGING_KINGS, sq));
+          break;
+        case ChessEngine::ColoredPiece::BLACK_PAWN:
+          features.addFeature(feature_index(NF_BLACK_HANGING_PAWNS, sq));
+          break;
+        case ChessEngine::ColoredPiece::BLACK_KNIGHT:
+          features.addFeature(feature_index(NF_BLACK_HANGING_KNIGHTS, sq));
+          break;
+        case ChessEngine::ColoredPiece::BLACK_BISHOP:
+          features.addFeature(feature_index(NF_BLACK_HANGING_BISHOPS, sq));
+          break;
+        case ChessEngine::ColoredPiece::BLACK_ROOK:
+          features.addFeature(feature_index(NF_BLACK_HANGING_ROOKS, sq));
+          break;
+        case ChessEngine::ColoredPiece::BLACK_QUEEN:
+          features.addFeature(feature_index(NF_BLACK_HANGING_QUEENS, sq));
+          break;
+        case ChessEngine::ColoredPiece::BLACK_KING:
+          features.addFeature(feature_index(NF_BLACK_HANGING_KINGS, sq));
+          break;
+        default:
+          throw std::invalid_argument("Invalid ColoredPiece");
       }
     }
   }
