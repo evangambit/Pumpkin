@@ -11,6 +11,7 @@ namespace ChessEngine {
 template<Color TURN>
 struct ColoredEvaluation {
   int16_t value;
+  ColoredEvaluation() {}
   explicit ColoredEvaluation(int16_t v) : value(v) {}
   ColoredEvaluation<opposite_color<TURN>()> operator-() const {
     return ColoredEvaluation<opposite_color<TURN>()>(-value);
