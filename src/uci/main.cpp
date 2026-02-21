@@ -195,6 +195,8 @@ struct UciEngine {
       state->taskQueue.push_back(std::make_shared<SelfPlayTask>(parts));
     } else if (parts[0] == "eval") {
       state->taskQueue.push_back(std::make_shared<EvalTask>(parts));
+    } else if (parts[0] == "fenerror") {
+      state->taskQueue.push_back(std::make_shared<FenErrorTask>(parts));
     } else {
       state->taskQueue.push_back(std::make_shared<UnrecognizedCommandTask>(parts));
     }

@@ -32,10 +32,6 @@ using WriterI16 = ShardedMatrix::Writer<int16_t>;
 using WriterI8 = ShardedMatrix::Writer<int8_t>;
 using WriterB = ShardedMatrix::Writer<bool>;
 
-float sigmoid(float x) {
-  return 1.0f / (1.0f + std::exp(-x));
-}
-
 void process(
   const std::vector<std::string>& line,
   WriterB& qstInputWriter,
