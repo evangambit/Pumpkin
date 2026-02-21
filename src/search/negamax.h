@@ -57,7 +57,7 @@ struct Killers {
   void add(Move move) {
     if (moves[1] == move) {
       std::swap(moves[0], moves[1]);
-    } else {
+    } else if (moves[0] != move) {
       moves[1] = move;
     }
   }
