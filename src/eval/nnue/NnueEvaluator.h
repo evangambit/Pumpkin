@@ -143,8 +143,8 @@ struct NnueEvaluator : public EvaluatorInterface {
   }
 
   // Very slow, but useful for testing (to ensure that incremental updates are correct).
-  Evaluation from_scratch(const Position& pos) const {
-    nnue_model->compute_acc_from_scratch(pos);
+  Evaluation from_scratch(const Position& pos, const Threats& threats) const {
+    nnue_model->compute_acc_from_scratch(pos, threats);
     T score = nnue_model->forward(pos.turn_)[0];
     if (std::is_same<T, int16_t>::value) {
       return Evaluation(score);
@@ -203,6 +203,28 @@ struct NnueEvaluator : public EvaluatorInterface {
         nnue_model->increment(BLACK_QUEENSIDE_CASTLING_RIGHT);
       } else {
         nnue_model->decrement(BLACK_QUEENSIDE_CASTLING_RIGHT);
+      }
+    }
+
+    for (int file = 0; file < 8; file++) {
+      const bool noWhitePawnsOnFile = (kFiles[file] & pos.pieceBitboards_[ColoredPiece::WHITE_PAWN]) == kEmptyBitboard;
+      if (noWhitePawnsOnFile != nnue_model->x[NO_WHITE_PAWNS_A_FILE + file]) {
+        if (noWhitePawnsOnFile) {
+          nnue_model->increment(static_cast<int16_t>(NO_WHITE_PAWNS_A_FILE + file));
+        } else {
+          nnue_model->decrement(static_cast<int16_t>(NO_WHITE_PAWNS_A_FILE + file));
+        }
+      }
+    }
+
+    for (int file = 0; file < 8; file++) {
+      const bool noBlackPawnsOnFile = (kFiles[file] & pos.pieceBitboards_[ColoredPiece::BLACK_PAWN]) == kEmptyBitboard;
+      if (noBlackPawnsOnFile != nnue_model->x[NO_BLACK_PAWNS_A_FILE + file]) {
+        if (noBlackPawnsOnFile) {
+          nnue_model->increment(static_cast<int16_t>(NO_BLACK_PAWNS_A_FILE + file));
+        } else {
+          nnue_model->decrement(static_cast<int16_t>(NO_BLACK_PAWNS_A_FILE + file));
+        }
       }
     }
 

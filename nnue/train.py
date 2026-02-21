@@ -12,7 +12,7 @@ import datetime
 import torch.utils.data as tdata
 from sharded_matrix import ShardedLoader
 from ShardedMatricesIterableDataset import ShardedMatricesIterableDataset, SingleShardedMatrixIterator, DynamicShardedMatrixIterator
-from features import board2x, x2board, kMaxNumOnesInInput
+from features import board2x, x2board
 from accumulator import Emb
 from nnue_model import NNUE
 
@@ -25,28 +25,6 @@ def save_tensor(tensor: torch.Tensor, name: str, out: io.BufferedWriter):
   out.write(np.array(len(tensor.shape), dtype=np.int32).tobytes())
   out.write(np.array(tensor.shape, dtype=np.int32).tobytes())
   out.write(tensor.tobytes())
-
-def evaluate_data_quality(dataset):
-  import chess
-  from chess import engine as chess_engine
-  engine = chess_engine.SimpleEngine.popen_uci('/opt/homebrew/bin/stockfish')
-  chunk = next(iter(dataset))
-  correct, mse = 0, 0
-  for i in range(100):
-    x, y, piece_counts = chunk
-    x, y, piece_counts = x[i], y[i], piece_counts[i]
-    assert x.shape == (kMaxNumOnesInInput,)
-    assert y.shape == (3,)
-    assert piece_counts.shape == (10,)
-    board = x2board(x, True)
-    lines = engine.analyse(board, chess_engine.Limit(depth=7), multipv=1)
-    wdl = lines[0]['score'].white().wdl()
-    wdl = np.array([wdl.wins, wdl.draws, wdl.losses], dtype=np.int32)
-    if y.argmax() == wdl.argmax():
-      correct += 1
-    mse += (((y.astype(np.float32) / 1000.0) - (wdl.astype(np.float32) / wdl.sum())) ** 2).mean()
-  incorrect = 100 - correct
-  print(f"Data quality: Accuracy: {correct}%, MSE: {mse / 100:.6f}")
 
 # Cosine learning rate scheduler with warmup
 class CosineAnnealingWithWarmup:
@@ -92,7 +70,6 @@ dataset = ShardedMatricesIterableDataset(
   SingleShardedMatrixIterator(f'data/x-eval', chunk_size=CHUNK_SIZE),
   SingleShardedMatrixIterator(f'data/x-piece-counts', chunk_size=CHUNK_SIZE),
 )
-# evaluate_data_quality(dataset)
 
 
 print(f'Dataset loaded with {len(dataset) * CHUNK_SIZE} rows.')
@@ -112,7 +89,7 @@ dataloader = tdata.DataLoader(dataset, batch_size=BATCH_SIZE//CHUNK_SIZE, shuffl
 
 print("Creating model...")
  # [512, 128]
-model = NNUE(input_size=kMaxNumOnesInInput, hidden_sizes=[512, 8], output_size=1).to(device)
+model = NNUE(hidden_sizes=[512, 8], output_size=1).to(device)
 
 print("Creating optimizer...")
 opt = torch.optim.AdamW(model.parameters(), lr=0.0, weight_decay=0.1)

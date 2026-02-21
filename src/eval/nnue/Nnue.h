@@ -429,11 +429,11 @@ struct Nnue {
     bias2.randn_();
   }
 
-  void compute_acc_from_scratch(const ChessEngine::Position& pos) {
+  void compute_acc_from_scratch(const ChessEngine::Position& pos, const ChessEngine::Threats& threats) {
     std::fill_n(x, NNUE_INPUT_DIM, false);
     whiteAcc.setZero();
     blackAcc.setZero();
-    Features features = pos2features(pos);
+    Features features = pos2features(pos, threats);
     for (size_t i = 0; i < features.length; ++i) {
       size_t index = features[i];
       x[index] = true;

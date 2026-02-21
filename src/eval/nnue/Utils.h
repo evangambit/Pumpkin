@@ -63,9 +63,28 @@ static_assert(NF_COUNT / 2 == NF_BLACK_PAWN, "Half of the features must be for b
 // also applies to castling rights.
 enum SpecialFeatures {
   WHITE_KINGSIDE_CASTLING_RIGHT = NF_WHITE_PAWN * 64 + 0,  // "white pawn on a8"
-  WHITE_QUEENSIDE_CASTLING_RIGHT = NF_WHITE_PAWN * 64 + 1,  // "white pawn on b8"
-  BLACK_KINGSIDE_CASTLING_RIGHT = NF_BLACK_PAWN * 64 + 0,  // "black pawn on a1" (vertically flipped vs white's castling right)
-  BLACK_QUEENSIDE_CASTLING_RIGHT = NF_BLACK_PAWN * 64 + 1,  // "black pawn on b1" (vertically flipped vs white's castling right)
+  WHITE_QUEENSIDE_CASTLING_RIGHT = NF_WHITE_PAWN * 64 + 1,
+
+  NO_WHITE_PAWNS_A_FILE = NF_WHITE_PAWN * 64 + 56,
+  NO_WHITE_PAWNS_B_FILE = NF_WHITE_PAWN * 64 + 57,
+  NO_WHITE_PAWNS_C_FILE = NF_WHITE_PAWN * 64 + 58,
+  NO_WHITE_PAWNS_D_FILE = NF_WHITE_PAWN * 64 + 59,
+  NO_WHITE_PAWNS_E_FILE = NF_WHITE_PAWN * 64 + 60,
+  NO_WHITE_PAWNS_F_FILE = NF_WHITE_PAWN * 64 + 61,
+  NO_WHITE_PAWNS_G_FILE = NF_WHITE_PAWN * 64 + 62,
+  NO_WHITE_PAWNS_H_FILE = NF_WHITE_PAWN * 64 + 63,
+
+  BLACK_KINGSIDE_CASTLING_RIGHT = NF_BLACK_PAWN * 64 + 56,  // "black pawn on a1" (vertically flipped vs white's castling right)
+  BLACK_QUEENSIDE_CASTLING_RIGHT = NF_BLACK_PAWN * 64 + 57,
+
+  NO_BLACK_PAWNS_A_FILE = NF_BLACK_PAWN * 64 + 0,  // flipped vertically vs white's no pawns on a file
+  NO_BLACK_PAWNS_B_FILE = NF_BLACK_PAWN * 64 + 1,
+  NO_BLACK_PAWNS_C_FILE = NF_BLACK_PAWN * 64 + 2,
+  NO_BLACK_PAWNS_D_FILE = NF_BLACK_PAWN * 64 + 3,
+  NO_BLACK_PAWNS_E_FILE = NF_BLACK_PAWN * 64 + 4,
+  NO_BLACK_PAWNS_F_FILE = NF_BLACK_PAWN * 64 + 5,
+  NO_BLACK_PAWNS_G_FILE = NF_BLACK_PAWN * 64 + 6,
+  NO_BLACK_PAWNS_H_FILE = NF_BLACK_PAWN * 64 + 7,
 };
 
 inline std::string nnue_feature_to_string(NnueFeatureBitmapType feature) {
@@ -113,6 +132,8 @@ constexpr int HIDDEN1_DIM = 8;
 constexpr int OUTPUT_DIM = 1;
 
 // 32 pieces, 4 castling rights, and 32 hanging pieces.
+// We ignore tha 16 'no pawns on a file' features, since they
+// can only become 1 at the expense of making other features 0.
 constexpr int MAX_NUM_ONES_IN_INPUT = 32 + 4 + 32;
 
 constexpr int16_t NNUE_INPUT_DIM = NF_COUNT * 64;
@@ -139,7 +160,7 @@ struct Features {
   }
 };
 
-Features pos2features(const struct ChessEngine::Position& pos);
+Features pos2features(const struct ChessEngine::Position& pos, const ChessEngine::Threats& threats);
 
 }  // namespace NNUE
 

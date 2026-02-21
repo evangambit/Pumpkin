@@ -4,14 +4,14 @@ import numpy as np
 import chess
 
 from accumulator import Emb
-from features import kMaxNumOnesInInput, board2x, x2board
+from features import board2x, x2board
 
 class CReLU(nn.Module):
   def forward(self, x):
     return x.clip(0, 1)
 
 class NNUE(nn.Module):
-  def __init__(self, input_size, hidden_sizes: list[int], output_size: int):
+  def __init__(self, hidden_sizes: list[int], output_size: int):
     super(NNUE, self).__init__()
     self.emb = Emb(dout=hidden_sizes[0])
     layers = []
