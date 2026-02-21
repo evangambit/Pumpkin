@@ -33,6 +33,20 @@ struct TTEntry {
     }
     return flipped;
   }
+  Evaluation lowerbound() const {
+    if (bound == BoundType::EXACT || bound == BoundType::LOWER) {
+      return value;
+    } else {
+      return kMinEval;
+    }
+  }
+  Evaluation upperbound() const {
+    if (bound == BoundType::EXACT || bound == BoundType::UPPER) {
+      return value;
+    } else {
+      return kMaxEval;
+    }
+  }
 };
 
 class TranspositionTable {

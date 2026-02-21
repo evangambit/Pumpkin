@@ -453,16 +453,20 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
             std::cout << repeat("  ", plyFromRoot) << "Returning (TT Hit: EXACT; eval=" << entry.bestMove << " " << entry.value << ")" << std::endl;
           }
           return NegamaxResult<TURN>(entry.bestMove, ColoredEvaluation<TURN>(entry.value).clamp_(alpha, beta));
-        } else if (entry.bound == BoundType::LOWER && entry.value >= beta.value) {
-          if (IS_PRINT_NODE) {
-            std::cout << repeat("  ", plyFromRoot) << "Returning (TT Hit: LOWER)" << std::endl;
+        } else if (entry.bound == BoundType::LOWER) {
+          if (entry.value >= beta.value) {
+            if (IS_PRINT_NODE) {
+              std::cout << repeat("  ", plyFromRoot) << "Returning (TT Hit: LOWER)" << std::endl;
+            }
+            return NegamaxResult<TURN>(entry.bestMove, beta);
           }
-          return NegamaxResult<TURN>(entry.bestMove, beta);
-        } else if (entry.bound == BoundType::UPPER && entry.value <= alpha.value) {
+        } else if (entry.bound == BoundType::UPPER) {
+          if (entry.value <= alpha.value) {
           if (IS_PRINT_NODE) {
-            std::cout << repeat("  ", plyFromRoot) << "Returning (TT Hit: UPPER)" << std::endl;
+              std::cout << repeat("  ", plyFromRoot) << "Returning (TT Hit: UPPER)" << std::endl;
+            }
+            return NegamaxResult<TURN>(entry.bestMove, alpha);
           }
-          return NegamaxResult<TURN>(entry.bestMove, alpha);
         }
       }
     } else {
