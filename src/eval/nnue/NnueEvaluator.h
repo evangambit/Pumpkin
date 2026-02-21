@@ -2,6 +2,7 @@
 #define SRC_EVAL_NNUE_NNUEEVALUATIOR_H
 
 #include <chrono>
+#include <cstdint>
 #include <iostream>
 #include <fstream>
 
@@ -19,8 +20,20 @@ namespace NNUE {
 
 inline Bitboard nnue_feature_to_bitboard(NnueFeatureBitmapType feature, const Position& pos, const Threats& threats) {
   switch (feature) {
-    case NF_WHITE_PAWN:
-      return pos.pieceBitboards_[ColoredPiece::WHITE_PAWN];
+    case NF_WHITE_PAWN: {
+      Bitboard r = pos.pieceBitboards_[ColoredPiece::WHITE_PAWN];
+      for (int file = 0; file < 8; file++) {
+        const bool noWhitePawnsOnFile = (kFiles[file] & pos.pieceBitboards_[ColoredPiece::WHITE_PAWN]) == kEmptyBitboard;
+        r |= bb(56 + file);
+      }
+      if (pos.currentState_.castlingRights & kCastlingRights_WhiteKing) {
+        r |= bb(0);
+      }
+      if (pos.currentState_.castlingRights & kCastlingRights_WhiteQueen) {
+        r |= bb(1);
+      }
+      return r;
+    }
     case NF_WHITE_KNIGHT:
       return pos.pieceBitboards_[ColoredPiece::WHITE_KNIGHT];
     case NF_WHITE_BISHOP:
@@ -43,8 +56,20 @@ inline Bitboard nnue_feature_to_bitboard(NnueFeatureBitmapType feature, const Po
       return threats.badForCp(ColoredPiece::WHITE_QUEEN) & pos.pieceBitboards_[ColoredPiece::WHITE_QUEEN];
     case NF_WHITE_HANGING_KINGS:
       return threats.badForCp(ColoredPiece::WHITE_KING) & pos.pieceBitboards_[ColoredPiece::WHITE_KING];
-    case NF_BLACK_PAWN:
-      return pos.pieceBitboards_[ColoredPiece::BLACK_PAWN];
+    case NF_BLACK_PAWN: {
+      Bitboard r = pos.pieceBitboards_[ColoredPiece::BLACK_PAWN];
+      for (int file = 0; file < 8; file++) {
+        const bool noBlackPawnsOnFile = (kFiles[file] & pos.pieceBitboards_[ColoredPiece::BLACK_PAWN]) == kEmptyBitboard;
+        r |= bb(file);
+      }
+      if (pos.currentState_.castlingRights & kCastlingRights_BlackKing) {
+        r |= bb(56);
+      }
+      if (pos.currentState_.castlingRights & kCastlingRights_BlackQueen) {
+        r |= bb(57);
+      }
+      return r;
+    }
     case NF_BLACK_KNIGHT:
       return pos.pieceBitboards_[ColoredPiece::BLACK_KNIGHT];
     case NF_BLACK_BISHOP:
@@ -73,7 +98,7 @@ inline Bitboard nnue_feature_to_bitboard(NnueFeatureBitmapType feature, const Po
   return kEmptyBitboard;
 }
 
-std::string diff_bstr(Bitboard oldb, Bitboard newb) {
+inline std::string diff_bstr(Bitboard oldb, Bitboard newb) {
   std::string result;
   for (int y = 0; y < 8; ++y) {
     for (int x = 0; x < 8; ++x) {
@@ -97,7 +122,7 @@ template<typename T>
 struct NnueEvaluator : public EvaluatorInterface {
   std::shared_ptr<Nnue<T>> nnue_model;
 
-  Bitboard lastPieceBitboards[NF_COUNT];
+  TypeSafeArray<Bitboard, NF_COUNT, NnueFeatureBitmapType> lastPieceBitboards;
 
   NnueEvaluator(std::shared_ptr<Nnue<T>> model) : nnue_model(model) {
     this->empty();
@@ -106,7 +131,7 @@ struct NnueEvaluator : public EvaluatorInterface {
   // Board listener
   void empty() override {
     nnue_model->clear_accumulator();
-    std::fill_n(lastPieceBitboards, NF_COUNT, kEmptyBitboard);
+    lastPieceBitboards.fill(kEmptyBitboard);
   }
   void place_piece(ColoredPiece cp, SafeSquare square) override {
   }
@@ -160,7 +185,6 @@ struct NnueEvaluator : public EvaluatorInterface {
     if (_is_material_draw(pos)) {
       return Evaluation(0);
     }
-
     for (NnueFeatureBitmapType i = static_cast<NnueFeatureBitmapType>(0); i < NF_COUNT; i = static_cast<NnueFeatureBitmapType>(i + 1)) {
       const Bitboard oldBitboard = lastPieceBitboards[i];
       const Bitboard newBitboard = nnue_feature_to_bitboard(i, pos, threats);
@@ -175,57 +199,6 @@ struct NnueEvaluator : public EvaluatorInterface {
         nnue_model->increment(feature_index(i, sq));
       }
       lastPieceBitboards[i] = newBitboard;
-    }
-
-    if (((pos.currentState_.castlingRights & kCastlingRights_WhiteKing) > 0) != nnue_model->x[WHITE_KINGSIDE_CASTLING_RIGHT]) {
-      if ((pos.currentState_.castlingRights & kCastlingRights_WhiteKing)) {
-        nnue_model->increment(WHITE_KINGSIDE_CASTLING_RIGHT);
-      } else {
-        nnue_model->decrement(WHITE_KINGSIDE_CASTLING_RIGHT);
-      }
-    }
-    if (((pos.currentState_.castlingRights & kCastlingRights_WhiteQueen) > 0) != nnue_model->x[WHITE_QUEENSIDE_CASTLING_RIGHT]) {
-      if ((pos.currentState_.castlingRights & kCastlingRights_WhiteQueen)) {
-        nnue_model->increment(WHITE_QUEENSIDE_CASTLING_RIGHT);
-      } else {
-        nnue_model->decrement(WHITE_QUEENSIDE_CASTLING_RIGHT);
-      }
-    }
-    if (((pos.currentState_.castlingRights & kCastlingRights_BlackKing) > 0) != nnue_model->x[BLACK_KINGSIDE_CASTLING_RIGHT]) {
-      if ((pos.currentState_.castlingRights & kCastlingRights_BlackKing)) {
-        nnue_model->increment(BLACK_KINGSIDE_CASTLING_RIGHT);
-      } else {
-        nnue_model->decrement(BLACK_KINGSIDE_CASTLING_RIGHT);
-      }
-    }
-    if (((pos.currentState_.castlingRights & kCastlingRights_BlackQueen) > 0) != nnue_model->x[BLACK_QUEENSIDE_CASTLING_RIGHT]) {
-      if ((pos.currentState_.castlingRights & kCastlingRights_BlackQueen)) {
-        nnue_model->increment(BLACK_QUEENSIDE_CASTLING_RIGHT);
-      } else {
-        nnue_model->decrement(BLACK_QUEENSIDE_CASTLING_RIGHT);
-      }
-    }
-
-    for (int file = 0; file < 8; file++) {
-      const bool noWhitePawnsOnFile = (kFiles[file] & pos.pieceBitboards_[ColoredPiece::WHITE_PAWN]) == kEmptyBitboard;
-      if (noWhitePawnsOnFile != nnue_model->x[NO_WHITE_PAWNS_A_FILE + file]) {
-        if (noWhitePawnsOnFile) {
-          nnue_model->increment(static_cast<int16_t>(NO_WHITE_PAWNS_A_FILE + file));
-        } else {
-          nnue_model->decrement(static_cast<int16_t>(NO_WHITE_PAWNS_A_FILE + file));
-        }
-      }
-    }
-
-    for (int file = 0; file < 8; file++) {
-      const bool noBlackPawnsOnFile = (kFiles[file] & pos.pieceBitboards_[ColoredPiece::BLACK_PAWN]) == kEmptyBitboard;
-      if (noBlackPawnsOnFile != nnue_model->x[NO_BLACK_PAWNS_A_FILE + file]) {
-        if (noBlackPawnsOnFile) {
-          nnue_model->increment(static_cast<int16_t>(NO_BLACK_PAWNS_A_FILE + file));
-        } else {
-          nnue_model->decrement(static_cast<int16_t>(NO_BLACK_PAWNS_A_FILE + file));
-        }
-      }
     }
 
     T *eval = nnue_model->forward(pos.turn_);
