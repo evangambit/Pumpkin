@@ -746,7 +746,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
         // We don't really care about optimizing this too much since it only happens
         // at the root of the search.
         thread->primaryVariations_.push_back(std::make_pair(move->move, eval.value));
-        std::sort(
+        std::stable_sort(
           thread->primaryVariations_.begin(),
           thread->primaryVariations_.end(),
           [](const std::pair<Move, Evaluation>& a, const std::pair<Move, Evaluation>& b) {
