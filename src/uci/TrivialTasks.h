@@ -151,6 +151,60 @@ struct EvalTask : public Task {
   std::deque<std::string> command;
 };
 
+struct FenErrorResult {
+  std::string fen;
+  float expected;
+  float actual;
+  float error;
+};
+
+struct FenErrorTask : public Task {
+  FenErrorTask(std::deque<std::string> command) : command(command) {}
+  void start(UciEngineState *state) {
+    if (command.size() < 2) {
+      std::cout << "Error: fenerror command requires a file argument." << std::endl;
+      return;
+    }
+    std::string filename = command.at(1);
+    std::ifstream file(filename);
+    if (!file.is_open()) {
+      std::cout << "Error: could not open file " << filename << std::endl;
+      return;
+    }
+    
+    std::vector<FenErrorResult> results;
+    std::string line;
+    while (std::getline(file, line)) {
+      size_t pos = line.find('|');
+      if (pos == std::string::npos) continue;
+      std::string fen = line.substr(0, pos);
+      float expected = std::stof(line.substr(pos + 1));
+      
+      Position p(fen);
+      p.set_listener(state->position.evaluator_->clone());
+      Threats threats;
+      create_threats(p.pieceBitboards_, p.colorBitboards_, &threats);
+      ColoredEvaluation<WHITE> eval = evaluate<WHITE>(p.evaluator_, p, threats);
+      
+      float actual = NNUE::sigmoid(eval.value / float(1 << NNUE::SCALE_SHIFT));
+      float error = std::abs(expected - actual);
+      results.push_back({fen, expected, actual, error});
+    }
+    
+    std::sort(results.begin(), results.end(), [](const FenErrorResult& a, const FenErrorResult& b) {
+      return a.error > b.error;
+    });
+    
+    int limit = std::min(10, (int)results.size());
+    for (int i = 0; i < limit; ++i) {
+      std::cout << results[i].fen << " Expected: " << results[i].expected 
+                << " Actual: " << results[i].actual << " Error: " << results[i].error << std::endl;
+    }
+  }
+ private:
+  std::deque<std::string> command;
+};
+
 struct MoveTask : public Task {
   MoveTask(std::deque<std::string> command) : command(command) {}
   void start(UciEngineState *state) {

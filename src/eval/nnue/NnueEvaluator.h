@@ -240,7 +240,7 @@ struct NnueEvaluator : public EvaluatorInterface {
     }
 
     #ifndef NDEBUG
-      Evaluation score2 = this->from_scratch(pos);
+      Evaluation score2 = this->from_scratch(pos, threats);
       bool mismatch;
       if (std::is_same<T, int16_t>::value) {
         mismatch = score != score2;

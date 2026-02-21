@@ -162,6 +162,11 @@ struct Features {
 
 Features pos2features(const struct ChessEngine::Position& pos, const ChessEngine::Threats& threats);
 
+inline float sigmoid(float x) {
+  return 1.0f / (1.0f + std::exp(-x));
+}
+
+
 }  // namespace NNUE
 
 #endif  // SRC_EVAL_NNUE_UTILS_H
