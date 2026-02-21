@@ -21,6 +21,14 @@ namespace NNUE {
 inline Bitboard nnue_feature_to_bitboard(NnueFeatureBitmapType feature, const Position& pos, const Threats& threats) {
   switch (feature) {
     case NF_WHITE_PAWN: {
+      // We use the 7th rank (56 - 63) to store whether there are any
+      // white pawns on a file. We use the 0th rank (0 - 7) to store
+      // castling rights. This trick works because pawns can never
+      // occupy these squares, so these bits are unused. Importantly,
+      // everything is vertically flipped for the black pawns (i.e.
+      // open files use the 0th rank and castling rights use the 7th
+      // rank). This way the same vertical symmetry that we use for
+      // our piece features automatically works for these features too.
       Bitboard r = pos.pieceBitboards_[ColoredPiece::WHITE_PAWN];
       for (int file = 0; file < 8; file++) {
         const bool noWhitePawnsOnFile = (kFiles[file] & pos.pieceBitboards_[ColoredPiece::WHITE_PAWN]) == kEmptyBitboard;
