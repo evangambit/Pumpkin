@@ -31,7 +31,7 @@ class UCIEngine:
         """Start the UCI engine process"""
         try:
             self.process = subprocess.Popen(
-                [self.engine_path],
+                [self.engine_path, 'evaluator', 'nnue'],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
