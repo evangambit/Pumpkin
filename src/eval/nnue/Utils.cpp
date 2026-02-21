@@ -65,9 +65,7 @@ int16_t flip_feature_index(int16_t index) {
   return piece_type + flipped_square;
 }
 
-Features pos2features(const struct ChessEngine::Position& pos) {
-  ChessEngine::Threats threats;
-  ChessEngine::create_threats(pos.pieceBitboards_, pos.colorBitboards_, &threats);
+Features pos2features(const ChessEngine::Position& pos, const ChessEngine::Threats& threats) {
   Features features;
   for (unsigned i = 0; i < 64; ++i) {
     ChessEngine::SafeSquare sq = ChessEngine::SafeSquare(i);

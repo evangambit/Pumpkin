@@ -6,7 +6,7 @@
     sh build.sh test_runner $(find src -name "*.cpp" | grep 'Tests\.cpp') -lgtest -lgtest_main -pthread && ./test_runner
 
 # Run one test
-    sh build.sh test_runner src/eval/nnue/tests/NnueTests.cpp -lgtest -lgtest_main && ./test_runner --gtest_output=stream
+    sh build.sh test_runner src/eval/nnue/tests/NnueTests.cpp -lgtest -lgtest_main && ./test_runner
     sh build.sh test_runner src/search/tests/SearchTests.cpp -lgtest -lgtest_main && ./test_runner
 
 # Update NNUE object file (model_bin.o) from a binary file

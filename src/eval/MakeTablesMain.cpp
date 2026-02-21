@@ -54,14 +54,16 @@ void process(
   // If line has 4 elements, it's in the format: fen | win | draw | loss
 
   Position pos(line[0]);
+  Threats threats;
+  create_threats(pos.pieceBitboards_, pos.colorBitboards_, &threats);
 
   if (FLAGS_emit_qst) {
     std::vector<Bitboard> features;
     features.reserve(Q_NUM_FEATURES);
     if (pos.turn_ == Color::WHITE) {
-      qstEvaluator.get_features<Color::WHITE>(pos, &features);
+      qstEvaluator.get_features<Color::WHITE>(pos, threats, &features);
     } else {
-      qstEvaluator.get_features<Color::BLACK>(pos, &features);
+      qstEvaluator.get_features<Color::BLACK>(pos, threats, &features);
     }
     
     if (features.size() != Q_NUM_FEATURES) {
@@ -79,7 +81,7 @@ void process(
   }
 
   if (FLAGS_emit_nnue) {
-    NNUE::Features features = NNUE::pos2features(pos);
+    NNUE::Features features = NNUE::pos2features(pos, threats);
     if (pos.turn_ == Color::BLACK) {
       features.flip_();
     }

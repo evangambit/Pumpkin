@@ -476,8 +476,8 @@ struct QstEvaluator : public EvaluatorInterface {
   // accomplished by flipping all bitboards vertically if the mover is black
   // (see the end of this function).
   template<Color US>
-  void get_features(const Position& pos, std::vector<Bitboard> *out) {
-    this->evaluate<US>(pos);
+  void get_features(const Position& pos, const Threats& threats, std::vector<Bitboard> *out) {
+    this->evaluate<US>(pos, threats);
     for (size_t i = 0; i < Q_NUM_FEATURES; ++i) {
       out->push_back(features[i].bits);
     }

@@ -10,7 +10,9 @@ import io
 import torch.utils.data as tdata
 from sharded_matrix import ShardedLoader
 from ShardedMatricesIterableDataset import ShardedMatricesIterableDataset
-from features import board2x, x2board, kMaxNumOnesInInput
+from features import board2x, x2board
+
+kMaxNumOnesInInput = 32
 
 class PST(nn.Module):
   def __init__(self):

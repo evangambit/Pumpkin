@@ -5,11 +5,13 @@ NNUE feature representation conversion functions.
 import chess
 import numpy as np
 
-kMaxNumOnesInInput = 32 + 4
+# We ignore the 16 'no pawns on a file' features, since they
+# can only become 1 at the expense of making other features 0.
+kRoughEstimateOfNumberOfOnesInInput = 32 + 4
 
 def x2board(vec, turn):
   assert len(vec.shape) == 1
-  assert vec.shape[0] == kMaxNumOnesInInput
+  assert vec.shape[0] == kRoughEstimateOfNumberOfOnesInInput
   board = chess.Board.empty()
   board.turn = turn
   castling = ''
