@@ -445,24 +445,28 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
 
   // Transposition Table probe
   TTEntry entry;
-  if (thread->tt_->probe(key, entry) && entry.depth >= depth) {
-    if (SEARCH_TYPE != SearchType::ROOT) {
-      if (entry.bound == BoundType::EXACT) {
-        if (IS_PRINT_NODE) {
-          std::cout << repeat("  ", plyFromRoot) << "Returning (TT Hit: EXACT; eval=" << entry.bestMove << " " << entry.value << ")" << std::endl;
+  if (thread->tt_->probe(key, entry)) {
+    if (entry.depth >= depth) {
+      if (SEARCH_TYPE != SearchType::ROOT) {
+        if (entry.bound == BoundType::EXACT) {
+          if (IS_PRINT_NODE) {
+            std::cout << repeat("  ", plyFromRoot) << "Returning (TT Hit: EXACT; eval=" << entry.bestMove << " " << entry.value << ")" << std::endl;
+          }
+          return NegamaxResult<TURN>(entry.bestMove, ColoredEvaluation<TURN>(entry.value).clamp_(alpha, beta));
+        } else if (entry.bound == BoundType::LOWER && entry.value >= beta.value) {
+          if (IS_PRINT_NODE) {
+            std::cout << repeat("  ", plyFromRoot) << "Returning (TT Hit: LOWER)" << std::endl;
+          }
+          return NegamaxResult<TURN>(entry.bestMove, beta);
+        } else if (entry.bound == BoundType::UPPER && entry.value <= alpha.value) {
+          if (IS_PRINT_NODE) {
+            std::cout << repeat("  ", plyFromRoot) << "Returning (TT Hit: UPPER)" << std::endl;
+          }
+          return NegamaxResult<TURN>(entry.bestMove, alpha);
         }
-        return NegamaxResult<TURN>(entry.bestMove, ColoredEvaluation<TURN>(entry.value).clamp_(alpha, beta));
-      } else if (entry.bound == BoundType::LOWER && entry.value >= beta.value) {
-        if (IS_PRINT_NODE) {
-          std::cout << repeat("  ", plyFromRoot) << "Returning (TT Hit: LOWER)" << std::endl;
-        }
-        return NegamaxResult<TURN>(entry.bestMove, beta);
-      } else if (entry.bound == BoundType::UPPER && entry.value <= alpha.value) {
-        if (IS_PRINT_NODE) {
-          std::cout << repeat("  ", plyFromRoot) << "Returning (TT Hit: UPPER)" << std::endl;
-        }
-        return NegamaxResult<TURN>(entry.bestMove, alpha);
       }
+    } else {
+      // TODO: can we do something with entry.value here?
     }
   } else {
     entry.bestMove = kNullMove;
