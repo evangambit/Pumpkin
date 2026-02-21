@@ -563,6 +563,21 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     2000 // KING
   };
 
+  ColoredEvaluation<TURN> staticScores[kMaxNumMoves];
+  int32_t low = kMaxEval;
+  int32_t high = kMinEval;
+  if (SEARCH_TYPE == SearchType::ROOT) {
+    for (ExtMove* move = moves; move < end; ++move) {
+      make_move<TURN>(&thread->position_, move->move);
+      Threats childThreats;
+      create_threats(thread->position_.pieceBitboards_, thread->position_.colorBitboards_, &childThreats);
+      staticScores[move - moves] = -evaluate<opposite_color<TURN>()>(thread->position_.evaluator_, thread->position_, childThreats);
+      undo<TURN>(&thread->position_);
+      low = std::min<int32_t>(low, staticScores[move - moves].value);
+      high = std::max<int32_t>(high, staticScores[move - moves].value);
+    }
+  }
+
   for (ExtMove* move = moves; move < end; ++move) {
     move->score = move->move == entry.bestMove ? 16000 : -16000;
     // Prioritize captures after the TT move.
@@ -598,6 +613,10 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     move->score += (frame - 2)->responseFrom[move->piece][lastMove.from] == move->move ? 10 : 0;
     move->score += (frame - 4)->responseTo[move->piece][lastMove.to] == move->move ? 5 : 0;
     move->score += (frame - 4)->responseFrom[move->piece][lastMove.from] == move->move ? 5 : 0;
+
+    if (depth > 2) {
+      move->score += (int32_t(staticScores[move - moves].value) - low) * 10 / (high - low);
+    }
 
     // Penalize pawn moves.
     move->score -= move->piece == Piece::PAWN;
