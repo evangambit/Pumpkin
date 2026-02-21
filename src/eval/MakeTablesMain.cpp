@@ -103,8 +103,8 @@ void process(
     Then the logistic function parameters are:
     p(win) = sigmoid(1.25 x - 1.33)
     */
-    float winRate = sigmoid(1.25f * score - 1.33f);
-    float loseRate = sigmoid(-1.25f * score - 1.33f);
+    float winRate = NNUE::sigmoid(1.25f * score - 1.33f);
+    float loseRate = NNUE::sigmoid(-1.25f * score - 1.33f);
     wdl[0] = int16_t(std::round(winRate * 1000.0f));
     wdl[2] = int16_t(std::round(loseRate * 1000.0f));
     wdl[1] = 1000 - wdl[0] - wdl[2];

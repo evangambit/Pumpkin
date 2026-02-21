@@ -1,12 +1,14 @@
 #include "Utils.h"
 
 #include "../../game/Threats.h"
-#include "../../game/CreateThreats.h"
+#include "../../game/Geometry.h"
+#include "NnueEvaluator.h"
+#include "Nnue.h"
 
 #include <cstdint>
-#include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <memory>
 
 namespace NNUE {
 
@@ -67,68 +69,17 @@ int16_t flip_feature_index(int16_t index) {
 
 Features pos2features(const ChessEngine::Position& pos, const ChessEngine::Threats& threats) {
   Features features;
-  for (unsigned i = 0; i < 64; ++i) {
-    ChessEngine::SafeSquare sq = ChessEngine::SafeSquare(i);
-    ChessEngine::ColoredPiece cp = pos.tiles_[sq];
-    if (cp == ChessEngine::ColoredPiece::NO_COLORED_PIECE) {
-      continue;
-    }
-    features.addFeature(feature_index(cp2nfbt(cp), sq));
-    if (threats.badForCp(cp) & bb(sq)) {
-      switch(cp) {
-        case ChessEngine::ColoredPiece::WHITE_PAWN:
-          features.addFeature(feature_index(NF_WHITE_HANGING_PAWNS, sq));
-          break;
-        case ChessEngine::ColoredPiece::WHITE_KNIGHT:
-          features.addFeature(feature_index(NF_WHITE_HANGING_KNIGHTS, sq));
-          break;
-        case ChessEngine::ColoredPiece::WHITE_BISHOP:
-          features.addFeature(feature_index(NF_WHITE_HANGING_BISHOPS, sq));
-          break;
-        case ChessEngine::ColoredPiece::WHITE_ROOK:
-          features.addFeature(feature_index(NF_WHITE_HANGING_ROOKS, sq));
-          break;
-        case ChessEngine::ColoredPiece::WHITE_QUEEN:
-          features.addFeature(feature_index(NF_WHITE_HANGING_QUEENS, sq));
-          break;
-        case ChessEngine::ColoredPiece::WHITE_KING:
-          features.addFeature(feature_index(NF_WHITE_HANGING_KINGS, sq));
-          break;
-        case ChessEngine::ColoredPiece::BLACK_PAWN:
-          features.addFeature(feature_index(NF_BLACK_HANGING_PAWNS, sq));
-          break;
-        case ChessEngine::ColoredPiece::BLACK_KNIGHT:
-          features.addFeature(feature_index(NF_BLACK_HANGING_KNIGHTS, sq));
-          break;
-        case ChessEngine::ColoredPiece::BLACK_BISHOP:
-          features.addFeature(feature_index(NF_BLACK_HANGING_BISHOPS, sq));
-          break;
-        case ChessEngine::ColoredPiece::BLACK_ROOK:
-          features.addFeature(feature_index(NF_BLACK_HANGING_ROOKS, sq));
-          break;
-        case ChessEngine::ColoredPiece::BLACK_QUEEN:
-          features.addFeature(feature_index(NF_BLACK_HANGING_QUEENS, sq));
-          break;
-        case ChessEngine::ColoredPiece::BLACK_KING:
-          features.addFeature(feature_index(NF_BLACK_HANGING_KINGS, sq));
-          break;
-        default:
-          throw std::invalid_argument("Invalid ColoredPiece");
-      }
+  std::shared_ptr<Nnue<int16_t>> nnue = std::make_shared<Nnue<int16_t>>();
+  std::shared_ptr<NnueEvaluator<int16_t>> evaluator = std::make_shared<NnueEvaluator<int16_t>>(nnue);
+  evaluator->_evaluate(pos, threats);
+  for (NnueFeatureBitmapType i = NnueFeatureBitmapType(0); i < NF_COUNT; i = NnueFeatureBitmapType(i + 1)) {
+    Bitboard bb = evaluator->lastPieceBitboards[i];
+    while (bb) {
+      unsigned sq = pop_lsb_i_promise_board_is_not_empty(bb);
+      features.addFeature(feature_index(i, sq));
     }
   }
-  if (pos.currentState_.castlingRights & ChessEngine::kCastlingRights_WhiteKing) {
-    features.addFeature(SpecialFeatures::WHITE_KINGSIDE_CASTLING_RIGHT);
-  }
-  if (pos.currentState_.castlingRights & ChessEngine::kCastlingRights_WhiteQueen) {
-    features.addFeature(SpecialFeatures::WHITE_QUEENSIDE_CASTLING_RIGHT);
-  }
-  if (pos.currentState_.castlingRights & ChessEngine::kCastlingRights_BlackKing) {
-    features.addFeature(SpecialFeatures::BLACK_KINGSIDE_CASTLING_RIGHT);
-  }
-  if (pos.currentState_.castlingRights & ChessEngine::kCastlingRights_BlackQueen) {
-    features.addFeature(SpecialFeatures::BLACK_QUEENSIDE_CASTLING_RIGHT);
-  }
+
   return features;
 }
 

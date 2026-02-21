@@ -1,12 +1,14 @@
 #ifndef SRC_EVAL_NNUE_NNUE_H
 #define SRC_EVAL_NNUE_NNUE_H
 
+#include <cstddef>
 #include <cstdint>
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <memory>
+#include <vector>
 
 #include "../../game/Position.h"
 #include "Utils.h"
@@ -433,8 +435,9 @@ struct Nnue {
     std::fill_n(x, NNUE_INPUT_DIM, false);
     whiteAcc.setZero();
     blackAcc.setZero();
-    Features features = pos2features(pos, threats);
-    for (size_t i = 0; i < features.length; ++i) {
+    std::vector<uint16_t> features = pos2features(pos, threats).to_vector();
+    std::sort(features.begin(), features.end());
+    for (size_t i = 0; i < features.size(); ++i) {
       size_t index = features[i];
       x[index] = true;
       whiteAcc += embWeights[index];
