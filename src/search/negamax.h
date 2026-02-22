@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <atomic>
 #include <bit>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <unordered_set>
@@ -709,14 +710,13 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
 
       // Null window search (possibly with reduced depth).
       if (SEARCH_TYPE != SearchType::NULL_WINDOW_SEARCH) {
-        // eval = to_parent_eval(negamax<opposite_color<TURN>(), SearchType::NULL_WINDOW_SEARCH>(thread, std::max(childDepth - reduction, 0), to_child_eval(alpha + 1), to_child_eval(alpha), plyFromRoot + 1, frame + 1, stopThinking).evaluation);
-        // if (eval.value > alpha.value) {
-        //   if (IS_PRINT_NODE) {
-        //     std::cout << repeat("  ", plyFromRoot) << "Null window search failed; doing full window search." << std::endl;
-        //   }
-        //   eval = to_parent_eval(negamax<opposite_color<TURN>(), SearchType::NORMAL_SEARCH>(thread, childDepth, to_child_eval(beta), to_child_eval(alpha), plyFromRoot + 1, frame + 1, stopThinking).evaluation);
-        // }
-        eval = to_parent_eval(negamax<opposite_color<TURN>(), SearchType::NORMAL_SEARCH>(thread, childDepth, to_child_eval(beta), to_child_eval(alpha), plyFromRoot + 1, frame + 1, stopThinking).evaluation);
+        eval = to_parent_eval(negamax<opposite_color<TURN>(), SearchType::NULL_WINDOW_SEARCH>(thread, std::max(childDepth - reduction, 0), to_child_eval(alpha + 1), to_child_eval(alpha), plyFromRoot + 1, frame + 1, stopThinking).evaluation);
+        if (eval.value > alpha.value) {
+          if (IS_PRINT_NODE) {
+            std::cout << repeat("  ", plyFromRoot) << "Null window search failed; doing full window search." << std::endl;
+          }
+          eval = to_parent_eval(negamax<opposite_color<TURN>(), SearchType::NORMAL_SEARCH>(thread, childDepth, to_child_eval(beta), to_child_eval(alpha), plyFromRoot + 1, frame + 1, stopThinking).evaluation);
+        }
       } else {
         eval = to_parent_eval(negamax<opposite_color<TURN>(), SearchType::NORMAL_SEARCH>(thread, childDepth, to_child_eval(beta), to_child_eval(alpha), plyFromRoot + 1, frame + 1, stopThinking).evaluation);
       }
