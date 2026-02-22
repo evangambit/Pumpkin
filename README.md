@@ -9,7 +9,7 @@
     sh build.sh test_runner src/eval/nnue/tests/NnueTests.cpp -lgtest -lgtest_main && ./test_runner
     sh build.sh test_runner src/search/tests/SearchTests.cpp -lgtest -lgtest_main && ./test_runner
 
-# Update NNUE object file (model_bin.o) from a binary file
+# Update NNUE object file from a binary file
 
     xxd -i model.bin > model_data.cpp
     xxd -i qst.bin > qst_data.cpp
@@ -27,7 +27,7 @@
 With time control (40 moves / 60 seconds):
 
     ~/bin/cutechess-cli \
-    -engine cmd=uci name=NewNNUE arg="evaluator nnue hanging-1d.bin" \
+    -engine cmd=uci name=NewNNUE arg="evaluator nnue model.bin" \
     -engine cmd=old name=OldNNUE arg="evaluator nnue" \
     -each tc=40/60 proto=uci \
     -rounds 10 \
