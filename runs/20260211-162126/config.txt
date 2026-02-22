@@ -1,5 +1,0 @@
-Dataset: de7-md4
-Batch size: 2048
-Chunk size: 128
-Max learning rate: 0.003
-Weight decay: 0.1

@@ -677,13 +677,12 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
       lsb_i_promise_board_is_not_empty(thread->position_.pieceBitboards_[moverKing])
     );
     if (inCheck) {
+      // Need this check because of en passant captures into check.
+      // e.g. b5c6 in position 8/1k6/6R1/KPpr4/8/8/8/8 w - c6 0 62
       if (IS_PRINT_NODE) {
         std::cout << repeat("  ", plyFromRoot) << "Illegal move generated that leaves us in check: " << move->move.uci() << std::endl;
       }
       undo<TURN>(&thread->position_);
-      std::cout << "Illegal move generated in negamax search: " << move->move.uci() << std::endl;
-      std::cout << thread->position_.fen() << std::endl;
-      std::cout << thread->position_ << std::endl;
       continue;
     }
 
