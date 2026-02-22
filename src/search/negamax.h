@@ -429,22 +429,6 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     return NegamaxResult<TURN>(kNullMove, beta);
   }
 
-  // // Check for immediate cutoffs based on mate distance.
-  // Evaluation lowestPossibleEvaluation = kCheckmate + plyFromRoot;
-  // if (SEARCH_TYPE != SearchType::ROOT && lowestPossibleEvaluation >= beta.value) {
-  //   if (IS_PRINT_NODE) {
-  //     std::cout << repeat("  ", plyFromRoot) << "Returning (Cutoff based on mate distance: lowestPossibleEvaluation=" << lowestPossibleEvaluation << " highestPossibleEvaluation=" << kCheckmate - plyFromRoot << ")" << std::endl;
-  //   }
-  //   return NegamaxResult<TURN>(kNullMove, beta);
-  // }
-  // Evaluation highestPossibleEvaluation = -kCheckmate - plyFromRoot;
-  // if (SEARCH_TYPE != SearchType::ROOT && highestPossibleEvaluation <= alpha.value) {
-  //   if (IS_PRINT_NODE) {
-  //     std::cout << repeat("  ", plyFromRoot) << "Returning (Cutoff based on mate distance: lowestPossibleEvaluation=" << lowestPossibleEvaluation << " highestPossibleEvaluation=" << highestPossibleEvaluation << ")" << std::endl;
-  //   }
-  //   return NegamaxResult<TURN>(kNullMove, alpha);
-  // }
-
   // Transposition Table probe
   TTEntry entry;
   if (thread->tt_->probe(key, entry)) {
@@ -573,6 +557,22 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     2000 // KING
   };
 
+  constexpr ColoredPiece moverKing = coloredPiece<TURN, Piece::KING>();
+  const bool inCheck = can_enemy_attack<TURN>(
+    thread->position_,
+    lsb_i_promise_board_is_not_empty(thread->position_.pieceBitboards_[moverKing])
+  );
+
+  // // Null move pruning.
+  // if (SEARCH_TYPE == SearchType::NULL_WINDOW_SEARCH && !inCheck && depth > 2) {
+  //   make_nullmove<TURN>(&thread->position_);
+  //   auto r = -negamax<opposite_color<TURN>(), SearchType::NULL_WINDOW_SEARCH>(thread, depth - 2, -beta, -alpha, plyFromRoot + 1, frame, stopThinking);
+  //   undo<TURN>(&thread->position_);
+  //   if (r.evaluation >= beta) {
+  //     return NegamaxResult<TURN>(kNullMove, beta);
+  //   }
+  // }
+
   ColoredEvaluation<TURN> staticScores[kMaxNumMoves];
   int32_t low = kMaxEval;
   int32_t high = kMinEval;
@@ -673,7 +673,6 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     }
     make_move<TURN>(&thread->position_, move->move);
 
-    constexpr ColoredPiece moverKing = coloredPiece<TURN, Piece::KING>();
     const bool inCheck = can_enemy_attack<TURN>(
       thread->position_,
       lsb_i_promise_board_is_not_empty(thread->position_.pieceBitboards_[moverKing])
