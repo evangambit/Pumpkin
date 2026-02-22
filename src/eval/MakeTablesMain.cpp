@@ -5,9 +5,11 @@
 #include "../game/movegen/sliding.h"
 #include "nnue/ShardedMatrix.h"
 #include "nnue/Nnue.h"
+#include "nnue/NnueEvaluator.h"
 #include "qst/QstEvaluator.h"
 
 #include <gflags/gflags.h>
+#include <memory>
 #include <thread>
 #include <chrono>
 #include <vector>
@@ -39,7 +41,8 @@ void process(
   WriterI8& pieceCountWriter,
   QstEvaluator& qstEvaluator,
   std::ofstream& sparseNnueValueWriter,
-  std::ofstream& sparseNnueLengthWriter
+  std::ofstream& sparseNnueLengthWriter,
+  NNUE::NnueEvaluator<int16_t>* nnueEvaluator
   ) {
   if (line.size() != 4 && line.size() != 2) {
     std::cout << "error: line has " << line.size() << " elements" << std::endl;
@@ -77,7 +80,7 @@ void process(
   }
 
   if (FLAGS_emit_nnue) {
-    NNUE::Features features = NNUE::pos2features(pos, threats);
+    NNUE::Features features = NNUE::pos2features(nnueEvaluator, pos, threats);
     if (pos.turn_ == Color::BLACK) {
       features.flip_();
     }
@@ -149,6 +152,8 @@ int main(int argc, char *argv[]) {
   std::chrono::time_point<std::chrono::system_clock> startTime = std::chrono::system_clock::now();
 
   QstEvaluator qstEvaluator;
+  std::shared_ptr<NNUE::Nnue<int16_t>> nnue = std::make_shared<NNUE::Nnue<int16_t>>();
+  NNUE::NnueEvaluator<int16_t> nnueEvaluator(nnue);
 
   size_t counter = 0;
   std::string line;
@@ -157,7 +162,7 @@ int main(int argc, char *argv[]) {
       continue;
     }
     std::vector<std::string> parts = split(line, '|');
-    process(parts, qstInputWriter, evalWriter, pieceCountWriter, qstEvaluator, sparseNnueValueWriter, sparseNnueLengthWriter);
+    process(parts, qstInputWriter, evalWriter, pieceCountWriter, qstEvaluator, sparseNnueValueWriter, sparseNnueLengthWriter, &nnueEvaluator);
 
     if ((++counter) % 100'000 == 0) {
       double ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime).count();

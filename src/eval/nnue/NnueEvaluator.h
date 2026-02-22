@@ -7,6 +7,7 @@
 #include <fstream>
 
 #include "Nnue.h"
+#include "NnueFeatureBitmapType.h"
 #include "Utils.h"
 
 #include "../../game/Position.h"
@@ -177,7 +178,15 @@ struct NnueEvaluator : public EvaluatorInterface {
 
   // Very slow, but useful for testing (to ensure that incremental updates are correct).
   Evaluation from_scratch(const Position& pos, const Threats& threats) const {
-    nnue_model->compute_acc_from_scratch(pos, threats);
+    Features features;
+    for (NnueFeatureBitmapType i = NnueFeatureBitmapType(0); i < NF_COUNT; i = NnueFeatureBitmapType(i + 1)) {
+      Bitboard bb = nnue_feature_to_bitboard(i, pos, threats);
+      while (bb) {
+        unsigned sq = pop_lsb_i_promise_board_is_not_empty(bb);
+        features.addFeature(feature_index(i, sq));
+      }
+    }
+    nnue_model->compute_acc_from_scratch(features);
     T score = nnue_model->forward(pos.turn_)[0];
     if (std::is_same<T, int16_t>::value) {
       return Evaluation(score);

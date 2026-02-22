@@ -30,7 +30,6 @@ class NNUE(nn.Module):
     z_us, z_them = self.emb(values, lengths)
     return torch.cat([z_us, z_them], dim=1)
 
-
   def forward(self, values, lengths):
     # Turn is 1 for white to move, -1 for black to move
     z = self.embed(values, lengths)

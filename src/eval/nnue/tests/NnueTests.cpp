@@ -122,15 +122,19 @@ TEST_F(NNUETest, FlipFeatureIndex) {
 TEST_F(NNUETest, Pos2FeaturesStartingPosition) {
   Position pos("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
   
-  Features features = pos2features(pos);
+  auto nnue = std::make_shared<Nnue<int16_t>>();
+  NnueEvaluator<int16_t> evaluator(nnue);
+  Threats threats;
+  create_threats(pos.pieceBitboards_, pos.colorBitboards_, &threats);
+  Features features = pos2features(&evaluator, pos, threats);
   
   // Starting position should have 32 pieces + 4 (for castling rights).
   EXPECT_EQ(features.length, 36);
   
   // All feature indices should be in valid range
   for (int i = 0; i < features.length; ++i) {
-    EXPECT_GE(features[i], 0);
-    EXPECT_LT(features[i], SpecialFeatures::INPUT_DIM);
+    EXPECT_GE(features.onIndices[i], 0);
+    EXPECT_LT(features.onIndices[i], SpecialFeatures::INPUT_DIM);
   }
 }
 
@@ -170,7 +174,11 @@ TEST_F(NNUETest, Pos2FeaturesCastlingRights) {
 TEST_F(NNUETest, Pos2FeaturesNoCastlingRights) {
   Position pos("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1");
   
-  Features features = pos2features(pos);
+  auto nnue = std::make_shared<Nnue<int16_t>>();
+  NnueEvaluator<int16_t> evaluator(nnue);
+  Threats threats;
+  create_threats(pos.pieceBitboards_, pos.colorBitboards_, &threats);
+  Features features = pos2features(&evaluator, pos, threats);
   
   bool has_castling = false;
   for (int i = 0; i < features.length; ++i) {

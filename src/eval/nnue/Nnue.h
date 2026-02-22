@@ -153,6 +153,10 @@ struct Vector {
   static_assert(std::is_same<T, int16_t>::value || std::is_same<T, float>::value, "Vector type must be int16_t or float");
   T *data;
 
+  T operator[](size_t index) const {
+    return data[index];
+  }
+
   Vector() {
     data = new T[DIM];
     setZero();
@@ -431,17 +435,15 @@ struct Nnue {
     bias2.randn_();
   }
 
-  void compute_acc_from_scratch(const ChessEngine::Position& pos, const ChessEngine::Threats& threats) {
+  void compute_acc_from_scratch(const Features& features) {
     std::fill_n(x, NNUE_INPUT_DIM, false);
     whiteAcc.setZero();
     blackAcc.setZero();
-    std::vector<uint16_t> features = pos2features(pos, threats).to_vector();
-    std::sort(features.begin(), features.end());
-    for (size_t i = 0; i < features.size(); ++i) {
-      size_t index = features[i];
+    for (size_t i = 0; i < features.length; ++i) {
+      size_t index = features.onIndices[i];
       x[index] = true;
       whiteAcc += embWeights[index];
-      blackAcc += embWeights[flip_feature_index(index)];
+      blackAcc += embWeights[flip_feature_index(static_cast<int16_t>(index))];
     }
   }
 

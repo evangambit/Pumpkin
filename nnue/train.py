@@ -91,6 +91,19 @@ print("Creating model...")
  # [512, 128]
 model = NNUE(hidden_sizes=[512, 8], output_size=1).to(device)
 
+with open('model.pt', 'rb') as f:
+  model.load_state_dict(torch.load(f, map_location=device))
+
+with open('model.bin', 'wb') as f:
+  save_tensor(model.emb.weight(model.emb.merged_tiles())[:-1], 'embedding', f)
+  save_tensor(model.mlp[0].weight, 'linear0.weight', f)
+  save_tensor(model.mlp[0].bias, 'linear0.bias', f)
+  save_tensor(model.mlp[2].weight, 'linear1.weight', f)
+  save_tensor(model.mlp[2].bias, 'linear1.bias', f)
+
+
+exit(0)
+
 print("Creating optimizer...")
 opt = torch.optim.AdamW(model.parameters(), lr=0.0, weight_decay=0.1)
 
@@ -170,7 +183,7 @@ with open(os.path.join(run_dir, 'model.pt'), 'wb') as f:
   torch.save(model.state_dict(), f)
 
 with open(os.path.join(run_dir, 'model.bin'), 'wb') as f:
-  save_tensor(model.emb.weight()[:-1], 'embedding', f)
+  save_tensor(model.emb.weight(model.emb.merged_tiles())[:-1], 'embedding', f)
   save_tensor(model.mlp[0].weight, 'linear0.weight', f)
   save_tensor(model.mlp[0].bias, 'linear0.bias', f)
   save_tensor(model.mlp[2].weight, 'linear1.weight', f)
