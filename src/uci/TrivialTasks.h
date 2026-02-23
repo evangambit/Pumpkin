@@ -12,6 +12,7 @@ extern unsigned int qst_bin_len;
 #include <chrono>
 #include <condition_variable>
 #include <deque>
+#include <iomanip>
 #include <iostream>
 #include <mutex>
 #include <sstream>
