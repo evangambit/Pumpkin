@@ -34,19 +34,34 @@ using WriterI16 = ShardedMatrix::Writer<int16_t>;
 using WriterI8 = ShardedMatrix::Writer<int8_t>;
 using WriterB = ShardedMatrix::Writer<bool>;
 
-void process(
+struct EvaluatedData {
+  bool qstFeatures[Q_NUM_FEATURES * 64];
+  NNUE::Features nnueFeatures;
+  int16_t wdl[3];
+  int8_t pieceCounts[10];
+  bool valid = true;
+};
+
+struct ProcessContext {
+  QstEvaluator qstEvaluator;
+  std::shared_ptr<NNUE::Nnue<int16_t>> nnue;
+  std::unique_ptr<NNUE::NnueEvaluator<int16_t>> nnueEvaluator;
+  
+  ProcessContext() {
+    nnue = std::make_shared<NNUE::Nnue<int16_t>>();
+    nnueEvaluator = std::make_unique<NNUE::NnueEvaluator<int16_t>>(nnue);
+  }
+};
+
+EvaluatedData process_line(
   const std::vector<std::string>& line,
-  WriterB& qstInputWriter,
-  WriterI16& evalWriter,
-  WriterI8& pieceCountWriter,
-  QstEvaluator& qstEvaluator,
-  std::ofstream& sparseNnueValueWriter,
-  std::ofstream& sparseNnueLengthWriter,
-  NNUE::NnueEvaluator<int16_t>* nnueEvaluator
+  ProcessContext *ctx
   ) {
+  EvaluatedData data;
   if (line.size() != 4 && line.size() != 2) {
     std::cout << "error: line has " << line.size() << " elements" << std::endl;
-    return;
+    data.valid = false;
+    return data;
   }
 
   // If line has 2 elements, it's in the format: fen | score
@@ -60,39 +75,35 @@ void process(
     std::vector<Bitboard> features;
     features.reserve(Q_NUM_FEATURES);
     if (pos.turn_ == Color::WHITE) {
-      qstEvaluator.get_features<Color::WHITE>(pos, threats, &features);
+      ctx->qstEvaluator.get_features<Color::WHITE>(pos, threats, &features);
     } else {
-      qstEvaluator.get_features<Color::BLACK>(pos, threats, &features);
+      ctx->qstEvaluator.get_features<Color::BLACK>(pos, threats, &features);
     }
     
     if (features.size() != Q_NUM_FEATURES) {
       std::cerr << "Error: Expected " << Q_NUM_FEATURES << " features, got " << features.size() << std::endl;
-      return;
+      data.valid = false;
+      return data;
     }
 
-    bool qstFeatures[Q_NUM_FEATURES * 64];
     for (size_t i = 0; i < Q_NUM_FEATURES; ++i) {
       for (size_t j = 0; j < 64; ++j) {
-        qstFeatures[i * 64 + j] = (features[i] >> j) & 1;
+        data.qstFeatures[i * 64 + j] = (features[i] >> j) & 1;
       }
     }
-    qstInputWriter.write_row(qstFeatures);
   }
 
   if (FLAGS_emit_nnue) {
-    NNUE::Features features = NNUE::pos2features(nnueEvaluator, pos, threats);
+    data.nnueFeatures = NNUE::pos2features(ctx->nnueEvaluator.get(), pos, threats);
     if (pos.turn_ == Color::BLACK) {
-      features.flip_();
+      data.nnueFeatures.flip_();
     }
-    sparseNnueValueWriter.write(reinterpret_cast<const char*>(features.onIndices), sizeof(features.onIndices[0]) * features.length);
-    sparseNnueLengthWriter.write(reinterpret_cast<const char*>(&features.length), sizeof(features.length));
   }
 
-  int16_t wdl[3];
   if (line.size() == 4) {
-    wdl[0] = int16_t(std::stoi(line[1]));
-    wdl[1] = int16_t(std::stoi(line[2]));
-    wdl[2] = int16_t(std::stoi(line[3]));
+    data.wdl[0] = int16_t(std::stoi(line[1]));
+    data.wdl[1] = int16_t(std::stoi(line[2]));
+    data.wdl[2] = int16_t(std::stoi(line[3]));
   } else {
     float score = std::stof(line[1]);
     /*
@@ -108,24 +119,23 @@ void process(
     */
     float winRate = NNUE::sigmoid(1.25f * score - 1.33f);
     float loseRate = NNUE::sigmoid(-1.25f * score - 1.33f);
-    wdl[0] = int16_t(std::round(winRate * 1000.0f));
-    wdl[2] = int16_t(std::round(loseRate * 1000.0f));
-    wdl[1] = 1000 - wdl[0] - wdl[2];
+    data.wdl[0] = int16_t(std::round(winRate * 1000.0f));
+    data.wdl[2] = int16_t(std::round(loseRate * 1000.0f));
+    data.wdl[1] = 1000 - data.wdl[0] - data.wdl[2];
   }
-  evalWriter.write_row(wdl);
 
-  int8_t pieceCounts[10];
-  pieceCounts[0] = std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_PAWN]);
-  pieceCounts[1] = std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_KNIGHT]);
-  pieceCounts[2] = std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_BISHOP]);
-  pieceCounts[3] = std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_ROOK]);
-  pieceCounts[4] = std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_QUEEN]);
-  pieceCounts[5] = std::popcount(pos.pieceBitboards_[ColoredPiece::BLACK_PAWN]);
-  pieceCounts[6] = std::popcount(pos.pieceBitboards_[ColoredPiece::BLACK_KNIGHT]);
-  pieceCounts[7] = std::popcount(pos.pieceBitboards_[ColoredPiece::BLACK_BISHOP]);
-  pieceCounts[8] = std::popcount(pos.pieceBitboards_[ColoredPiece::BLACK_ROOK]);
-  pieceCounts[9] = std::popcount(pos.pieceBitboards_[ColoredPiece::BLACK_QUEEN]);
-  pieceCountWriter.write_row(pieceCounts);
+  data.pieceCounts[0] = std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_PAWN]);
+  data.pieceCounts[1] = std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_KNIGHT]);
+  data.pieceCounts[2] = std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_BISHOP]);
+  data.pieceCounts[3] = std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_ROOK]);
+  data.pieceCounts[4] = std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_QUEEN]);
+  data.pieceCounts[5] = std::popcount(pos.pieceBitboards_[ColoredPiece::BLACK_PAWN]);
+  data.pieceCounts[6] = std::popcount(pos.pieceBitboards_[ColoredPiece::BLACK_KNIGHT]);
+  data.pieceCounts[7] = std::popcount(pos.pieceBitboards_[ColoredPiece::BLACK_BISHOP]);
+  data.pieceCounts[8] = std::popcount(pos.pieceBitboards_[ColoredPiece::BLACK_ROOK]);
+  data.pieceCounts[9] = std::popcount(pos.pieceBitboards_[ColoredPiece::BLACK_QUEEN]);
+  
+  return data;
 }
 
 int main(int argc, char *argv[]) {
@@ -151,24 +161,69 @@ int main(int argc, char *argv[]) {
 
   std::chrono::time_point<std::chrono::system_clock> startTime = std::chrono::system_clock::now();
 
-  QstEvaluator qstEvaluator;
-  std::shared_ptr<NNUE::Nnue<int16_t>> nnue = std::make_shared<NNUE::Nnue<int16_t>>();
-  NNUE::NnueEvaluator<int16_t> nnueEvaluator(nnue);
+  const unsigned numThreads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 4;
+  std::vector<ProcessContext> contexts(numThreads);
 
   size_t counter = 0;
   std::string line;
+  
+  const size_t CHUNK_SIZE = 16384;
+  std::vector<std::string> lines;
+  lines.reserve(CHUNK_SIZE);
+
+  auto process_chunk = [&]() {
+    if (lines.empty()) return;
+
+    std::vector<EvaluatedData> results(lines.size());
+    std::vector<std::thread> workers;
+    
+    // Divide work
+    for (unsigned t = 0; t < numThreads; ++t) {
+      workers.emplace_back([t, numThreads, &lines, &results, &contexts]() {
+        for (size_t i = t; i < lines.size(); i += numThreads) {
+          std::vector<std::string> parts = split(lines[i], '|');
+          results[i] = process_line(parts, &contexts[t]);
+        }
+      });
+    }
+
+    for (auto& w : workers) {
+      w.join();
+    }
+
+    // Write results sequentially
+    for (size_t i = 0; i < results.size(); ++i) {
+      if (!results[i].valid) continue;
+      
+      if (FLAGS_emit_qst) {
+        qstInputWriter.write_row(results[i].qstFeatures);
+      }
+      if (FLAGS_emit_nnue) {
+        sparseNnueValueWriter.write(reinterpret_cast<const char*>(results[i].nnueFeatures.onIndices), sizeof(results[i].nnueFeatures.onIndices[0]) * results[i].nnueFeatures.length);
+        sparseNnueLengthWriter.write(reinterpret_cast<const char*>(&results[i].nnueFeatures.length), sizeof(results[i].nnueFeatures.length));
+      }
+      
+      evalWriter.write_row(results[i].wdl);
+      pieceCountWriter.write_row(results[i].pieceCounts);
+      
+      if ((++counter) % 100'000 == 0) {
+        double ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime).count();
+        std::cout << "Finished " << counter / 1000 << "k in " << ms / 1000 << " seconds" << std::endl;
+      }
+    }
+    lines.clear();
+  };
+
   while (std::getline(std::cin, line)) {
     if (line == "") {
       continue;
     }
-    std::vector<std::string> parts = split(line, '|');
-    process(parts, qstInputWriter, evalWriter, pieceCountWriter, qstEvaluator, sparseNnueValueWriter, sparseNnueLengthWriter, &nnueEvaluator);
-
-    if ((++counter) % 100'000 == 0) {
-      double ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime).count();
-      std::cout << "Finished " << counter / 1000 << "k in " << ms / 1000 << " seconds" << std::endl;
+    lines.push_back(line);
+    if (lines.size() >= CHUNK_SIZE) {
+      process_chunk();
     }
   }
+  process_chunk();
 
   sparseNnueValueWriter.close();
   sparseNnueLengthWriter.close();
