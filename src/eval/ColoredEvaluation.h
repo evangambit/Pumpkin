@@ -35,10 +35,13 @@ struct ColoredEvaluation {
     return value != other.value;
   }
   ColoredEvaluation<TURN> operator+(Evaluation other) const {
-    return ColoredEvaluation<TURN>(value + other);
+    return ColoredEvaluation<TURN>(std::clamp<int32_t>(int32_t(value) + other, kMinEval, kMaxEval));
+  }
+  ColoredEvaluation<TURN> operator-(Evaluation other) const {
+    return ColoredEvaluation<TURN>(std::clamp<int32_t>(int32_t(value) - other, kMinEval, kMaxEval));
   }
   ColoredEvaluation<TURN>& operator+=(const ColoredEvaluation<TURN>& other) {
-    value += other.value;
+    value = std::clamp<int32_t>(int32_t(value) + other.value, kMinEval, kMaxEval);
     return *this;
   }
   ColoredEvaluation<TURN>& clamp_(const ColoredEvaluation<TURN>& alpha, const ColoredEvaluation<TURN>& beta) {
