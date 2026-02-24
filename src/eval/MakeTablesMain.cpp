@@ -21,6 +21,7 @@
 DEFINE_string(output, "", "Output prefix for the sharded matrices");
 DEFINE_bool(emit_qst, false, "Whether to emit QST features");
 DEFINE_bool(emit_nnue, false, "Whether to emit NNUE features");
+DEFINE_bool(emit_piece_counts, false, "Whether to emit piece counts");
 
 /*
  * This tool converts a text file of chess positions into sharded binary matrices
@@ -124,16 +125,18 @@ EvaluatedData process_line(
     data.wdl[1] = 1000 - data.wdl[0] - data.wdl[2];
   }
 
-  data.pieceCounts[0] = std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_PAWN]);
-  data.pieceCounts[1] = std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_KNIGHT]);
-  data.pieceCounts[2] = std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_BISHOP]);
-  data.pieceCounts[3] = std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_ROOK]);
-  data.pieceCounts[4] = std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_QUEEN]);
-  data.pieceCounts[5] = std::popcount(pos.pieceBitboards_[ColoredPiece::BLACK_PAWN]);
-  data.pieceCounts[6] = std::popcount(pos.pieceBitboards_[ColoredPiece::BLACK_KNIGHT]);
-  data.pieceCounts[7] = std::popcount(pos.pieceBitboards_[ColoredPiece::BLACK_BISHOP]);
-  data.pieceCounts[8] = std::popcount(pos.pieceBitboards_[ColoredPiece::BLACK_ROOK]);
-  data.pieceCounts[9] = std::popcount(pos.pieceBitboards_[ColoredPiece::BLACK_QUEEN]);
+  if (FLAGS_emit_piece_counts) {
+    data.pieceCounts[0] = std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_PAWN]);
+    data.pieceCounts[1] = std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_KNIGHT]);
+    data.pieceCounts[2] = std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_BISHOP]);
+    data.pieceCounts[3] = std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_ROOK]);
+    data.pieceCounts[4] = std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_QUEEN]);
+    data.pieceCounts[5] = std::popcount(pos.pieceBitboards_[ColoredPiece::BLACK_PAWN]);
+    data.pieceCounts[6] = std::popcount(pos.pieceBitboards_[ColoredPiece::BLACK_KNIGHT]);
+    data.pieceCounts[7] = std::popcount(pos.pieceBitboards_[ColoredPiece::BLACK_BISHOP]);
+    data.pieceCounts[8] = std::popcount(pos.pieceBitboards_[ColoredPiece::BLACK_ROOK]);
+    data.pieceCounts[9] = std::popcount(pos.pieceBitboards_[ColoredPiece::BLACK_QUEEN]);
+  }
   
   return data;
 }
@@ -204,7 +207,9 @@ int main(int argc, char *argv[]) {
       }
       
       evalWriter.write_row(results[i].wdl);
-      pieceCountWriter.write_row(results[i].pieceCounts);
+      if (FLAGS_emit_piece_counts) {
+        pieceCountWriter.write_row(results[i].pieceCounts);
+      }
       
       if ((++counter) % 100'000 == 0) {
         double ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now() - startTime).count();
