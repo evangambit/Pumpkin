@@ -170,7 +170,7 @@ int main(int argc, char *argv[]) {
   size_t counter = 0;
   std::string line;
   
-  const size_t CHUNK_SIZE = 16384;
+  constexpr size_t CHUNK_SIZE = 16384;
   std::vector<std::string> lines;
   lines.reserve(CHUNK_SIZE);
 
