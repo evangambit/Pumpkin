@@ -19,35 +19,21 @@ template <size_t HEIGHT, size_t WIDTH, typename T>
 struct Matrix {
   static_assert(WIDTH > 0 && HEIGHT > 0, "Matrix dimensions must be greater than zero");
   static_assert(std::is_same<T, int16_t>::value || std::is_same<T, float>::value, "Matrix type must be int16_t or float");
-  T *data;
+  T data[HEIGHT * WIDTH];
 
   Matrix() {
-    data = new T[HEIGHT * WIDTH];
     setZero();
   }
 
-  ~Matrix() {
-    delete[] data;
-  }
+  ~Matrix() = default;
 
-  Matrix& operator=(const Matrix& other) {
-    std::memcpy(data, other.data, HEIGHT * WIDTH * sizeof(T));
-    return *this;
-  }
+  Matrix& operator=(const Matrix& other) = default;
 
-  Matrix(const Matrix& other) {
-    data = new T[HEIGHT * WIDTH];
-    std::memcpy(data, other.data, HEIGHT * WIDTH * sizeof(T));
-  }
+  Matrix(const Matrix& other) = default;
 
-  Matrix& operator=(Matrix&& other) noexcept {
-    std::swap(data, other.data);
-    return *this;
-  }
+  Matrix& operator=(Matrix&& other) = default;
 
-  Matrix(Matrix&& other) noexcept : data(other.data) {
-    other.data = nullptr;
-  }
+  Matrix(Matrix&& other) = default;
 
   void setZero() {
     std::fill(data, data + HEIGHT * WIDTH, T(0));
@@ -151,39 +137,25 @@ template<size_t DIM, typename T>
 struct Vector {
   static_assert(DIM > 0, "Vector dimension must be greater than zero");
   static_assert(std::is_same<T, int16_t>::value || std::is_same<T, float>::value, "Vector type must be int16_t or float");
-  T *data;
+  T data[DIM];
 
   T operator[](size_t index) const {
     return data[index];
   }
 
   Vector() {
-    data = new T[DIM];
     setZero();
   }
 
-  ~Vector() {
-    delete[] data;
-  }
+  ~Vector() = default;
 
-  Vector& operator=(const Vector& other) {
-    std::memcpy(data, other.data, DIM * sizeof(T));
-    return *this;
-  }
+  Vector& operator=(const Vector& other) = default;
 
-  Vector(const Vector& other) {
-    data = new T[DIM];
-    std::memcpy(data, other.data, DIM * sizeof(T));
-  }
+  Vector(const Vector& other) = default;
 
-  Vector& operator=(Vector&& other) noexcept {
-    std::swap(data, other.data);
-    return *this;
-  }
+  Vector& operator=(Vector&& other) = default;
 
-  Vector(Vector&& other) noexcept : data(other.data) {
-    other.data = nullptr;
-  }
+  Vector(Vector&& other) = default;
 
   void setZero() {
     std::fill(data, data + DIM, T(0));
@@ -380,10 +352,7 @@ inline void concat_and_matmul(const Matrix<HEIGHT, COMBINED_WIDTH, float>& mat, 
 
 template<typename T>
 struct Nnue {
-  bool x[NNUE_INPUT_DIM];
   Vector<EMBEDDING_DIM, T> embWeights[NNUE_INPUT_DIM];
-  Vector<EMBEDDING_DIM, T> whiteAcc;
-  Vector<EMBEDDING_DIM, T> blackAcc;
 
   Matrix<HIDDEN1_DIM, EMBEDDING_DIM * 2, T> layer1;
   Vector<HIDDEN1_DIM, T> bias1;
@@ -394,35 +363,21 @@ struct Nnue {
   Vector<OUTPUT_DIM, T> output;
 
   Nnue() {
-    std::fill_n(x, NNUE_INPUT_DIM, false);
-    whiteAcc.setZero();
-    blackAcc.setZero();
     layer1.setZero();
     bias1.setZero();
     layer2.setZero();
     bias2.setZero();
     output.setZero();
-    this->clear_accumulator();
   }
 
-  void increment(size_t index) {
-    ASSERT(!x[index], "Feature index " << index << "(" << nnue_feature_to_string(NnueFeatureBitmapType(index / 64)) << ", " << (index % 64) << ") is already set");
-    x[index] = true;
-    whiteAcc += embWeights[index];
-    blackAcc += embWeights[flip_feature_index(index)];
+  void increment(Vector<EMBEDDING_DIM, T> *whiteAcc, Vector<EMBEDDING_DIM, T> *blackAcc, size_t index) {
+    *whiteAcc += embWeights[index];
+    *blackAcc += embWeights[flip_feature_index(index)];
   }
 
-  void decrement(size_t index) {
-    ASSERT(x[index], "Feature index " << index << "(" << nnue_feature_to_string(NnueFeatureBitmapType(index / 64)) << ", " << (index % 64) << ") is not set");
-    x[index] = false;
-    whiteAcc -= embWeights[index];
-    blackAcc -= embWeights[flip_feature_index(index)];
-  }
-
-  void clear_accumulator() {
-    std::fill_n(x, NNUE_INPUT_DIM, false);
-    whiteAcc.setZero();
-    blackAcc.setZero();
+  void decrement(Vector<EMBEDDING_DIM, T> *whiteAcc, Vector<EMBEDDING_DIM, T> *blackAcc, size_t index) {
+    *whiteAcc -= embWeights[index];
+    *blackAcc -= embWeights[flip_feature_index(index)];
   }
 
   void randn_() {
@@ -435,23 +390,11 @@ struct Nnue {
     bias2.randn_();
   }
 
-  void compute_acc_from_scratch(const Features& features) {
-    std::fill_n(x, NNUE_INPUT_DIM, false);
-    whiteAcc.setZero();
-    blackAcc.setZero();
-    for (size_t i = 0; i < features.length; ++i) {
-      size_t index = features.onIndices[i];
-      x[index] = true;
-      whiteAcc += embWeights[index];
-      blackAcc += embWeights[flip_feature_index(static_cast<int16_t>(index))];
-    }
-  }
-
   void load(std::istream& in) {
-    Matrix<NNUE_INPUT_DIM, EMBEDDING_DIM, T> emb;
-    emb.load_from_stream(in);
+    auto emb = std::make_unique<Matrix<NNUE_INPUT_DIM, EMBEDDING_DIM, T>>();
+    emb->load_from_stream(in);
     for (size_t i = 0; i < NNUE_INPUT_DIM; ++i) {
-      embWeights[i].load_from_row(emb, i);
+      embWeights[i].load_from_row(*emb, i);
     }
     layer1.load_from_stream(in);
     bias1.load_from_stream(in);
@@ -476,9 +419,7 @@ struct Nnue {
     bias2.randn_();
   }
 
-  T *forward(ChessEngine::Color sideToMove) {
-    const Vector<EMBEDDING_DIM, T>& mover = sideToMove == ChessEngine::Color::WHITE ? whiteAcc : blackAcc;
-    const Vector<EMBEDDING_DIM, T>& opponent = sideToMove == ChessEngine::Color::WHITE ? blackAcc : whiteAcc;
+  T *forward(const Vector<EMBEDDING_DIM, T>& mover, const Vector<EMBEDDING_DIM, T>& opponent) {
     concat_and_matmul<HIDDEN1_DIM, EMBEDDING_DIM * 2, EMBEDDING_DIM, EMBEDDING_DIM>(layer1, mover, opponent, &hidden1);
     hidden1 += bias1;
     hidden1.clip_(0, 1 << SCALE_SHIFT);
