@@ -539,6 +539,8 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   // Add score to each move.
   Threats threats;
   create_threats(thread->position_.pieceBitboards_, thread->position_.colorBitboards_, &threats);
+  // We never call evaluate in interior nodes, but it behooves us to keep the accumulator
+  // up to date so our children/grandchildren can benefit from it.
   thread->position_.evaluator_->update_accumulator(thread->position_, threats, plyFromRoot);
   const Move lastMove = SEARCH_TYPE == SearchType::ROOT ? kNullMove : thread->position_.history_.back().move;
   // ±16000: best move from transposition table
