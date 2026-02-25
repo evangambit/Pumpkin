@@ -362,6 +362,9 @@ struct Nnue {
   Vector<OUTPUT_DIM, T> bias2;
   Vector<OUTPUT_DIM, T> output;
 
+  Vector<EMBEDDING_DIM, T> clippedMover;
+  Vector<EMBEDDING_DIM, T> clippedOpponent;
+
   Nnue() {
     layer1.setZero();
     bias1.setZero();
@@ -420,13 +423,20 @@ struct Nnue {
   }
 
   T *forward(const Vector<EMBEDDING_DIM, T>& mover, const Vector<EMBEDDING_DIM, T>& opponent) {
-    concat_and_matmul<HIDDEN1_DIM, EMBEDDING_DIM * 2, EMBEDDING_DIM, EMBEDDING_DIM>(layer1, mover, opponent, &hidden1);
-    hidden1 += bias1;
-    hidden1.clip_(0, 1 << SCALE_SHIFT);
+    this->clippedMover = mover;
+    this->clippedOpponent = opponent;
+    
+    constexpr T maxValue = std::is_same<T, float>::value ? T(1) : T(1 << SCALE_SHIFT);
+    this->clippedMover.clip_(T(0), maxValue);
+    this->clippedOpponent.clip_(T(0), maxValue);
+
+    concat_and_matmul<HIDDEN1_DIM, EMBEDDING_DIM * 2, EMBEDDING_DIM, EMBEDDING_DIM>(layer1, clippedMover, clippedOpponent, &hidden1);
+    this->hidden1 += bias1;
+    this->hidden1.clip_(T(0), maxValue);
 
     matmul(layer2, hidden1, &output);
-    output += bias2;
-    return output.data_ptr();
+    this->output += bias2;
+    return this->output.data_ptr();
   }
 
   std::shared_ptr<Nnue> clone() const {
