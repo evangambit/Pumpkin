@@ -85,5 +85,5 @@ class Emb(nn.Module):
     flipped = self.flipped_weight(merged_tiles)
     a = self.bagger(w[values.to(torch.int64)], lengths.to(torch.int64))
     b = self.bagger(flipped[values.to(torch.int64)], lengths.to(torch.int64))
-    return a, b
+    return a.clip(0, 1), b.clip(0, 1)
 Emb.k = 24
