@@ -72,12 +72,99 @@ struct Features {
   }
 };
 
+inline ChessEngine::Bitboard nnue_feature_to_bitboard(NnueFeatureBitmapType feature, const ChessEngine::Position& pos, const ChessEngine::Threats& threats) {
+  switch (feature) {
+    case NF_WHITE_PAWN: {
+      // We use the 7th rank (56 - 63) to store whether there are any
+      // white pawns on a file. We use the 0th rank (0 - 7) to store
+      // castling rights. This trick works because pawns can never
+      // occupy these squares, so these bits are unused. Importantly,
+      // everything is vertically flipped for the black pawns (i.e.
+      // open files use the 0th rank and castling rights use the 7th
+      // rank). This way the same vertical symmetry that we use for
+      // our piece features automatically works for these features too.
+      ChessEngine::Bitboard r = pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_PAWN];
+      for (int file = 0; file < 8; file++) {
+        const bool noWhitePawnsOnFile = (ChessEngine::kFiles[file] & pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_PAWN]) == ChessEngine::kEmptyBitboard;
+        r |= ChessEngine::bb(56 + file);
+      }
+      if (pos.currentState_.castlingRights & ChessEngine::kCastlingRights_WhiteKing) {
+        r |= ChessEngine::bb(0);
+      }
+      if (pos.currentState_.castlingRights & ChessEngine::kCastlingRights_WhiteQueen) {
+        r |= ChessEngine::bb(1);
+      }
+      return r;
+    }
+    case NF_WHITE_KNIGHT:
+      return pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_KNIGHT];
+    case NF_WHITE_BISHOP:
+      return pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_BISHOP];
+    case NF_WHITE_ROOK:
+      return pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_ROOK];
+    case NF_WHITE_QUEEN:
+      return pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_QUEEN];
+    case NF_WHITE_KING:
+      return pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_KING];
+    case NF_WHITE_HANGING_PAWNS: 
+      return threats.badForCp(ChessEngine::ColoredPiece::WHITE_PAWN) & pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_PAWN];
+    case NF_WHITE_HANGING_KNIGHTS:
+      return threats.badForCp(ChessEngine::ColoredPiece::WHITE_KNIGHT) & pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_KNIGHT];
+    case NF_WHITE_HANGING_BISHOPS:
+      return threats.badForCp(ChessEngine::ColoredPiece::WHITE_BISHOP) & pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_BISHOP];
+    case NF_WHITE_HANGING_ROOKS:
+      return threats.badForCp(ChessEngine::ColoredPiece::WHITE_ROOK) & pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_ROOK];
+    case NF_WHITE_HANGING_QUEENS:
+      return threats.badForCp(ChessEngine::ColoredPiece::WHITE_QUEEN) & pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_QUEEN];
+    case NF_WHITE_HANGING_KINGS:
+      return threats.badForCp(ChessEngine::ColoredPiece::WHITE_KING) & pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_KING];
+    case NF_BLACK_PAWN: {
+      ChessEngine::Bitboard r = pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_PAWN];
+      for (int file = 0; file < 8; file++) {
+        const bool noBlackPawnsOnFile = (ChessEngine::kFiles[file] & pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_PAWN]) == ChessEngine::kEmptyBitboard;
+        r |= ChessEngine::bb(file);
+      }
+      if (pos.currentState_.castlingRights & ChessEngine::kCastlingRights_BlackKing) {
+        r |= ChessEngine::bb(56);
+      }
+      if (pos.currentState_.castlingRights & ChessEngine::kCastlingRights_BlackQueen) {
+        r |= ChessEngine::bb(57);
+      }
+      return r;
+    }
+    case NF_BLACK_KNIGHT:
+      return pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_KNIGHT];
+    case NF_BLACK_BISHOP:
+      return pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_BISHOP];
+    case NF_BLACK_ROOK:
+      return pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_ROOK];
+    case NF_BLACK_QUEEN:
+      return pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_QUEEN];
+    case NF_BLACK_KING:
+      return pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_KING];
+    case NF_BLACK_HANGING_PAWNS:
+      return threats.badForCp(ChessEngine::ColoredPiece::BLACK_PAWN) & pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_PAWN];
+    case NF_BLACK_HANGING_KNIGHTS:
+      return threats.badForCp(ChessEngine::ColoredPiece::BLACK_KNIGHT) & pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_KNIGHT];
+    case NF_BLACK_HANGING_BISHOPS:
+      return threats.badForCp(ChessEngine::ColoredPiece::BLACK_BISHOP) & pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_BISHOP];
+    case NF_BLACK_HANGING_ROOKS:
+      return threats.badForCp(ChessEngine::ColoredPiece::BLACK_ROOK) & pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_ROOK];
+    case NF_BLACK_HANGING_QUEENS:
+      return threats.badForCp(ChessEngine::ColoredPiece::BLACK_QUEEN) & pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_QUEEN];
+    case NF_BLACK_HANGING_KINGS:
+      return threats.badForCp(ChessEngine::ColoredPiece::BLACK_KING) & pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_KING];
+    default:
+      std::cerr << "Invalid NnueFeatureBitmapType: " << feature << std::endl;
+  }
+  return ChessEngine::kEmptyBitboard;
+}
+
 template<typename T>
 Features pos2features(NnueEvaluator<T> *evaluator, const ChessEngine::Position& pos, const ChessEngine::Threats& threats) {
   Features features;
-  evaluator->_evaluate(pos, threats);
   for (NnueFeatureBitmapType i = NnueFeatureBitmapType(0); i < NF_COUNT; i = NnueFeatureBitmapType(i + 1)) {
-    ChessEngine::Bitboard bb = evaluator->lastPieceBitboards[i];
+    ChessEngine::Bitboard bb = nnue_feature_to_bitboard(i, pos, threats);
     while (bb) {
       unsigned sq = ChessEngine::pop_lsb_i_promise_board_is_not_empty(bb);
       features.addFeature(feature_index(i, sq));
