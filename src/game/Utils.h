@@ -11,6 +11,10 @@
 
 namespace ChessEngine {
 
+constexpr unsigned kMaxSearchDepth = 32;
+constexpr unsigned kMaxPlyFromRoot = kMaxSearchDepth + 16;
+constexpr int kMaxQuiescenceDepth = kMaxPlyFromRoot - kMaxSearchDepth;
+
 enum MoveGenType {
   CAPTURES,
   CHECKS_AND_CAPTURES,

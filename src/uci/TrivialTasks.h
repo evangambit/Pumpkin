@@ -118,10 +118,10 @@ struct EvalTask : public Task {
       Threats threats;
       create_threats(pos.pieceBitboards_, pos.colorBitboards_, &threats);
       if (pos.turn_ == Color::WHITE) {
-        ColoredEvaluation<WHITE> eval = evaluate<WHITE>(pos.evaluator_, pos, threats);
+        ColoredEvaluation<WHITE> eval = evaluate<WHITE>(pos.evaluator_, pos, threats, 0);
         std::cout << eval.value << " (white) (" << pos.evaluator_->to_string() << ")" << std::endl;
       } else {
-        ColoredEvaluation<BLACK> eval = evaluate<BLACK>(pos.evaluator_, pos, threats);
+        ColoredEvaluation<BLACK> eval = evaluate<BLACK>(pos.evaluator_, pos, threats, 0);
         std::cout << eval.value << " (black) (" << pos.evaluator_->to_string() << ")" << std::endl;
       }
       return;
@@ -138,9 +138,9 @@ struct EvalTask : public Task {
       Threats threats;
       create_threats(pos.pieceBitboards_, pos.colorBitboards_, &threats);
       if (pos.turn_ == Color::BLACK) {
-        move->score = -evaluate<BLACK>(pos.evaluator_, pos, threats).value;
+        move->score = -evaluate<BLACK>(pos.evaluator_, pos, threats, 0).value;
       } else {
-        move->score = evaluate<WHITE>(pos.evaluator_, pos, threats).value;
+        move->score = evaluate<WHITE>(pos.evaluator_, pos, threats, 0).value;
       }
       ez_undo(&pos);
     }
@@ -190,7 +190,7 @@ struct FenErrorTask : public Task {
       p.set_listener(state->position.evaluator_->clone());
       Threats threats;
       create_threats(p.pieceBitboards_, p.colorBitboards_, &threats);
-      ColoredEvaluation<WHITE> eval = evaluate<WHITE>(p.evaluator_, p, threats);
+      ColoredEvaluation<WHITE> eval = evaluate<WHITE>(p.evaluator_, p, threats, 0);
       
       float actual = NNUE::sigmoid(eval.value / float(1 << NNUE::SCALE_SHIFT));
       float error = std::abs(expected - actual);
@@ -362,19 +362,20 @@ class NnueEvalDebugTask : public Task {
   NnueEvalDebugTask(std::deque<std::string> command) : command(command) {}
   void start(UciEngineState *state) {
     std::shared_ptr<NNUE::Nnue<float>> nnue_model = std::make_shared<NNUE::Nnue<float>>();
-    if (command.size() == 0) {
-      std::cout << "Error: nnue eval debug command requires a model file." << std::endl;
-      return;
-    }
     command.pop_front();
-    std::string modelFile = command.at(0);
-    command.pop_front();
-    std::ifstream f(modelFile, std::ios::binary);
-    if (!f) {
-      std::cout << "Error: could not open model file \"" << modelFile << "\"" << std::endl;
-      return;
+    if (command.size() > 0) {
+      std::string modelFile = command.at(0);
+      command.pop_front();
+      std::ifstream f(modelFile, std::ios::binary);
+      if (!f) {
+        std::cout << "Error: could not open model file \"" << modelFile << "\"" << std::endl;
+        return;
+      }
+      nnue_model->load(f);
+    } else {
+      std::istringstream f(std::string(model_bin, model_bin_len));
+      nnue_model->load(f);
     }
-    nnue_model->load(f);
     Position pos = state->position;
     auto evaluator = std::make_shared<NNUE::NnueEvaluator<float>>(nnue_model);
     pos.set_listener(evaluator);
@@ -383,17 +384,19 @@ class NnueEvalDebugTask : public Task {
 
     float value;
     if (pos.turn_ == Color::WHITE) {
-      ColoredEvaluation<WHITE> eval = evaluate<WHITE>(evaluator, pos, threats);
+      ColoredEvaluation<WHITE> eval = evaluate<WHITE>(evaluator, pos, threats, 0);
       value = float(eval.value) / float(1 << NNUE::SCALE_SHIFT);
     } else {
-      ColoredEvaluation<BLACK> eval = evaluate<BLACK>(evaluator, pos, threats);
+      ColoredEvaluation<BLACK> eval = evaluate<BLACK>(evaluator, pos, threats, 0);
       value = float(eval.value) / float(1 << NNUE::SCALE_SHIFT);
     }
+    const auto& whiteAcc = evaluator->frames[1].whiteAcc;
+    const auto& blackAcc = evaluator->frames[1].blackAcc;
     std::streamsize ss = std::cout.precision();
     std::cout << std::fixed << std::setprecision(3);
     std::cout << "Emb: " << nnue_model->embWeights[0][0] << ", " << nnue_model->embWeights[0][1] << std::endl;
-    std::cout << "White Acc: " << nnue_model->whiteAcc.data[0] << ", " << nnue_model->whiteAcc.data[1] << std::endl;
-    std::cout << "Black Acc: " << nnue_model->blackAcc.data[0] << ", " << nnue_model->blackAcc.data[1] << std::endl;
+    std::cout << "White Acc: " << whiteAcc.data[0] << ", " << whiteAcc.data[1] << std::endl;
+    std::cout << "Black Acc: " << blackAcc.data[0] << ", " << blackAcc.data[1] << std::endl;
     std::cout << "layer1: " << nnue_model->layer1.data[0] << ", " << nnue_model->layer1.data[1] << std::endl;
     std::cout << "bias1: " << nnue_model->bias1.data[0] << " " << nnue_model->bias1.data[1] << std::endl;
     std::cout << "hidden1: " << nnue_model->hidden1.data[0] << ", " << nnue_model->hidden1.data[1] << ", " << nnue_model->hidden1.data[2] << ", " << nnue_model->hidden1.data[3] << ", " << nnue_model->hidden1.data[4] << ", " << nnue_model->hidden1.data[5] << ", " << nnue_model->hidden1.data[6] << ", " << nnue_model->hidden1.data[7] << std::endl;

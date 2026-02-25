@@ -25,8 +25,9 @@ struct EvaluatorInterface {
   virtual ~EvaluatorInterface() = default;
 
   // Evaluation methods
-  virtual ColoredEvaluation<Color::WHITE> evaluate_white(const Position& pos, const Threats& threats) = 0;
-  virtual ColoredEvaluation<Color::BLACK> evaluate_black(const Position& pos, const Threats& threats) = 0;
+  virtual ColoredEvaluation<Color::WHITE> evaluate_white(const Position& pos, const Threats& threats, int plyFromRoot) = 0;
+  virtual ColoredEvaluation<Color::BLACK> evaluate_black(const Position& pos, const Threats& threats, int plyFromRoot) = 0;
+  virtual void update_accumulator(const Position& pos, const Threats& threats, int plyFromRoot) {}
   virtual std::shared_ptr<EvaluatorInterface> clone() const = 0;
   virtual size_t num_features() const { return 0; }
   virtual std::string to_string() const = 0;
@@ -44,12 +45,13 @@ struct EvaluatorInterface {
 
 struct DummyEvaluator : public EvaluatorInterface {
 
-  virtual ColoredEvaluation<Color::WHITE> evaluate_white(const Position& pos, const Threats& threats) override {
+  virtual ColoredEvaluation<Color::WHITE> evaluate_white(const Position& pos, const Threats& threats, int plyFromRoot) override {
     return ColoredEvaluation<Color::WHITE>(0);
   }
-  virtual ColoredEvaluation<Color::BLACK> evaluate_black(const Position& pos, const Threats& threats) override {
+  virtual ColoredEvaluation<Color::BLACK> evaluate_black(const Position& pos, const Threats& threats, int plyFromRoot) override {
     return ColoredEvaluation<Color::BLACK>(0);
   }
+  virtual void update_accumulator(const Position& pos, const Threats& threats, int plyFromRoot) override {}
   virtual std::shared_ptr<EvaluatorInterface> clone() const override {
     return std::make_shared<DummyEvaluator>();
   }

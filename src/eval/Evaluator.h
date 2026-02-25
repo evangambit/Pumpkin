@@ -10,7 +10,7 @@
 namespace ChessEngine {
 
 struct SimpleEvaluator : public EvaluatorInterface {
-   ColoredEvaluation<Color::WHITE> evaluate_white(const Position& pos, const Threats& threats) override {
+   ColoredEvaluation<Color::WHITE> evaluate_white(const Position& pos, const Threats& threats, int plyFromRoot) override {
     if ((pos.pieceBitboards_[ColoredPiece::WHITE_PAWN] | pos.pieceBitboards_[ColoredPiece::BLACK_PAWN]) == kEmptyBitboard) {
       int whiteMinor = std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_KNIGHT] | pos.pieceBitboards_[ColoredPiece::WHITE_BISHOP]);
       int blackMinor = std::popcount(pos.pieceBitboards_[ColoredPiece::BLACK_KNIGHT] | pos.pieceBitboards_[ColoredPiece::BLACK_BISHOP]);
@@ -28,8 +28,8 @@ struct SimpleEvaluator : public EvaluatorInterface {
     return totalEval;
   }
   
-  ColoredEvaluation<Color::BLACK> evaluate_black(const Position& pos, const Threats& threats) override {
-    return -evaluate_white(pos, threats);
+  ColoredEvaluation<Color::BLACK> evaluate_black(const Position& pos, const Threats& threats, int plyFromRoot) override {
+    return -evaluate_white(pos, threats, plyFromRoot);
   }
 
   std::shared_ptr<EvaluatorInterface> clone() const override {
