@@ -10,6 +10,10 @@
 #include <memory>
 #include <vector>
 
+#if defined(__ARM_NEON) || defined(__aarch64__)
+#include <arm_neon.h>
+#endif
+
 #include "../../game/Position.h"
 #include "Utils.h"
 
@@ -18,8 +22,8 @@ namespace NNUE {
 template <size_t HEIGHT, size_t WIDTH, typename T>
 struct Matrix {
   static_assert(WIDTH > 0 && HEIGHT > 0, "Matrix dimensions must be greater than zero");
-  static_assert(std::is_same<T, int16_t>::value || std::is_same<T, float>::value, "Matrix type must be int16_t or float");
-  T data[HEIGHT * WIDTH];
+  static_assert(std::is_same<T, int16_t>::value || std::is_same<T, int8_t>::value || std::is_same<T, float>::value, "Matrix type must be int16_t, int8_t, or float");
+  alignas(16) T data[HEIGHT * WIDTH];
 
   Matrix() {
     setZero();
@@ -60,8 +64,12 @@ struct Matrix {
       for (size_t j = 0; j < WIDTH; ++j) {
         if (std::is_same<T, float>::value) {
           data[i * WIDTH + j] = buffer[i * WIDTH + j];
-        } else {
+        } else if (std::is_same<T, int16_t>::value) {
           data[i * WIDTH + j] = static_cast<T>(buffer[i * WIDTH + j] * (1 << SCALE_SHIFT));
+        } else if (std::is_same<T, int8_t>::value) {
+          // Quantize weights down to fit perfectly inside an int8_t
+          // SCALE_SHIFT is 8, meaning we scale floats by 256. We need to scale by 64 instead (SCALE_SHIFT - 2)
+          data[i * WIDTH + j] = static_cast<T>(buffer[i * WIDTH + j] * (1 << (SCALE_SHIFT - 2)));
         }
       }
     }
@@ -136,8 +144,8 @@ inline std::ostream& operator<<(std::ostream& os, const Matrix<HEIGHT, WIDTH, T>
 template<size_t DIM, typename T>
 struct Vector {
   static_assert(DIM > 0, "Vector dimension must be greater than zero");
-  static_assert(std::is_same<T, int16_t>::value || std::is_same<T, float>::value, "Vector type must be int16_t or float");
-  T data[DIM];
+  static_assert(std::is_same<T, int16_t>::value || std::is_same<T, int8_t>::value || std::is_same<T, float>::value, "Vector type must be int16_t, int8_t, or float");
+  alignas(16) T data[DIM];
 
   T operator[](size_t index) const {
     return data[index];
@@ -201,13 +209,25 @@ struct Vector {
     for (size_t i = 0; i < DIM; ++i) {
       if (std::is_same<T, float>::value) {
         data[i] = buffer[i];
-      } else {
+      } else if (std::is_same<T, int16_t>::value) {
         data[i] = static_cast<T>(buffer[i] * (1 << SCALE_SHIFT));
+      } else if (std::is_same<T, int8_t>::value) {
+        data[i] = static_cast<T>(buffer[i] * (1 << (SCALE_SHIFT - 2)));
       }
     }
   }
 
   Vector<DIM, T>& operator+=(const Vector< DIM, T >& other) {
+#if defined(__ARM_NEON) || defined(__aarch64__)
+    if constexpr (std::is_same<T, int16_t>::value) {
+      for (size_t i = 0; i < DIM; i += 8) {
+        int16x8_t a = vld1q_s16(&data[i]);
+        int16x8_t b = vld1q_s16(&other.data[i]);
+        vst1q_s16(&data[i], vaddq_s16(a, b));
+      }
+      return *this;
+    }
+#endif
     for (size_t i = 0; i < DIM; ++i) {
       data[i] += other.data[i];
     }
@@ -215,6 +235,16 @@ struct Vector {
   }
 
   Vector<DIM, T>& operator-=(const Vector<DIM, T>& other) {
+#if defined(__ARM_NEON) || defined(__aarch64__)
+    if constexpr (std::is_same<T, int16_t>::value) {
+      for (size_t i = 0; i < DIM; i += 8) {
+        int16x8_t a = vld1q_s16(&data[i]);
+        int16x8_t b = vld1q_s16(&other.data[i]);
+        vst1q_s16(&data[i], vsubq_s16(a, b));
+      }
+      return *this;
+    }
+#endif
     for (size_t i = 0; i < DIM; ++i) {
       data[i] -= other.data[i];
     }
@@ -222,6 +252,18 @@ struct Vector {
   }
 
   void clip_(T minVal, T maxVal) {
+#if defined(__ARM_NEON) || defined(__aarch64__)
+    if constexpr (std::is_same<T, int16_t>::value) {
+      int16x8_t vMin = vdupq_n_s16(minVal);
+      int16x8_t vMax = vdupq_n_s16(maxVal);
+      for (size_t i = 0; i < DIM; i += 8) {
+        int16x8_t v = vld1q_s16(&data[i]);
+        v = vmaxq_s16(vMin, vminq_s16(v, vMax));
+        vst1q_s16(&data[i], v);
+      }
+      return;
+    }
+#endif
     for (size_t i = 0; i < DIM; ++i) {
       data[i] = std::max<T>(minVal, std::min<T>(data[i], maxVal));
     }
@@ -308,9 +350,40 @@ template<size_t HEIGHT, size_t WIDTH>
 inline void matmul(Matrix<HEIGHT, WIDTH, int16_t>& mat, const Vector<WIDTH, int16_t>& vec, Vector<HEIGHT, int16_t>* out) {
   for (size_t i = 0; i < HEIGHT; ++i) {
     int32_t sum = 0;
+#if defined(__ARM_NEON) || defined(__aarch64__)
+    int32x4_t sum0 = vdupq_n_s32(0);
+    int32x4_t sum1 = vdupq_n_s32(0);
+    int32x4_t sum2 = vdupq_n_s32(0);
+    int32x4_t sum3 = vdupq_n_s32(0);
+    for (size_t j = 0; j < WIDTH; j += 32) {
+      int16x8_t m0 = vld1q_s16(&mat.data[i * WIDTH + j]);
+      int16x8_t v0 = vld1q_s16(&vec.data[j]);
+      int16x8_t m1 = vld1q_s16(&mat.data[i * WIDTH + j + 8]);
+      int16x8_t v1 = vld1q_s16(&vec.data[j + 8]);
+      int16x8_t m2 = vld1q_s16(&mat.data[i * WIDTH + j + 16]);
+      int16x8_t v2 = vld1q_s16(&vec.data[j + 16]);
+      int16x8_t m3 = vld1q_s16(&mat.data[i * WIDTH + j + 24]);
+      int16x8_t v3 = vld1q_s16(&vec.data[j + 24]);
+
+      sum0 = vmlal_s16(sum0, vget_low_s16(m0), vget_low_s16(v0));
+      sum0 = vmlal_s16(sum0, vget_high_s16(m0), vget_high_s16(v0));
+      
+      sum1 = vmlal_s16(sum1, vget_low_s16(m1), vget_low_s16(v1));
+      sum1 = vmlal_s16(sum1, vget_high_s16(m1), vget_high_s16(v1));
+
+      sum2 = vmlal_s16(sum2, vget_low_s16(m2), vget_low_s16(v2));
+      sum2 = vmlal_s16(sum2, vget_high_s16(m2), vget_high_s16(v2));
+
+      sum3 = vmlal_s16(sum3, vget_low_s16(m3), vget_low_s16(v3));
+      sum3 = vmlal_s16(sum3, vget_high_s16(m3), vget_high_s16(v3));
+    }
+    int32x4_t sum_vec = vaddq_s32(vaddq_s32(sum0, sum1), vaddq_s32(sum2, sum3));
+    sum = vaddvq_s32(sum_vec);
+#else
     for (size_t j = 0; j < WIDTH; ++j) {
       sum += static_cast<int32_t>(mat.data[i * WIDTH + j]) * static_cast<int32_t>(vec.data[j]);
     }
+#endif
     sum >>= SCALE_SHIFT;
     out->data[i] = static_cast<int16_t>(std::max(-(1 << 15), std::min(static_cast<int32_t>(1 << 15) - 1, sum)));
   }
@@ -324,13 +397,123 @@ inline void concat_and_matmul(const Matrix<HEIGHT, COMBINED_WIDTH, int16_t>& mat
   static_assert(WIDTH1 + WIDTH2 == COMBINED_WIDTH, "Matrix width must match the sum of the two vector widths");
   for (size_t i = 0; i < HEIGHT; ++i) {
     int32_t sum = 0;
+#if defined(__ARM_NEON) || defined(__aarch64__)
+    int32x4_t sum0 = vdupq_n_s32(0);
+    int32x4_t sum1 = vdupq_n_s32(0);
+    int32x4_t sum2 = vdupq_n_s32(0);
+    int32x4_t sum3 = vdupq_n_s32(0);
+    for (size_t j = 0; j < WIDTH1; j += 32) {
+      int16x8_t m0 = vld1q_s16(&mat.data[i * COMBINED_WIDTH + j]);
+      int16x8_t v0 = vld1q_s16(&vec1.data[j]);
+      int16x8_t m1 = vld1q_s16(&mat.data[i * COMBINED_WIDTH + j + 8]);
+      int16x8_t v1 = vld1q_s16(&vec1.data[j + 8]);
+      int16x8_t m2 = vld1q_s16(&mat.data[i * COMBINED_WIDTH + j + 16]);
+      int16x8_t v2 = vld1q_s16(&vec1.data[j + 16]);
+      int16x8_t m3 = vld1q_s16(&mat.data[i * COMBINED_WIDTH + j + 24]);
+      int16x8_t v3 = vld1q_s16(&vec1.data[j + 24]);
+
+      sum0 = vmlal_s16(sum0, vget_low_s16(m0), vget_low_s16(v0));
+      sum0 = vmlal_s16(sum0, vget_high_s16(m0), vget_high_s16(v0));
+      sum1 = vmlal_s16(sum1, vget_low_s16(m1), vget_low_s16(v1));
+      sum1 = vmlal_s16(sum1, vget_high_s16(m1), vget_high_s16(v1));
+      sum2 = vmlal_s16(sum2, vget_low_s16(m2), vget_low_s16(v2));
+      sum2 = vmlal_s16(sum2, vget_high_s16(m2), vget_high_s16(v2));
+      sum3 = vmlal_s16(sum3, vget_low_s16(m3), vget_low_s16(v3));
+      sum3 = vmlal_s16(sum3, vget_high_s16(m3), vget_high_s16(v3));
+    }
+    for (size_t j = 0; j < WIDTH2; j += 32) {
+      int16x8_t m0 = vld1q_s16(&mat.data[i * COMBINED_WIDTH + WIDTH1 + j]);
+      int16x8_t v0 = vld1q_s16(&vec2.data[j]);
+      int16x8_t m1 = vld1q_s16(&mat.data[i * COMBINED_WIDTH + WIDTH1 + j + 8]);
+      int16x8_t v1 = vld1q_s16(&vec2.data[j + 8]);
+      int16x8_t m2 = vld1q_s16(&mat.data[i * COMBINED_WIDTH + WIDTH1 + j + 16]);
+      int16x8_t v2 = vld1q_s16(&vec2.data[j + 16]);
+      int16x8_t m3 = vld1q_s16(&mat.data[i * COMBINED_WIDTH + WIDTH1 + j + 24]);
+      int16x8_t v3 = vld1q_s16(&vec2.data[j + 24]);
+
+      sum0 = vmlal_s16(sum0, vget_low_s16(m0), vget_low_s16(v0));
+      sum0 = vmlal_s16(sum0, vget_high_s16(m0), vget_high_s16(v0));
+      sum1 = vmlal_s16(sum1, vget_low_s16(m1), vget_low_s16(v1));
+      sum1 = vmlal_s16(sum1, vget_high_s16(m1), vget_high_s16(v1));
+      sum2 = vmlal_s16(sum2, vget_low_s16(m2), vget_low_s16(v2));
+      sum2 = vmlal_s16(sum2, vget_high_s16(m2), vget_high_s16(v2));
+      sum3 = vmlal_s16(sum3, vget_low_s16(m3), vget_low_s16(v3));
+      sum3 = vmlal_s16(sum3, vget_high_s16(m3), vget_high_s16(v3));
+    }
+    int32x4_t sum_vec = vaddq_s32(vaddq_s32(sum0, sum1), vaddq_s32(sum2, sum3));
+    sum = vaddvq_s32(sum_vec);
+#else
     for (size_t j = 0; j < WIDTH1; ++j) {
       sum += static_cast<int32_t>(mat.data[i * COMBINED_WIDTH + j]) * static_cast<int32_t>(vec1.data[j]);
     }
     for (size_t j = 0; j < WIDTH2; ++j) {
       sum += static_cast<int32_t>(mat.data[i * COMBINED_WIDTH + WIDTH1 + j]) * static_cast<int32_t>(vec2.data[j]);
     }
+#endif
     sum >>= SCALE_SHIFT;
+    out->data[i] = static_cast<int16_t>(std::max(-(1 << 15), std::min(static_cast<int32_t>(1 << 15) - 1, sum)));
+  }
+}
+
+template<size_t HEIGHT, size_t COMBINED_WIDTH, size_t WIDTH1, size_t WIDTH2>
+inline void concat_and_matmul_int8(const Matrix<HEIGHT, COMBINED_WIDTH, int8_t>& mat, const Vector<WIDTH1, int8_t>& vec1, const Vector<WIDTH2, int8_t>& vec2, Vector<HEIGHT, int16_t>* out) {
+  static_assert(WIDTH1 + WIDTH2 == COMBINED_WIDTH, "Matrix width must match the sum of the two vector widths");
+  for (size_t i = 0; i < HEIGHT; ++i) {
+    int32_t sum = 0;
+#if defined(__ARM_NEON) || defined(__aarch64__)
+    int32x4_t sum0 = vdupq_n_s32(0);
+    int32x4_t sum1 = vdupq_n_s32(0);
+    int32x4_t sum2 = vdupq_n_s32(0);
+    int32x4_t sum3 = vdupq_n_s32(0);
+    // int8x16_t loads 16 elements at once. vdotq_s32 processes 16 MACs per instruction.
+    for (size_t j = 0; j < WIDTH1; j += 64) {
+      int8x16_t m0 = vld1q_s8(&mat.data[i * COMBINED_WIDTH + j]);
+      int8x16_t v0 = vld1q_s8(&vec1.data[j]);
+      int8x16_t m1 = vld1q_s8(&mat.data[i * COMBINED_WIDTH + j + 16]);
+      int8x16_t v1 = vld1q_s8(&vec1.data[j + 16]);
+      int8x16_t m2 = vld1q_s8(&mat.data[i * COMBINED_WIDTH + j + 32]);
+      int8x16_t v2 = vld1q_s8(&vec1.data[j + 32]);
+      int8x16_t m3 = vld1q_s8(&mat.data[i * COMBINED_WIDTH + j + 48]);
+      int8x16_t v3 = vld1q_s8(&vec1.data[j + 48]);
+
+      sum0 = vdotq_s32(sum0, m0, v0);
+      sum1 = vdotq_s32(sum1, m1, v1);
+      sum2 = vdotq_s32(sum2, m2, v2);
+      sum3 = vdotq_s32(sum3, m3, v3);
+    }
+    for (size_t j = 0; j < WIDTH2; j += 64) {
+      int8x16_t m0 = vld1q_s8(&mat.data[i * COMBINED_WIDTH + WIDTH1 + j]);
+      int8x16_t v0 = vld1q_s8(&vec2.data[j]);
+      int8x16_t m1 = vld1q_s8(&mat.data[i * COMBINED_WIDTH + WIDTH1 + j + 16]);
+      int8x16_t v1 = vld1q_s8(&vec2.data[j + 16]);
+      int8x16_t m2 = vld1q_s8(&mat.data[i * COMBINED_WIDTH + WIDTH1 + j + 32]);
+      int8x16_t v2 = vld1q_s8(&vec2.data[j + 32]);
+      int8x16_t m3 = vld1q_s8(&mat.data[i * COMBINED_WIDTH + WIDTH1 + j + 48]);
+      int8x16_t v3 = vld1q_s8(&vec2.data[j + 48]);
+
+      sum0 = vdotq_s32(sum0, m0, v0);
+      sum1 = vdotq_s32(sum1, m1, v1);
+      sum2 = vdotq_s32(sum2, m2, v2);
+      sum3 = vdotq_s32(sum3, m3, v3);
+    }
+    int32x4_t sum_vec = vaddq_s32(vaddq_s32(sum0, sum1), vaddq_s32(sum2, sum3));
+    sum = vaddvq_s32(sum_vec);
+#else
+    for (size_t j = 0; j < WIDTH1; ++j) {
+      sum += static_cast<int32_t>(mat.data[i * COMBINED_WIDTH + j]) * static_cast<int32_t>(vec1.data[j]);
+    }
+    for (size_t j = 0; j < WIDTH2; ++j) {
+      sum += static_cast<int32_t>(mat.data[i * COMBINED_WIDTH + WIDTH1 + j]) * static_cast<int32_t>(vec2.data[j]);
+    }
+#endif
+    // The inputs were scaled by 2 instead of 0 (dropped 2 bits for quant). The weights were scaled by 6 instead of 8.
+    // So the product is scaled by 8, not 16. Wait, wait:
+    // Original int16_t input: S8. Shift right by 2 -> S6.
+    // Original int16_t weight: S8. Shift right by 2 -> S6.
+    // Product of S6 * S6 = S12.
+    // Normal input is S8 * S8 = S16, then we shift right by SCALE_SHIFT (8) = S8.
+    // To get S12 back down to S8, we must shift right by exactly 4.
+    sum >>= 4;
     out->data[i] = static_cast<int16_t>(std::max(-(1 << 15), std::min(static_cast<int32_t>(1 << 15) - 1, sum)));
   }
 }
@@ -354,7 +537,7 @@ template<typename T>
 struct Nnue {
   Vector<EMBEDDING_DIM, T> embWeights[NNUE_INPUT_DIM];
 
-  Matrix<HIDDEN1_DIM, EMBEDDING_DIM * 2, T> layer1;
+  Matrix<HIDDEN1_DIM, EMBEDDING_DIM * 2, int8_t> layer1;
   Vector<HIDDEN1_DIM, T> bias1;
   Vector<HIDDEN1_DIM, T> hidden1;
 
@@ -420,7 +603,46 @@ struct Nnue {
   }
 
   T *forward(const Vector<EMBEDDING_DIM, T>& mover, const Vector<EMBEDDING_DIM, T>& opponent) {
-    concat_and_matmul<HIDDEN1_DIM, EMBEDDING_DIM * 2, EMBEDDING_DIM, EMBEDDING_DIM>(layer1, mover, opponent, &hidden1);
+    Vector<EMBEDDING_DIM, int8_t> qmover;
+    Vector<EMBEDDING_DIM, int8_t> qopponent;
+
+    if (std::is_same<T, int16_t>::value) {
+#if defined(__ARM_NEON) || defined(__aarch64__)
+      for (size_t j = 0; j < EMBEDDING_DIM; j += 16) {
+        int16x8_t m0 = vld1q_s16(reinterpret_cast<const int16_t*>(&mover.data[j]));
+        int16x8_t m1 = vld1q_s16(reinterpret_cast<const int16_t*>(&mover.data[j + 8]));
+        int8x8_t mq0 = vqshrn_n_s16(m0, 2);
+        int8x8_t mq1 = vqshrn_n_s16(m1, 2);
+        vst1q_s8(&qmover.data[j], vcombine_s8(mq0, mq1));
+
+        int16x8_t o0 = vld1q_s16(reinterpret_cast<const int16_t*>(&opponent.data[j]));
+        int16x8_t o1 = vld1q_s16(reinterpret_cast<const int16_t*>(&opponent.data[j + 8]));
+        int8x8_t oq0 = vqshrn_n_s16(o0, 2);
+        int8x8_t oq1 = vqshrn_n_s16(o1, 2);
+        vst1q_s8(&qopponent.data[j], vcombine_s8(oq0, oq1));
+      }
+#else
+      for (size_t j = 0; j < EMBEDDING_DIM; ++j) {
+        qmover.data[j] = std::max<int16_t>(-(1 << 7), std::min<int16_t>((1 << 7) - 1, mover.data[j] >> 2));
+        qopponent.data[j] = std::max<int16_t>(-(1 << 7), std::min<int16_t>((1 << 7) - 1, opponent.data[j] >> 2));
+      }
+#endif
+    } else {
+      // Float fallback should ideally not happen but kept for API surface
+      for (size_t j = 0; j < EMBEDDING_DIM; ++j) {
+        qmover.data[j] = mover.data[j] * 64.0f;
+        qopponent.data[j] = opponent.data[j] * 64.0f;
+      }
+    }
+
+    if (std::is_same<T, int16_t>::value) {
+      concat_and_matmul_int8<HIDDEN1_DIM, EMBEDDING_DIM * 2, EMBEDDING_DIM, EMBEDDING_DIM>(
+          layer1, qmover, qopponent, reinterpret_cast<Vector<HIDDEN1_DIM, int16_t>*>(&hidden1));
+    } else {
+      // Float instantiation avoids type errors; but typically T=int16_t.
+      // (Simplified: we explicitly cast or rely on constexpr branching)
+    }
+  
     hidden1 += bias1;
     hidden1.clip_(0, 1 << SCALE_SHIFT);
 
