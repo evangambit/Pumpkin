@@ -66,6 +66,21 @@ Data comes from https://huggingface.co/datasets/official-stockfish/fishtest_pgns
 
     ~/go/bin/pprof -png ./uci /tmp/prof.out
 
+todo: make this nicer
+
+
+# "-g" allows per-line profiling
+sh build.
+sh uci src/uci/main.cpp -g -L$(brew --prefix gper
+ftools)/lib -lprofiler -DNDEBUG -O3 && CPUPROFILE
+=/tmp/prof.out ./uci "evaluator nnue" "move e2e4 
+c7c5 g1f3 d7d6" "go depth 7" "lazyquit"
+
+~/go/bin/pprof -top ./uci /tmp/prof.out
+
+~/go/bin/pprof -list _evaluate ./uci /tmp/prof.out
+
+
 ## Known bugs
 
 - Capturing enpassant into check (e.g. "r4Q2/1pk2pp1/8/3qpP1K/8/8/PP5B/n7 w - - 0 25")
