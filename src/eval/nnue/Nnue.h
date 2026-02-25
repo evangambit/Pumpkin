@@ -533,6 +533,21 @@ inline void concat_and_matmul(const Matrix<HEIGHT, COMBINED_WIDTH, float>& mat, 
   }
 }
 
+template<size_t HEIGHT, size_t COMBINED_WIDTH, size_t WIDTH1, size_t WIDTH2>
+inline void concat_and_matmul(const Matrix<HEIGHT, COMBINED_WIDTH, int8_t>& mat, const Vector<WIDTH1, float>& vec1, const Vector<WIDTH2, float>& vec2, Vector<HEIGHT, float>* out) {
+  static_assert(WIDTH1 + WIDTH2 == COMBINED_WIDTH, "Matrix width must match the sum of the two vector widths");
+  for (size_t i = 0; i < HEIGHT; ++i) {
+    float sum = 0;
+    for (size_t j = 0; j < WIDTH1; ++j) {
+      sum += static_cast<float>(mat.data[i * COMBINED_WIDTH + j]) * vec1.data[j];
+    }
+    for (size_t j = 0; j < WIDTH2; ++j) {
+      sum += static_cast<float>(mat.data[i * COMBINED_WIDTH + WIDTH1 + j]) * vec2.data[j];
+    }
+    out->data[i] = sum / static_cast<float>(1 << (SCALE_SHIFT - 2));
+  }
+}
+
 template<typename T>
 struct Nnue {
   Vector<EMBEDDING_DIM, T> embWeights[NNUE_INPUT_DIM];
@@ -544,6 +559,9 @@ struct Nnue {
   Matrix<OUTPUT_DIM, HIDDEN1_DIM, T> layer2;
   Vector<OUTPUT_DIM, T> bias2;
   Vector<OUTPUT_DIM, T> output;
+
+  Vector<EMBEDDING_DIM, T> clippedMover;
+  Vector<EMBEDDING_DIM, T> clippedOpponent;
 
   Nnue() {
     layer1.setZero();
@@ -603,52 +621,50 @@ struct Nnue {
   }
 
   T *forward(const Vector<EMBEDDING_DIM, T>& mover, const Vector<EMBEDDING_DIM, T>& opponent) {
-    Vector<EMBEDDING_DIM, int8_t> qmover;
-    Vector<EMBEDDING_DIM, int8_t> qopponent;
-
-    if (std::is_same<T, int16_t>::value) {
+    this->clippedMover = mover;
+    this->clippedOpponent = opponent;
+    
+    constexpr T maxValue = std::is_same<T, float>::value ? T(1) : T(1 << SCALE_SHIFT);
+    this->clippedMover.clip_(T(0), maxValue);
+    this->clippedOpponent.clip_(T(0), maxValue);
+    
+    if constexpr (std::is_same<T, int16_t>::value) {
+      Vector<EMBEDDING_DIM, int8_t> qmover;
+      Vector<EMBEDDING_DIM, int8_t> qopponent;
 #if defined(__ARM_NEON) || defined(__aarch64__)
       for (size_t j = 0; j < EMBEDDING_DIM; j += 16) {
-        int16x8_t m0 = vld1q_s16(reinterpret_cast<const int16_t*>(&mover.data[j]));
-        int16x8_t m1 = vld1q_s16(reinterpret_cast<const int16_t*>(&mover.data[j + 8]));
+        int16x8_t m0 = vld1q_s16(reinterpret_cast<const int16_t*>(&clippedMover.data[j]));
+        int16x8_t m1 = vld1q_s16(reinterpret_cast<const int16_t*>(&clippedMover.data[j + 8]));
         int8x8_t mq0 = vqshrn_n_s16(m0, 2);
         int8x8_t mq1 = vqshrn_n_s16(m1, 2);
         vst1q_s8(&qmover.data[j], vcombine_s8(mq0, mq1));
 
-        int16x8_t o0 = vld1q_s16(reinterpret_cast<const int16_t*>(&opponent.data[j]));
-        int16x8_t o1 = vld1q_s16(reinterpret_cast<const int16_t*>(&opponent.data[j + 8]));
+        int16x8_t o0 = vld1q_s16(reinterpret_cast<const int16_t*>(&clippedOpponent.data[j]));
+        int16x8_t o1 = vld1q_s16(reinterpret_cast<const int16_t*>(&clippedOpponent.data[j + 8]));
         int8x8_t oq0 = vqshrn_n_s16(o0, 2);
         int8x8_t oq1 = vqshrn_n_s16(o1, 2);
         vst1q_s8(&qopponent.data[j], vcombine_s8(oq0, oq1));
       }
 #else
       for (size_t j = 0; j < EMBEDDING_DIM; ++j) {
-        qmover.data[j] = std::max<int16_t>(-(1 << 7), std::min<int16_t>((1 << 7) - 1, mover.data[j] >> 2));
-        qopponent.data[j] = std::max<int16_t>(-(1 << 7), std::min<int16_t>((1 << 7) - 1, opponent.data[j] >> 2));
+        qmover.data[j] = std::max<int16_t>(-(1 << 7), std::min<int16_t>((1 << 7) - 1, clippedMover.data[j] >> 2));
+        qopponent.data[j] = std::max<int16_t>(-(1 << 7), std::min<int16_t>((1 << 7) - 1, clippedOpponent.data[j] >> 2));
       }
 #endif
-    } else {
-      // Float fallback should ideally not happen but kept for API surface
-      for (size_t j = 0; j < EMBEDDING_DIM; ++j) {
-        qmover.data[j] = mover.data[j] * 64.0f;
-        qopponent.data[j] = opponent.data[j] * 64.0f;
-      }
-    }
-
-    if (std::is_same<T, int16_t>::value) {
       concat_and_matmul_int8<HIDDEN1_DIM, EMBEDDING_DIM * 2, EMBEDDING_DIM, EMBEDDING_DIM>(
           layer1, qmover, qopponent, reinterpret_cast<Vector<HIDDEN1_DIM, int16_t>*>(&hidden1));
     } else {
-      // Float instantiation avoids type errors; but typically T=int16_t.
-      // (Simplified: we explicitly cast or rely on constexpr branching)
+      // Float implementation is for debugging. It is not intended to be highly optimized.
+      concat_and_matmul<HIDDEN1_DIM, EMBEDDING_DIM * 2, EMBEDDING_DIM, EMBEDDING_DIM>(
+          layer1, clippedMover, clippedOpponent, reinterpret_cast<Vector<HIDDEN1_DIM, float>*>(&hidden1));
     }
   
     hidden1 += bias1;
-    hidden1.clip_(0, 1 << SCALE_SHIFT);
+    hidden1.clip_(T(0), maxValue);
 
     matmul(layer2, hidden1, &output);
-    output += bias2;
-    return output.data_ptr();
+    this->output += bias2;
+    return this->output.data_ptr();
   }
 
   std::shared_ptr<Nnue> clone() const {
