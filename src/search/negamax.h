@@ -325,20 +325,10 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
       // Don't consider moves that lose material according to move ordering heuristic.
       continue;
     }
-    if (thread->position_.pieceBitboards_[enemyKing] & bb(move->move.to)) {
-      undo<TURN>(&thread->position_);
-      std::cout << "Illegal move generated in qsearch: " << move->move.uci() << std::endl;
-      std::cout << thread->position_.fen() << std::endl;
-      std::cout << thread->position_ << std::endl;
-      continue;
-    }
     if (IS_PRINT_QNODE) {
       std::cout << repeat("  ", plyFromRoot) << "Trying move: " << move->move.uci() << std::endl;
     }
     make_move<TURN>(&thread->position_, move->move);
-    if (IS_PRINT_QNODE) {
-      std::cout << repeat("  ", plyFromRoot) << "Position after move: " << thread->position_.fen() << " (hash=" << thread->position_.currentState_.hash << ")" << std::endl;
-    }
 
     // Move generation can sometimes generate illegal en passant moves.
     if (move->move.moveType == MoveType::EN_PASSANT) {
@@ -353,6 +343,19 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
         undo<TURN>(&thread->position_);
         continue;
       }
+    }
+
+    if (can_enemy_attack<TURN>(
+      thread->position_,
+      lsb_i_promise_board_is_not_empty(thread->position_.pieceBitboards_[moverKing])
+    )) {
+      // Need this check because of en passant captures into check.
+      // e.g. b5c6 in position 8/1k6/6R1/KPpr4/8/8/8/8 w - c6 0 62
+      if (IS_PRINT_NODE) {
+        std::cout << repeat("  ", plyFromRoot) << "Illegal move generated that leaves us in check: " << move->move.uci() << std::endl;
+      }
+      undo<TURN>(&thread->position_);
+      continue;
     }
 
     if (IS_PRINT_QNODE) {
