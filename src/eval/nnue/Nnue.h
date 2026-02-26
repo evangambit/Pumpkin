@@ -12,6 +12,8 @@
 
 #if defined(__ARM_NEON) || defined(__aarch64__)
 #include <arm_neon.h>
+#elif defined(__AVX2__)
+#include <immintrin.h>
 #endif
 
 #include "../../game/Position.h"
@@ -23,7 +25,7 @@ template <size_t HEIGHT, size_t WIDTH, typename T>
 struct Matrix {
   static_assert(WIDTH > 0 && HEIGHT > 0, "Matrix dimensions must be greater than zero");
   static_assert(std::is_same<T, int16_t>::value || std::is_same<T, int8_t>::value || std::is_same<T, float>::value, "Matrix type must be int16_t, int8_t, or float");
-  alignas(16) T data[HEIGHT * WIDTH];
+  alignas(32) T data[HEIGHT * WIDTH];
 
   Matrix() {
     setZero();
@@ -145,7 +147,7 @@ template<size_t DIM, typename T>
 struct Vector {
   static_assert(DIM > 0, "Vector dimension must be greater than zero");
   static_assert(std::is_same<T, int16_t>::value || std::is_same<T, int8_t>::value || std::is_same<T, float>::value, "Vector type must be int16_t, int8_t, or float");
-  alignas(16) T data[DIM];
+  alignas(32) T data[DIM];
 
   T operator[](size_t index) const {
     return data[index];
@@ -227,6 +229,15 @@ struct Vector {
       }
       return *this;
     }
+#elif defined(__AVX2__)
+    if constexpr (std::is_same<T, int16_t>::value) {
+      for (size_t i = 0; i < DIM; i += 16) {
+        __m256i a = _mm256_load_si256((const __m256i*)&data[i]);
+        __m256i b = _mm256_load_si256((const __m256i*)&other.data[i]);
+        _mm256_store_si256((__m256i*)&data[i], _mm256_add_epi16(a, b));
+      }
+      return *this;
+    }
 #endif
     for (size_t i = 0; i < DIM; ++i) {
       data[i] += other.data[i];
@@ -241,6 +252,15 @@ struct Vector {
         int16x8_t a = vld1q_s16(&data[i]);
         int16x8_t b = vld1q_s16(&other.data[i]);
         vst1q_s16(&data[i], vsubq_s16(a, b));
+      }
+      return *this;
+    }
+#elif defined(__AVX2__)
+    if constexpr (std::is_same<T, int16_t>::value) {
+      for (size_t i = 0; i < DIM; i += 16) {
+        __m256i a = _mm256_load_si256((const __m256i*)&data[i]);
+        __m256i b = _mm256_load_si256((const __m256i*)&other.data[i]);
+        _mm256_store_si256((__m256i*)&data[i], _mm256_sub_epi16(a, b));
       }
       return *this;
     }
@@ -260,6 +280,17 @@ struct Vector {
         int16x8_t v = vld1q_s16(&data[i]);
         v = vmaxq_s16(vMin, vminq_s16(v, vMax));
         vst1q_s16(&data[i], v);
+      }
+      return;
+    }
+#elif defined(__AVX2__)
+    if constexpr (std::is_same<T, int16_t>::value) {
+      __m256i vMin = _mm256_set1_epi16(minVal);
+      __m256i vMax = _mm256_set1_epi16(maxVal);
+      for (size_t i = 0; i < DIM; i += 16) {
+        __m256i v = _mm256_load_si256((const __m256i*)&data[i]);
+        v = _mm256_max_epi16(vMin, _mm256_min_epi16(v, vMax));
+        _mm256_store_si256((__m256i*)&data[i], v);
       }
       return;
     }
@@ -379,6 +410,23 @@ inline void matmul(Matrix<HEIGHT, WIDTH, int16_t>& mat, const Vector<WIDTH, int1
     }
     int32x4_t sum_vec = vaddq_s32(vaddq_s32(sum0, sum1), vaddq_s32(sum2, sum3));
     sum = vaddvq_s32(sum_vec);
+#elif defined(__AVX2__)
+    __m256i sum0 = _mm256_setzero_si256();
+    __m256i sum1 = _mm256_setzero_si256();
+    for (size_t j = 0; j < WIDTH; j += 32) {
+      __m256i m0 = _mm256_load_si256((const __m256i*)&mat.data[i * WIDTH + j]);
+      __m256i v0 = _mm256_load_si256((const __m256i*)&vec.data[j]);
+      __m256i m1 = _mm256_load_si256((const __m256i*)&mat.data[i * WIDTH + j + 16]);
+      __m256i v1 = _mm256_load_si256((const __m256i*)&vec.data[j + 16]);
+
+      sum0 = _mm256_add_epi32(sum0, _mm256_madd_epi16(m0, v0));
+      sum1 = _mm256_add_epi32(sum1, _mm256_madd_epi16(m1, v1));
+    }
+    __m256i sum_vec_avx = _mm256_add_epi32(sum0, sum1);
+    __m128i sum128 = _mm_add_epi32(_mm256_castsi256_si128(sum_vec_avx), _mm256_extracti128_si256(sum_vec_avx, 1));
+    sum128 = _mm_add_epi32(sum128, _mm_shuffle_epi32(sum128, _MM_SHUFFLE(1, 0, 3, 2)));
+    sum128 = _mm_add_epi32(sum128, _mm_shuffle_epi32(sum128, _MM_SHUFFLE(2, 3, 0, 1)));
+    sum = _mm_cvtsi128_si32(sum128);
 #else
     for (size_t j = 0; j < WIDTH; ++j) {
       sum += static_cast<int32_t>(mat.data[i * WIDTH + j]) * static_cast<int32_t>(vec.data[j]);
@@ -442,6 +490,32 @@ inline void concat_and_matmul(const Matrix<HEIGHT, COMBINED_WIDTH, int16_t>& mat
     }
     int32x4_t sum_vec = vaddq_s32(vaddq_s32(sum0, sum1), vaddq_s32(sum2, sum3));
     sum = vaddvq_s32(sum_vec);
+#elif defined(__AVX2__)
+    __m256i sum0_avx = _mm256_setzero_si256();
+    __m256i sum1_avx = _mm256_setzero_si256();
+    for (size_t j = 0; j < WIDTH1; j += 32) {
+      __m256i m0 = _mm256_load_si256((const __m256i*)&mat.data[i * COMBINED_WIDTH + j]);
+      __m256i v0 = _mm256_load_si256((const __m256i*)&vec1.data[j]);
+      __m256i m1 = _mm256_load_si256((const __m256i*)&mat.data[i * COMBINED_WIDTH + j + 16]);
+      __m256i v1 = _mm256_load_si256((const __m256i*)&vec1.data[j + 16]);
+
+      sum0_avx = _mm256_add_epi32(sum0_avx, _mm256_madd_epi16(m0, v0));
+      sum1_avx = _mm256_add_epi32(sum1_avx, _mm256_madd_epi16(m1, v1));
+    }
+    for (size_t j = 0; j < WIDTH2; j += 32) {
+      __m256i m0 = _mm256_load_si256((const __m256i*)&mat.data[i * COMBINED_WIDTH + WIDTH1 + j]);
+      __m256i v0 = _mm256_load_si256((const __m256i*)&vec2.data[j]);
+      __m256i m1 = _mm256_load_si256((const __m256i*)&mat.data[i * COMBINED_WIDTH + WIDTH1 + j + 16]);
+      __m256i v1 = _mm256_load_si256((const __m256i*)&vec2.data[j + 16]);
+
+      sum0_avx = _mm256_add_epi32(sum0_avx, _mm256_madd_epi16(m0, v0));
+      sum1_avx = _mm256_add_epi32(sum1_avx, _mm256_madd_epi16(m1, v1));
+    }
+    __m256i sum_vec_avx = _mm256_add_epi32(sum0_avx, sum1_avx);
+    __m128i sum128 = _mm_add_epi32(_mm256_castsi256_si128(sum_vec_avx), _mm256_extracti128_si256(sum_vec_avx, 1));
+    sum128 = _mm_add_epi32(sum128, _mm_shuffle_epi32(sum128, _MM_SHUFFLE(1, 0, 3, 2)));
+    sum128 = _mm_add_epi32(sum128, _mm_shuffle_epi32(sum128, _MM_SHUFFLE(2, 3, 0, 1)));
+    sum = _mm_cvtsi128_si32(sum128);
 #else
     for (size_t j = 0; j < WIDTH1; ++j) {
       sum += static_cast<int32_t>(mat.data[i * COMBINED_WIDTH + j]) * static_cast<int32_t>(vec1.data[j]);
@@ -498,6 +572,38 @@ inline void concat_and_matmul_int8(const Matrix<HEIGHT, COMBINED_WIDTH, int8_t>&
     }
     int32x4_t sum_vec = vaddq_s32(vaddq_s32(sum0, sum1), vaddq_s32(sum2, sum3));
     sum = vaddvq_s32(sum_vec);
+#elif defined(__AVX2__)
+    __m256i sum0_avx = _mm256_setzero_si256();
+    __m256i sum1_avx = _mm256_setzero_si256();
+    for (size_t j = 0; j < WIDTH1; j += 32) {
+      __m256i m_256 = _mm256_load_si256((const __m256i*)&mat.data[i * COMBINED_WIDTH + j]);
+      __m256i m0 = _mm256_cvtepi8_epi16(_mm256_castsi256_si128(m_256));
+      __m256i m1 = _mm256_cvtepi8_epi16(_mm256_extracti128_si256(m_256, 1));
+      
+      __m256i v_256 = _mm256_load_si256((const __m256i*)&vec1.data[j]);
+      __m256i v0 = _mm256_cvtepi8_epi16(_mm256_castsi256_si128(v_256));
+      __m256i v1 = _mm256_cvtepi8_epi16(_mm256_extracti128_si256(v_256, 1));
+
+      sum0_avx = _mm256_add_epi32(sum0_avx, _mm256_madd_epi16(m0, v0));
+      sum1_avx = _mm256_add_epi32(sum1_avx, _mm256_madd_epi16(m1, v1));
+    }
+    for (size_t j = 0; j < WIDTH2; j += 32) {
+      __m256i m_256 = _mm256_load_si256((const __m256i*)&mat.data[i * COMBINED_WIDTH + WIDTH1 + j]);
+      __m256i m0 = _mm256_cvtepi8_epi16(_mm256_castsi256_si128(m_256));
+      __m256i m1 = _mm256_cvtepi8_epi16(_mm256_extracti128_si256(m_256, 1));
+      
+      __m256i v_256 = _mm256_load_si256((const __m256i*)&vec2.data[j]);
+      __m256i v0 = _mm256_cvtepi8_epi16(_mm256_castsi256_si128(v_256));
+      __m256i v1 = _mm256_cvtepi8_epi16(_mm256_extracti128_si256(v_256, 1));
+
+      sum0_avx = _mm256_add_epi32(sum0_avx, _mm256_madd_epi16(m0, v0));
+      sum1_avx = _mm256_add_epi32(sum1_avx, _mm256_madd_epi16(m1, v1));
+    }
+    __m256i sum_vec_avx = _mm256_add_epi32(sum0_avx, sum1_avx);
+    __m128i sum128 = _mm_add_epi32(_mm256_castsi256_si128(sum_vec_avx), _mm256_extracti128_si256(sum_vec_avx, 1));
+    sum128 = _mm_add_epi32(sum128, _mm_shuffle_epi32(sum128, _MM_SHUFFLE(1, 0, 3, 2)));
+    sum128 = _mm_add_epi32(sum128, _mm_shuffle_epi32(sum128, _MM_SHUFFLE(2, 3, 0, 1)));
+    sum = _mm_cvtsi128_si32(sum128);
 #else
     for (size_t j = 0; j < WIDTH1; ++j) {
       sum += static_cast<int32_t>(mat.data[i * COMBINED_WIDTH + j]) * static_cast<int32_t>(vec1.data[j]);
@@ -644,6 +750,26 @@ struct Nnue {
         int8x8_t oq0 = vqshrn_n_s16(o0, 2);
         int8x8_t oq1 = vqshrn_n_s16(o1, 2);
         vst1q_s8(&qopponent.data[j], vcombine_s8(oq0, oq1));
+      }
+#elif defined(__AVX2__)
+      for (size_t j = 0; j < EMBEDDING_DIM; j += 32) {
+        __m256i m0 = _mm256_load_si256((const __m256i*)&clippedMover.data[j]);
+        __m256i m1 = _mm256_load_si256((const __m256i*)&clippedMover.data[j + 16]);
+        
+        m0 = _mm256_srai_epi16(m0, 2);
+        m1 = _mm256_srai_epi16(m1, 2);
+        
+        __m256i packed = _mm256_packs_epi16(m0, m1);
+        __m256i ordered = _mm256_permute4x64_epi64(packed, _MM_SHUFFLE(3, 1, 2, 0));
+        _mm256_store_si256((__m256i*)&qmover.data[j], ordered);
+
+        __m256i o0 = _mm256_load_si256((const __m256i*)&clippedOpponent.data[j]);
+        __m256i o1 = _mm256_load_si256((const __m256i*)&clippedOpponent.data[j + 16]);
+        o0 = _mm256_srai_epi16(o0, 2);
+        o1 = _mm256_srai_epi16(o1, 2);
+        __m256i opacked = _mm256_packs_epi16(o0, o1);
+        __m256i oordered = _mm256_permute4x64_epi64(opacked, _MM_SHUFFLE(3, 1, 2, 0));
+        _mm256_store_si256((__m256i*)&qopponent.data[j], oordered);
       }
 #else
       for (size_t j = 0; j < EMBEDDING_DIM; ++j) {
