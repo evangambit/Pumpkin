@@ -623,7 +623,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     move->score += (frame - 4)->responseTo[move->piece][lastMove.to] == move->move ? 5 : 0;
     move->score += (frame - 4)->responseFrom[move->piece][lastMove.from] == move->move ? 5 : 0;
 
-    if (depth > 1 && low < high) {
+    if (depth > 1 && low < high && SEARCH_TYPE == SearchType::ROOT) {
       move->score += (int32_t(staticScores[move - moves].value) - low) * 10 / (high - low);
     }
 
