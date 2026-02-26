@@ -1,5 +1,46 @@
 sudo dnf install git -y
 sudo dnf install gcc-c++
 sudo dnf install gflags-devel zlib-devel -y
+
+# For debugging
+sudo dnf install gdb -y
+
 git clone https://github.com/evangambit/Pumpkin.git
+
+
+# Opening book
+wget https://raw.githubusercontent.com/official-stockfish/books/master/UHO_4060_v4.epd.zip
+unzip UHO_4060_v4.epd.zip
+
+# c-chess-cli
+git clone https://github.com/lucasart/c-chess-cli.git
+gcc -O3 -std=gnu99 src/*.c -o c-chess-cli -lpthread -lm -DVERSION=\"1.1\"
+
+# Inside ~/Pumpkin
+../c-chess-cli/c-chess-cli \
+-engine cmd="./uci \"evaluator nnue\" \"setoption name Overhead value 10\"" name="T-0.1" tc=0.1+0.001 option.Hash=2048 \
+-engine cmd="./uci \"evaluator nnue\" \"setoption name Overhead value 10\"" name="T-0.2" tc=0.2+0.002 option.Hash=2048 \
+-engine cmd="./uci \"evaluator nnue\" \"setoption name Overhead value 10\"" name="T-0.4" tc=0.4+0.004 option.Hash=2048 \
+-engine cmd="./uci \"evaluator nnue\" \"setoption name Overhead value 10\"" name="T-0.8" tc=0.8+0.008 option.Hash=2048 \
+-engine cmd="./uci \"evaluator nnue\" \"setoption name Overhead value 10\"" name="T-1.6" tc=1.6+0.016 option.Hash=2048 \
+-engine cmd="./uci \"evaluator nnue\" \"setoption name Overhead value 10\"" name="T-3.2" tc=3.2+0.032 option.Hash=2048 \
+-each -games 400 -repeat -concurrency 14 \
+-openings file=../UHO_4060_v4.epd order=random \
+-pgn scaling_results.pgn 3 \
+-resign count=3 score=700 \
+-draw number=40
+
+
+# Analyze tournament results:
+git clone git clone https://github.com/michiguel/Ordo.git
+cd Ordo
+make
+
+cd ~/Pumpkin
+# -a: anchor ELO
+# -s: number of bootstrap samples for confidence intervals
+../Ordo/ordo -p tournament.pgn -a 0 -W -V -s 100
+
+
+
 
