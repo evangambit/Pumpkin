@@ -8,7 +8,7 @@ INCLUDE_FLAGS=""
 
 # Detect operating system and add platform-specific flags
 # Add optimization flags for all platforms
-CXXFLAGS="$CXXFLAGS -march=native"
+CXXFLAGS="$CXXFLAGS -march=native -funroll-loops -flto"
 
 if [[ "$OSTYPE" == "darwin"* ]]; then
   # macOS - check for Homebrew paths
