@@ -311,13 +311,13 @@ class SetEvaluatorTask : public Task {
           return;
         }
         nnue_model->load(f);
-        std::cout << "Model loaded successfully." << std::endl;
+        std::cout << "info string Model loaded successfully." << std::endl;
       } else {
         std::istringstream f(std::string(model_bin, model_bin_len));
         nnue_model->load(f);
       }
       state->position.set_listener(std::make_shared<NNUE::NnueEvaluator<int16_t>>(nnue_model));
-      std::cout << "Evaluator set to nnue." << std::endl;
+      std::cout << "info string Evaluator set to nnue." << std::endl;
     } else if (evaluatorName == "nnuef") {
       std::shared_ptr<NNUE::Nnue<float>> nnue_model = std::make_shared<NNUE::Nnue<float>>();
       if (command.size() > 0) {
@@ -329,13 +329,13 @@ class SetEvaluatorTask : public Task {
           return;
         }
         nnue_model->load(f);
-        std::cout << "Model loaded successfully." << std::endl;
+        std::cout << "info string Model loaded successfully." << std::endl;
       } else {
         std::istringstream f(std::string(model_bin, model_bin_len));
         nnue_model->load(f);
       }
       state->position.set_listener(std::make_shared<NNUE::NnueEvaluator<float>>(nnue_model));
-      std::cout << "Evaluator set to nnue." << std::endl;
+      std::cout << "info string Evaluator set to nnue." << std::endl;
     } else if (evaluatorName == "qst") {
       auto qst = std::make_shared<QstEvaluator>();
       if (command.size() > 0) {
@@ -347,7 +347,7 @@ class SetEvaluatorTask : public Task {
         qst->load(f);
       }
       state->position.set_listener(qst);
-      std::cout << "Evaluator set to qst." << std::endl;
+      std::cout << "info string Evaluator set to qst." << std::endl;
     } else {
       std::cout << "Error: unrecognized evaluator name \"" << evaluatorName << "\"" << std::endl;
     }
