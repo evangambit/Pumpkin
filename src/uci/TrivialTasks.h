@@ -49,10 +49,6 @@ class ProbeTask : public Task {
  public:
   ProbeTask(std::deque<std::string> command) : command(command) {}
   void start(UciEngineState *state) {
-    if (command.size() < 2) {
-      std::cout << "Error: probe command requires a move argument." << std::endl;
-      return;
-    }
     command.pop_front();
     Position pos = state->position;
     while (command.size() > 0) {

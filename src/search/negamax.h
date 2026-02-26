@@ -720,18 +720,15 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
         && move->piece != Piece::PAWN
         && numQuietMovesSearched >= 10
         && !inCheck;
+      const int reducedChildDepth = std::max(childDepth - reduction, 0);
 
-      // Null window search (possibly with reduced depth).
-      if (SEARCH_TYPE != SearchType::NULL_WINDOW_SEARCH) {
-        eval = to_parent_eval(negamax<opposite_color<TURN>(), SearchType::NULL_WINDOW_SEARCH>(thread, std::max(childDepth - reduction, 0), to_child_eval(alpha + 1), to_child_eval(alpha), plyFromRoot + 1, frame + 1, stopThinking).evaluation);
-        if (eval.value > alpha.value) {
-          if (IS_PRINT_NODE) {
-            std::cout << repeat("  ", plyFromRoot) << "Null window search failed; doing full window search." << std::endl;
-          }
-          eval = to_parent_eval(negamax<opposite_color<TURN>(), SearchType::NORMAL_SEARCH>(thread, childDepth, to_child_eval(beta), to_child_eval(alpha), plyFromRoot + 1, frame + 1, stopThinking).evaluation);
+      eval = to_parent_eval(negamax<opposite_color<TURN>(), SearchType::NULL_WINDOW_SEARCH>(thread, reducedChildDepth, to_child_eval(alpha + 1), to_child_eval(alpha), plyFromRoot + 1, frame + 1, stopThinking).evaluation);
+      if (eval.value > alpha.value) {
+        if (IS_PRINT_NODE) {
+          std::cout << repeat("  ", plyFromRoot) << "Null window search failed; doing full window search." << std::endl;
         }
-      } else {
-        eval = to_parent_eval(negamax<opposite_color<TURN>(), SearchType::NORMAL_SEARCH>(thread, childDepth, to_child_eval(beta), to_child_eval(alpha), plyFromRoot + 1, frame + 1, stopThinking).evaluation);
+        constexpr SearchType searchType = SEARCH_TYPE == SearchType::ROOT ? SearchType::NORMAL_SEARCH : SEARCH_TYPE;
+        eval = to_parent_eval(negamax<opposite_color<TURN>(), searchType>(thread, childDepth, to_child_eval(beta), to_child_eval(alpha), plyFromRoot + 1, frame + 1, stopThinking).evaluation);
       }
     } else {
       // Simple, full-window, full-depth search. Used for the first move in non-root search.
