@@ -565,15 +565,20 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     lsb_i_promise_board_is_not_empty(thread->position_.pieceBitboards_[moverKing])
   );
 
-  // // Null move pruning.
-  // if (SEARCH_TYPE == SearchType::NULL_WINDOW_SEARCH && !inCheck && depth > 2) {
-  //   make_nullmove<TURN>(&thread->position_);
-  //   auto r = -negamax<opposite_color<TURN>(), SearchType::NULL_WINDOW_SEARCH>(thread, depth - 2, -beta, -alpha, plyFromRoot + 1, frame, stopThinking);
-  //   undo<TURN>(&thread->position_);
-  //   if (r.evaluation >= beta) {
-  //     return NegamaxResult<TURN>(kNullMove, beta);
-  //   }
-  // }
+  // Null move pruning.
+  const int myPieceCount = std::popcount(thread->position_.colorBitboards_[TURN] & ~thread->position_.pieceBitboards_[coloredPiece<TURN, Piece::PAWN>()]);
+  if (SEARCH_TYPE == SearchType::NULL_WINDOW_SEARCH && !inCheck && myPieceCount > 0 && depth > 0) {
+    constexpr int reduction = 4;
+    const int reducedDepth = std::max(0, depth - reduction);
+    make_nullmove<TURN>(&thread->position_);
+    ColoredEvaluation<TURN> r = to_parent_eval(negamax<opposite_color<TURN>(), SearchType::NULL_WINDOW_SEARCH>(
+      thread, reducedDepth, to_child_eval(beta), to_child_eval(beta - 1), plyFromRoot + 1, frame, stopThinking
+    ).evaluation);
+    undo_nullmove<TURN>(&thread->position_);
+    if (r >= beta) {
+      return NegamaxResult<TURN>(kNullMove, beta);
+    }
+  }
 
   ColoredEvaluation<TURN> staticScores[kMaxNumMoves];
   int32_t low = kMaxEval;
