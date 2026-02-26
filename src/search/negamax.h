@@ -566,6 +566,12 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   );
 
   // Null move pruning.
+  // This is roughly equivalent to having twice as much time.
+  //  # PLAYER       :  RATING  ERROR  POINTS  PLAYED   (%)
+  //  1 nmp-slow     :    64.1    5.5  2963.5    4800    62
+  //  2 nmp-fast     :     2.3    5.4  2420.5    4800    50
+  //  3 main-slow    :    -4.1    5.5  2364.0    4800    49
+  //  4 main-fast    :   -62.3    5.4  1852.0    4800    39
   const int myPieceCount = std::popcount(thread->position_.colorBitboards_[TURN] & ~thread->position_.pieceBitboards_[coloredPiece<TURN, Piece::PAWN>()]);
   if (SEARCH_TYPE == SearchType::NULL_WINDOW_SEARCH && !inCheck && myPieceCount > 0 && depth > 0) {
     constexpr int reduction = 4;
