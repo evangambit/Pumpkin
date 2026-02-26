@@ -148,7 +148,6 @@ class GoTask : public Task {
         }
         timeForMoveMs += goCommand.bIncrementMs;
       }
-      std::cout << "Time for move: " << timeForMoveMs << " ms" <<  std::endl;
       // Use 95% of the calculated time to leave some buffer.
       goCommand.timeLimitMs = timeForMoveMs * 95 / 100;
     }
