@@ -469,9 +469,9 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   }
 
   // TODO: We need to check this *after* we do the checkmate test above, since you can win on the 50th move.
-  if (thread->position_.is_fifty_move_rule()) {
+  if (thread->position_.is_draw_assuming_no_checkmate(plyFromRoot) || thread->position_.is_material_draw()) {
     if (IS_PRINT_NODE) {
-      std::cout << repeat("  ", plyFromRoot) << "Returning (Fifty-move rule draw detected)." << std::endl;
+      std::cout << repeat("  ", plyFromRoot) << "Returning (Draw detected)." << std::endl;
     }
     return NegamaxResult<TURN>(kNullMove, ColoredEvaluation<TURN>(kDraw).clamp_(originalAlpha, beta));
   }

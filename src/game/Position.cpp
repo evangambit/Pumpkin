@@ -318,10 +318,7 @@ bool Position::is_fifty_move_rule() const {
 }
 
 bool Position::is_draw_assuming_no_checkmate(unsigned plyFromRoot) const {
-  if (this->is_fifty_move_rule()) {
-    return true;
-  }
-  return this->is_3fold_repetition(plyFromRoot);
+  return this->is_fifty_move_rule() || this->is_3fold_repetition(plyFromRoot);
 }
 
 bool Position::is_draw_assuming_no_checkmate() const {
