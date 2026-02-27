@@ -465,7 +465,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     if (IS_PRINT_NODE) {
       std::cout << repeat("  ", plyFromRoot) << "Returning (Search stopped externally)." << std::endl;
     }
-    return NegamaxResult<TURN>(entry.bestMove, ColoredEvaluation<TURN>(0).clamp_(originalAlpha, beta));
+    return NegamaxResult<TURN>(entry.bestMove, originalAlpha);
   }
 
   // TODO: We need to check this *after* we do the checkmate test above, since you can win on the 50th move.
@@ -473,7 +473,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     if (IS_PRINT_NODE) {
       std::cout << repeat("  ", plyFromRoot) << "Returning (Fifty-move rule draw detected)." << std::endl;
     }
-    return NegamaxResult<TURN>(kNullMove, ColoredEvaluation<TURN>(Evaluation(0)).clamp_(originalAlpha, beta));
+    return NegamaxResult<TURN>(kNullMove, ColoredEvaluation<TURN>(kDraw).clamp_(originalAlpha, beta));
   }
 
   thread->nodeCount_++;
@@ -527,17 +527,19 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
       if (IS_PRINT_NODE) {
         std::cout << repeat("  ", plyFromRoot) << "Returning (Stalemate detected)." << std::endl;
       }
-      return NegamaxResult<TURN>(kNullMove, ColoredEvaluation<TURN>(Evaluation(0)).clamp_(originalAlpha, beta));
+      return NegamaxResult<TURN>(kNullMove, ColoredEvaluation<TURN>(Evaluation(kDraw)).clamp_(originalAlpha, beta));
     }
   }
 
   // Internal Iterative Deepening.
-  // If we don't have a best move from the TT, we compute one with reduced depth.
-  if (depth > 2 && (entry.key != key || entry.bestMove == kNullMove)) {
-    NegamaxResult<TURN> result = negamax<TURN, SEARCH_TYPE>(thread, depth - 2, alpha, beta, plyFromRoot, frame, stopThinking);
-    entry.bestMove = result.bestMove;
-    entry.value = result.evaluation.value;
-  }
+  #ifndef NO_IID
+    // If we don't have a best move from the TT, we compute one with reduced depth.
+    if (depth > 2 && (entry.key != key || entry.bestMove == kNullMove)) {
+      NegamaxResult<TURN> result = negamax<TURN, SEARCH_TYPE>(thread, depth - 2, alpha, beta, plyFromRoot, frame, stopThinking);
+      entry.bestMove = result.bestMove;
+      entry.value = result.evaluation.value;
+    }
+  #endif
 
   // Add score to each move.
   Threats threats;
@@ -700,7 +702,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
       continue;
     }
 
-    ColoredEvaluation<TURN> eval(0);
+    ColoredEvaluation<TURN> eval;
     int childDepth = depth - 1;
 
     // Don't reduce depth for sensible captures (Elo difference: 254.7 +/- 286.2, LOS: 98.7 %)
@@ -713,15 +715,18 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     }
 
     if (move->move != moves[0].move && (SEARCH_TYPE != SearchType::ROOT || thread->multiPV_ == 1)) {
-      // Very conservative late move reduction (115.2 +/- 103.0, LOS: 99.0 %)
-      int reduction = SEARCH_TYPE != SearchType::ROOT
-        && childDepth >= 3
-        && move->capture == ColoredPiece::NO_COLORED_PIECE
-        && move->piece != Piece::PAWN
-        && numQuietMovesSearched >= 4
-        && !inCheck;
-      reduction += numQuietMovesSearched > 10 ? 1 : 0;
-      const int reducedChildDepth = std::max(childDepth - reduction, 0);
+      #ifndef NO_LMR
+        int lateMoveReduction = SEARCH_TYPE != SearchType::ROOT
+          && childDepth >= 3
+          && move->capture == ColoredPiece::NO_COLORED_PIECE
+          && move->piece != Piece::PAWN
+          && numQuietMovesSearched >= 4
+          && !inCheck;
+        lateMoveReduction += numQuietMovesSearched > 10 ? 1 : 0;
+        const int reducedChildDepth = std::max(childDepth - lateMoveReduction, 0);
+      #else
+        const int reducedChildDepth = childDepth;
+      #endif
 
       eval = to_parent_eval(negamax<opposite_color<TURN>(), SearchType::NULL_WINDOW_SEARCH>(thread, reducedChildDepth, to_child_eval(alpha + 1), to_child_eval(alpha), plyFromRoot + 1, frame + 1, stopThinking).evaluation);
       if (eval.value > alpha.value) {
