@@ -428,6 +428,22 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     return NegamaxResult<TURN>(kNullMove, beta);
   }
 
+
+  if (SEARCH_TYPE != SearchType::ROOT && stopThinking->load()) {
+    if (IS_PRINT_NODE) {
+      std::cout << repeat("  ", plyFromRoot) << "Returning (Search stopped externally)." << std::endl;
+    }
+    return NegamaxResult<TURN>(kNullMove, originalAlpha);
+  }
+
+  // TODO: We need to check this *after* we do the checkmate test above, since you can win on the 50th move.
+  if (thread->position_.is_draw_assuming_no_checkmate(plyFromRoot) || thread->position_.is_material_draw()) {
+    if (IS_PRINT_NODE) {
+      std::cout << repeat("  ", plyFromRoot) << "Returning (Draw detected)." << std::endl;
+    }
+    return NegamaxResult<TURN>(kNullMove, ColoredEvaluation<TURN>(kDraw).clamp_(originalAlpha, beta));
+  }
+
   // Transposition Table probe
   TTEntry entry;
   if (thread->tt_->probe(key, entry)) {
@@ -459,21 +475,6 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     }
   } else {
     entry.bestMove = kNullMove;
-  }
-
-  if (SEARCH_TYPE != SearchType::ROOT && stopThinking->load()) {
-    if (IS_PRINT_NODE) {
-      std::cout << repeat("  ", plyFromRoot) << "Returning (Search stopped externally)." << std::endl;
-    }
-    return NegamaxResult<TURN>(entry.bestMove, originalAlpha);
-  }
-
-  // TODO: We need to check this *after* we do the checkmate test above, since you can win on the 50th move.
-  if (thread->position_.is_draw_assuming_no_checkmate(plyFromRoot) || thread->position_.is_material_draw()) {
-    if (IS_PRINT_NODE) {
-      std::cout << repeat("  ", plyFromRoot) << "Returning (Draw detected)." << std::endl;
-    }
-    return NegamaxResult<TURN>(kNullMove, ColoredEvaluation<TURN>(kDraw).clamp_(originalAlpha, beta));
   }
 
   thread->nodeCount_++;
