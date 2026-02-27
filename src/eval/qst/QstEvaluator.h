@@ -665,11 +665,11 @@ struct QstEvaluator : public EvaluatorInterface {
     return ColoredEvaluation<US>(eval / 18);
   }
 
-  ColoredEvaluation<Color::WHITE> evaluate_white(const Position& pos, const Threats& threats, int plyFromRoot) override {
+  ColoredEvaluation<Color::WHITE> evaluate_white(const Position& pos, const Threats& threats, int plyFromRoot, ColoredEvaluation<Color::WHITE> alpha, ColoredEvaluation<Color::WHITE> beta) override {
     return evaluate<Color::WHITE>(pos, threats);
   }
 
-  ColoredEvaluation<Color::BLACK> evaluate_black(const Position& pos, const Threats& threats, int plyFromRoot) override {
+  ColoredEvaluation<Color::BLACK> evaluate_black(const Position& pos, const Threats& threats, int plyFromRoot, ColoredEvaluation<Color::BLACK> alpha, ColoredEvaluation<Color::BLACK> beta) override {
     return evaluate<Color::BLACK>(pos, threats);
   }
 

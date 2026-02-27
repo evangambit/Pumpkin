@@ -134,11 +134,11 @@ struct NegamaxResult {
 };
 
 template<Color TURN>
-ColoredEvaluation<TURN> evaluate(std::shared_ptr<EvaluatorInterface> evaluator, const Position& pos, const Threats& threats, int plyFromRoot) {
+ColoredEvaluation<TURN> evaluate(std::shared_ptr<EvaluatorInterface> evaluator, const Position& pos, const Threats& threats, int plyFromRoot, ColoredEvaluation<TURN> alpha, ColoredEvaluation<TURN> beta) {
   if constexpr (TURN == Color::WHITE) {
-    return ColoredEvaluation<TURN>(evaluator->evaluate_white(pos, threats, plyFromRoot));
+    return evaluator->evaluate_white(pos, threats, plyFromRoot, alpha, beta);
   } else {
-    return ColoredEvaluation<TURN>(evaluator->evaluate_black(pos, threats, plyFromRoot));
+    return evaluator->evaluate_black(pos, threats, plyFromRoot, alpha, beta);
   }
 }
 
@@ -201,7 +201,7 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
     }
     Threats threats;
     create_threats(thread->position_.pieceBitboards_, thread->position_.colorBitboards_, &threats);
-    return NegamaxResult<TURN>(kNullMove, evaluate<TURN>(thread->position_.evaluator_, thread->position_, threats, plyFromRoot).clamp_(alpha, beta));
+    return NegamaxResult<TURN>(kNullMove, evaluate<TURN>(thread->position_.evaluator_, thread->position_, threats, plyFromRoot, alpha, beta).clamp_(alpha, beta));
   }
 
   // Transposition Table probe
@@ -259,7 +259,7 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
 
   Threats threats;
   create_threats(thread->position_.pieceBitboards_, thread->position_.colorBitboards_, &threats);
-  NegamaxResult<TURN> bestResult(kNullMove, evaluate<TURN>(thread->position_.evaluator_, thread->position_, threats, plyFromRoot).clamp_(alpha, beta));
+  NegamaxResult<TURN> bestResult(kNullMove, evaluate<TURN>(thread->position_.evaluator_, thread->position_, threats, plyFromRoot, alpha, beta).clamp_(alpha, beta));
   if (IS_PRINT_QNODE) {
     std::cout << repeat("  ", plyFromRoot) << "Static evaluation: " << bestResult.evaluation.value << " (hash = " << frame->hash << ")" << std::endl;
   }
@@ -597,7 +597,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
       make_move<TURN>(&thread->position_, move->move);
       Threats childThreats;
       create_threats(thread->position_.pieceBitboards_, thread->position_.colorBitboards_, &childThreats);
-      staticScores[move - moves] = -evaluate<opposite_color<TURN>()>(thread->position_.evaluator_, thread->position_, childThreats, plyFromRoot + 1);
+      staticScores[move - moves] = -evaluate<opposite_color<TURN>()>(thread->position_.evaluator_, thread->position_, childThreats, plyFromRoot + 1, to_child_eval(beta), to_child_eval(alpha));
       undo<TURN>(&thread->position_);
       low = std::min<int32_t>(low, staticScores[move - moves].value);
       high = std::max<int32_t>(high, staticScores[move - moves].value);

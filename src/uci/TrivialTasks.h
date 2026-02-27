@@ -114,10 +114,10 @@ struct EvalTask : public Task {
       Threats threats;
       create_threats(pos.pieceBitboards_, pos.colorBitboards_, &threats);
       if (pos.turn_ == Color::WHITE) {
-        ColoredEvaluation<WHITE> eval = evaluate<WHITE>(pos.evaluator_, pos, threats, 0);
+        ColoredEvaluation<WHITE> eval = evaluate<WHITE>(pos.evaluator_, pos, threats, 0, ColoredEvaluation<WHITE>(kMinEval), ColoredEvaluation<WHITE>(kMaxEval));
         std::cout << eval.value << " (white) (" << pos.evaluator_->to_string() << ")" << std::endl;
       } else {
-        ColoredEvaluation<BLACK> eval = evaluate<BLACK>(pos.evaluator_, pos, threats, 0);
+        ColoredEvaluation<BLACK> eval = evaluate<BLACK>(pos.evaluator_, pos, threats, 0, ColoredEvaluation<BLACK>(kMinEval), ColoredEvaluation<BLACK>(kMaxEval));
         std::cout << eval.value << " (black) (" << pos.evaluator_->to_string() << ")" << std::endl;
       }
       return;
@@ -134,9 +134,9 @@ struct EvalTask : public Task {
       Threats threats;
       create_threats(pos.pieceBitboards_, pos.colorBitboards_, &threats);
       if (pos.turn_ == Color::BLACK) {
-        move->score = -evaluate<BLACK>(pos.evaluator_, pos, threats, 0).value;
+        move->score = -evaluate<BLACK>(pos.evaluator_, pos, threats, 0, ColoredEvaluation<BLACK>(kMinEval), ColoredEvaluation<BLACK>(kMaxEval)).value;
       } else {
-        move->score = evaluate<WHITE>(pos.evaluator_, pos, threats, 0).value;
+        move->score = evaluate<WHITE>(pos.evaluator_, pos, threats, 0, ColoredEvaluation<WHITE>(kMinEval), ColoredEvaluation<WHITE>(kMaxEval)).value;
       }
       ez_undo(&pos);
     }
@@ -186,7 +186,7 @@ struct FenErrorTask : public Task {
       p.set_listener(state->position.evaluator_->clone());
       Threats threats;
       create_threats(p.pieceBitboards_, p.colorBitboards_, &threats);
-      ColoredEvaluation<WHITE> eval = evaluate<WHITE>(p.evaluator_, p, threats, 0);
+      ColoredEvaluation<WHITE> eval = evaluate<WHITE>(p.evaluator_, p, threats, 0, ColoredEvaluation<WHITE>(kMinEval), ColoredEvaluation<WHITE>(kMaxEval));
       
       float actual = NNUE::sigmoid(eval.value / float(1 << NNUE::SCALE_SHIFT));
       float error = std::abs(expected - actual);
@@ -380,10 +380,10 @@ class NnueEvalDebugTask : public Task {
 
     float value;
     if (pos.turn_ == Color::WHITE) {
-      ColoredEvaluation<WHITE> eval = evaluate<WHITE>(evaluator, pos, threats, 0);
+      ColoredEvaluation<WHITE> eval = evaluate<WHITE>(evaluator, pos, threats, 0, ColoredEvaluation<WHITE>(kMinEval), ColoredEvaluation<WHITE>(kMaxEval));
       value = float(eval.value) / float(1 << NNUE::SCALE_SHIFT);
     } else {
-      ColoredEvaluation<BLACK> eval = evaluate<BLACK>(evaluator, pos, threats, 0);
+      ColoredEvaluation<BLACK> eval = evaluate<BLACK>(evaluator, pos, threats, 0, ColoredEvaluation<BLACK>(kMinEval), ColoredEvaluation<BLACK>(kMaxEval));
       value = float(eval.value) / float(1 << NNUE::SCALE_SHIFT);
     }
     const auto& whiteAcc = evaluator->frames[1].whiteAcc;

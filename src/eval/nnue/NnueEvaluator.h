@@ -82,19 +82,19 @@ struct NnueEvaluator : public EvaluatorInterface {
 
   // EvaluatorInterface
 
-  ColoredEvaluation<Color::WHITE> evaluate_white(const Position& pos, const Threats& threats, int plyFromRoot) override {
+  ColoredEvaluation<Color::WHITE> evaluate_white(const Position& pos, const Threats& threats, int plyFromRoot, ColoredEvaluation<Color::WHITE> alpha, ColoredEvaluation<Color::WHITE> beta) override {
     assert(pos.turn_ == Color::WHITE);
-    Evaluation eval = _evaluate(pos, threats, plyFromRoot, true);
+    Evaluation eval = _evaluate(pos, threats, plyFromRoot, true, alpha.value, beta.value);
     return ColoredEvaluation<Color::WHITE>(eval);
   }
-  ColoredEvaluation<Color::BLACK> evaluate_black(const Position& pos, const Threats& threats, int plyFromRoot) override {
+  ColoredEvaluation<Color::BLACK> evaluate_black(const Position& pos, const Threats& threats, int plyFromRoot, ColoredEvaluation<Color::BLACK> alpha, ColoredEvaluation<Color::BLACK> beta) override {
     assert(pos.turn_ == Color::BLACK);
-    Evaluation eval = _evaluate(pos, threats, plyFromRoot, true);
+    Evaluation eval = _evaluate(pos, threats, plyFromRoot, true, alpha.value, beta.value);
     return ColoredEvaluation<Color::BLACK>(eval);
   }
   
   void update_accumulator(const Position& pos, const Threats& threats, int plyFromRoot) override {
-    _evaluate(pos, threats, plyFromRoot, false);
+    _evaluate(pos, threats, plyFromRoot, false, kMinEval, kMaxEval);
   }
 
   bool _is_material_draw(const Position& pos) const {
@@ -142,7 +142,7 @@ struct NnueEvaluator : public EvaluatorInterface {
     }
   }
 
-  Evaluation _evaluate(const Position& pos, const Threats& threats, int plyFromRoot, bool compute_score) {
+  Evaluation _evaluate(const Position& pos, const Threats& threats, int plyFromRoot, bool compute_score, Evaluation alpha, Evaluation beta) {
     if (_is_material_draw(pos)) {
       if (compute_score) {
         return Evaluation(0);
