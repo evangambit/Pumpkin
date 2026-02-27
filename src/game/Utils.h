@@ -32,6 +32,8 @@ constexpr Evaluation kMissingKing = kMinEval + 1;  // -32766
 constexpr Evaluation kCheckmate = kMissingKing + 1;  // -32765
 constexpr Evaluation kLongestForcedMate = kCheckmate + 100;    // -32665
 
+constexpr Evaluation kDraw = 0;
+
 std::string eval2str(Evaluation eval);
 
 // Current record is 218 but we're conservative

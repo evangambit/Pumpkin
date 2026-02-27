@@ -60,9 +60,9 @@ Data comes from https://huggingface.co/datasets/official-stockfish/fishtest_pgns
 
 /usr/local/go/bin/go install github.com/google/pprof@latest
 
-    sh build.sh uci src/uci/main.cpp $(pkg-config --cflags --libs libprofiler)
+    sh build.sh uci src/uci/main.cpp $(pkg-config --cflags --libs libprofiler) -DNDEBUG -O3
 
-    CPUPROFILE=/tmp/prof.out ./uci "move e2e4 c7c5 g1f3 d7d6" "go depth 8" "lazyquit"
+    CPUPROFILE=/tmp/prof.out ./uci "evaluator nnue" "move e2e4 c7c5 g1f3 d7d6" "go depth 8" "lazyquit"
 
     ~/go/bin/pprof -png ./uci /tmp/prof.out
 
