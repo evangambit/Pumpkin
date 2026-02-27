@@ -17,14 +17,14 @@ struct PieceSquareEvaluator : public EvaluatorInterface {
 
   PieceSquareEvaluator() : early(0), late(0) {}
 
-  ColoredEvaluation<Color::WHITE> evaluate_white(const Position& pos, const Threats& threats, int plyFromRoot) override {
+  ColoredEvaluation<Color::WHITE> evaluate_white(const Position& pos, const Threats& threats, int plyFromRoot, ColoredEvaluation<Color::WHITE> alpha, ColoredEvaluation<Color::WHITE> beta) override {
     int32_t stage = earliness(pos);
     int32_t eval = early * stage + late * (16 - stage);
     return ColoredEvaluation<Color::WHITE>(eval / 16);
   }
 
-  ColoredEvaluation<Color::BLACK> evaluate_black(const Position& pos, const Threats& threats, int plyFromRoot) override {
-    return -evaluate_white(pos, threats, plyFromRoot);
+  ColoredEvaluation<Color::BLACK> evaluate_black(const Position& pos, const Threats& threats, int plyFromRoot, ColoredEvaluation<Color::BLACK> alpha, ColoredEvaluation<Color::BLACK> beta) override {
+    return -evaluate_white(pos, threats, plyFromRoot, -beta, -alpha);
   }
 
   std::shared_ptr<EvaluatorInterface> clone() const override {
