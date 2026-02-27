@@ -714,12 +714,13 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
 
     if (move->move != moves[0].move && (SEARCH_TYPE != SearchType::ROOT || thread->multiPV_ == 1)) {
       // Very conservative late move reduction (115.2 +/- 103.0, LOS: 99.0 %)
-      const int reduction = SEARCH_TYPE != SearchType::ROOT
+      int reduction = SEARCH_TYPE != SearchType::ROOT
         && childDepth >= 3
         && move->capture == ColoredPiece::NO_COLORED_PIECE
         && move->piece != Piece::PAWN
-        && numQuietMovesSearched >= 10
+        && numQuietMovesSearched >= 4
         && !inCheck;
+      reduction += numQuietMovesSearched > 10 ? 1 : 0;
       const int reducedChildDepth = std::max(childDepth - reduction, 0);
 
       eval = to_parent_eval(negamax<opposite_color<TURN>(), SearchType::NULL_WINDOW_SEARCH>(thread, reducedChildDepth, to_child_eval(alpha + 1), to_child_eval(alpha), plyFromRoot + 1, frame + 1, stopThinking).evaluation);
