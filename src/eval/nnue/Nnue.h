@@ -666,6 +666,10 @@ struct Nnue {
   Vector<OUTPUT_DIM, T> bias2;
   Vector<OUTPUT_DIM, T> output;
 
+  Matrix<OUTPUT_DIM, EMBEDDING_DIM * 2, int8_t> shortcutLayer;
+  Vector<OUTPUT_DIM, T> shortcutBias;
+  Vector<OUTPUT_DIM, T> shortcutOutput;
+
   Vector<EMBEDDING_DIM, T> clippedMover;
   Vector<EMBEDDING_DIM, T> clippedOpponent;
 
@@ -675,6 +679,9 @@ struct Nnue {
     layer2.setZero();
     bias2.setZero();
     output.setZero();
+    shortcutLayer.setZero();
+    shortcutBias.setZero();
+    shortcutOutput.setZero();
   }
 
   void increment(Vector<EMBEDDING_DIM, T> *whiteAcc, Vector<EMBEDDING_DIM, T> *blackAcc, size_t index) {
@@ -707,6 +714,8 @@ struct Nnue {
     bias1.load_from_stream(in);
     layer2.load_from_stream(in);
     bias2.load_from_stream(in);
+    shortcutLayer.load_from_stream(in);
+    shortcutBias.load_from_stream(in);
 
     // Verify that the entire file has been read
     char dummy;
@@ -724,15 +733,85 @@ struct Nnue {
     bias1.randn_();
     layer2.randn_();
     bias2.randn_();
+    shortcutLayer.randn_();
+    shortcutBias.randn_();
   }
 
-  T *forward(const Vector<EMBEDDING_DIM, T>& mover, const Vector<EMBEDDING_DIM, T>& opponent) {
+  T *short_forward(const Vector<EMBEDDING_DIM, T>& mover, const Vector<EMBEDDING_DIM, T>& opponent) {
+    if constexpr (std::is_same<T, int16_t>::value) {
+      Vector<EMBEDDING_DIM, int8_t> qmover;
+      Vector<EMBEDDING_DIM, int8_t> qopponent;
+#if defined(__ARM_NEON) || defined(__aarch64__)
+      for (size_t j = 0; j < EMBEDDING_DIM; j += 16) {
+        int16x8_t m0 = vld1q_s16(reinterpret_cast<const int16_t*>(&clippedMover.data[j]));
+        int16x8_t m1 = vld1q_s16(reinterpret_cast<const int16_t*>(&clippedMover.data[j + 8]));
+        int8x8_t mq0 = vqshrn_n_s16(m0, 2);
+        int8x8_t mq1 = vqshrn_n_s16(m1, 2);
+        vst1q_s8(&qmover.data[j], vcombine_s8(mq0, mq1));
+
+        int16x8_t o0 = vld1q_s16(reinterpret_cast<const int16_t*>(&clippedOpponent.data[j]));
+        int16x8_t o1 = vld1q_s16(reinterpret_cast<const int16_t*>(&clippedOpponent.data[j + 8]));
+        int8x8_t oq0 = vqshrn_n_s16(o0, 2);
+        int8x8_t oq1 = vqshrn_n_s16(o1, 2);
+        vst1q_s8(&qopponent.data[j], vcombine_s8(oq0, oq1));
+      }
+#elif defined(__AVX2__)
+      for (size_t j = 0; j < EMBEDDING_DIM; j += 32) {
+        __m256i m0 = _mm256_load_si256((const __m256i*)&clippedMover.data[j]);
+        __m256i m1 = _mm256_load_si256((const __m256i*)&clippedMover.data[j + 16]);
+        
+        m0 = _mm256_srai_epi16(m0, 2);
+        m1 = _mm256_srai_epi16(m1, 2);
+        
+        __m256i packed = _mm256_packs_epi16(m0, m1);
+        __m256i ordered = _mm256_permute4x64_epi64(packed, _MM_SHUFFLE(3, 1, 2, 0));
+        _mm256_store_si256((__m256i*)&qmover.data[j], ordered);
+
+        __m256i o0 = _mm256_load_si256((const __m256i*)&clippedOpponent.data[j]);
+        __m256i o1 = _mm256_load_si256((const __m256i*)&clippedOpponent.data[j + 16]);
+        o0 = _mm256_srai_epi16(o0, 2);
+        o1 = _mm256_srai_epi16(o1, 2);
+        __m256i opacked = _mm256_packs_epi16(o0, o1);
+        __m256i oordered = _mm256_permute4x64_epi64(opacked, _MM_SHUFFLE(3, 1, 2, 0));
+        _mm256_store_si256((__m256i*)&qopponent.data[j], oordered);
+      }
+#else
+      for (size_t j = 0; j < EMBEDDING_DIM; ++j) {
+        qmover.data[j] = std::max<int16_t>(-(1 << 7), std::min<int16_t>((1 << 7) - 1, clippedMover.data[j] >> 2));
+        qopponent.data[j] = std::max<int16_t>(-(1 << 7), std::min<int16_t>((1 << 7) - 1, clippedOpponent.data[j] >> 2));
+      }
+#endif
+      concat_and_matmul_int8<OUTPUT_DIM, EMBEDDING_DIM * 2, EMBEDDING_DIM, EMBEDDING_DIM>(
+          shortcutLayer, qmover, qopponent, reinterpret_cast<Vector<OUTPUT_DIM, int16_t>*>(&shortcutOutput));
+    } else {
+      // Float implementation is for debugging. It is not intended to be highly optimized.
+      concat_and_matmul<OUTPUT_DIM, EMBEDDING_DIM * 2, EMBEDDING_DIM, EMBEDDING_DIM>(
+          shortcutLayer, clippedMover, clippedOpponent, reinterpret_cast<Vector<OUTPUT_DIM, float>*>(&shortcutOutput));
+    }
+  
+    shortcutOutput += shortcutBias;
+    return this->shortcutOutput.data_ptr();
+  }
+
+  T *forward(const Vector<EMBEDDING_DIM, T>& mover, const Vector<EMBEDDING_DIM, T>& opponent, T alpha, T beta) {
     this->clippedMover = mover;
     this->clippedOpponent = opponent;
     
     constexpr T maxValue = std::is_same<T, float>::value ? T(1) : T(1 << SCALE_SHIFT);
     this->clippedMover.clip_(T(0), maxValue);
     this->clippedOpponent.clip_(T(0), maxValue);
+
+    #ifndef NO_FAST_EVAL
+    T *fastEval = this->short_forward(mover, opponent);
+    if constexpr (std::is_same<T, int16_t>::value) {
+      constexpr int32_t buffer = int32_t(0.05 * (1 << SCALE_SHIFT));
+      if (fastEval[0] > int32_t(beta) + buffer || fastEval[0] < int32_t(alpha) - buffer) {
+        return fastEval;
+      }
+    } else {
+      // Shortcut is ignored for float.
+    }
+    #endif
     
     if constexpr (std::is_same<T, int16_t>::value) {
       Vector<EMBEDDING_DIM, int8_t> qmover;
@@ -802,6 +881,8 @@ struct Nnue {
     copy->bias1 = this->bias1;
     copy->layer2 = this->layer2;
     copy->bias2 = this->bias2;
+    copy->shortcutLayer = this->shortcutLayer;
+    copy->shortcutBias = this->shortcutBias;
     return copy;
   }
 };

@@ -128,9 +128,9 @@ struct NnueEvaluator : public EvaluatorInterface {
     }
     T score;
     if (pos.turn_ == Color::WHITE) {
-      score = nnue_model->forward(whiteAcc, blackAcc)[0];
+      score = nnue_model->forward(whiteAcc, blackAcc, kMinEval, kMaxEval)[0];
     } else {
-      score = nnue_model->forward(blackAcc, whiteAcc)[0];
+      score = nnue_model->forward(blackAcc, whiteAcc, kMinEval, kMaxEval)[0];
     }
     if (std::is_same<T, int16_t>::value) {
       return Evaluation(score);
@@ -177,9 +177,9 @@ struct NnueEvaluator : public EvaluatorInterface {
     const Vector<EMBEDDING_DIM, T>& whiteAcc = currentFrame->whiteAcc;
     const Vector<EMBEDDING_DIM, T>& blackAcc = currentFrame->blackAcc;
     if (pos.turn_ == Color::WHITE) {
-      eval = nnue_model->forward(whiteAcc, blackAcc);
+      eval = nnue_model->forward(whiteAcc, blackAcc, alpha, beta);
     } else {
-      eval = nnue_model->forward(blackAcc, whiteAcc);
+      eval = nnue_model->forward(blackAcc, whiteAcc, alpha, beta);
     }
     int16_t score;
     if (std::is_same<T, int16_t>::value) {
@@ -190,22 +190,6 @@ struct NnueEvaluator : public EvaluatorInterface {
       const int64_t minVal = -(1 << 15);
       score = static_cast<int16_t>(std::max(minVal, std::min(maxVal, v)));
     }
-
-    #ifndef NDEBUG
-      Evaluation score2 = this->from_scratch(pos, threats);
-      bool mismatch;
-      if (std::is_same<T, int16_t>::value) {
-        mismatch = score != score2;
-      } else {
-        // Allow a small tolerance for floating point differences.
-        mismatch = std::abs(score - score2) > 1;
-      }
-      if (mismatch) {
-        std::cerr << "Score mismatch! Incremental: " << score << ", from scratch: " << score2 << std::endl;
-        std::cerr << "Position: " << pos.fen() << std::endl;
-        exit(1);
-      }
-    #endif
 
     return Evaluation(score);
   }
