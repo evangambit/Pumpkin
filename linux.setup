@@ -5,6 +5,10 @@ sudo dnf install gflags-devel zlib-devel -y
 # For debugging
 sudo dnf install gdb -y
 
+# For progress bar while shuffling.
+sudo dnf install pv  # or 'sudo yum install pv'
+
+
 git clone https://github.com/evangambit/Pumpkin.git
 
 
@@ -53,3 +57,7 @@ cd ~/Pumpkin
 -draw number=40
 
 
+pip install huggingface-hub
+python3 download.py
+./p2f --input_path=pgns/ --dedup_cache_size=50000 > data/pos.txt
+shuf data/pos.txt | pv -l -s $(wc -l < data/pos.txt) > data/pos.shuf.txt
