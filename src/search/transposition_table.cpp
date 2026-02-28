@@ -62,7 +62,7 @@ void TranspositionTable::store(uint64_t key, Move bestMove, int depth, int value
 bool TranspositionTable::probe(uint64_t key, TTEntry& entry) const {
   size_t idx = key % table_.size();
   const TTEntry& found = table_[idx];
-  if (found.generation == generation_ && found.key == key) {
+  if (found.key == key) {
     entry = found;
     return true;
   }
