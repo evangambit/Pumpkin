@@ -82,7 +82,7 @@ SearchResult<TURN> negamax_result_to_search_result(const NegamaxResult<TURN>& re
   std::vector<Variation<TURN>> convertedPVs;
   for (const auto& pv : thread->primaryVariations_) {
     std::vector<Move> moves;
-    extract_variation_from_tt(thread->position_, thread->tt_, &moves, pv.first);
+      extract_variation_from_tt(thread->position_, thread->tt_, &moves, pv.first);
     convertedPVs.push_back(Variation<TURN>(moves, ColoredEvaluation<TURN>(pv.second)));
   }
   return SearchResult<TURN>(
@@ -122,15 +122,31 @@ SearchResult<TURN> search(Thread* thread, std::atomic<bool> *stopThinking, std::
     if (stopThinking->load()) {
       break;
     }
-    result = negamax<TURN, SearchType::ROOT>(
-      thread,
-      i,
-      /*alpha=*/ColoredEvaluation<TURN>(kMinEval),
-      /*beta=*/ColoredEvaluation<TURN>(kMaxEval),
-      /*plyFromRoot=*/0,
-      &thread->frames_[0],
-      stopThinking
-    );
+    // Experiment results:
+    //  1 Win50     :     7.6    3.7  1233.5    2400    51
+    //  2 Win25     :    -0.5    3.8  1198.0    2400    50
+    //  3 Win100    :    -1.1    3.7  1195.0    2400    50
+    //  4 Old       :    -6.0    3.7  1173.5    2400    49
+    ColoredEvaluation<TURN> alpha = lastResult.evaluation - 50;
+    ColoredEvaluation<TURN> beta = lastResult.evaluation + 50;
+    while (true) {
+      result = negamax<TURN, SearchType::ROOT>(
+        thread,
+        i,
+        /*alpha=*/alpha,
+        /*beta=*/beta,
+        /*plyFromRoot=*/0,
+        &thread->frames_[0],
+        stopThinking
+      );
+      if (result.evaluation <= alpha) {
+        alpha = ColoredEvaluation<TURN>(kMinEval);
+      } else if (result.evaluation >= beta) {
+        beta = ColoredEvaluation<TURN>(kMaxEval);
+      } else {
+        break;
+      }
+    }
     searchResult = negamax_result_to_search_result<TURN>(result, thread);
     // TODO: why do we need "searchResult.bestMove == kNullMove" in the condition?
     if (stopThinking->load() || searchResult.bestMove == kNullMove) {
