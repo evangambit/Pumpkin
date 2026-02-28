@@ -39,6 +39,10 @@
 // #define IS_PRINT_QNODE ((frame - quiescenceDepth)->hash == 17514877330620511575ULL)
 #endif
 
+#ifndef FUTILITY_MARGIN
+#define FUTILITY_MARGIN 0  // 0 -> disabled
+#endif
+
 namespace ChessEngine {
 
 /**
@@ -513,12 +517,12 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   }
 
   constexpr ColoredPiece enemyKing = coloredPiece<opposite_color<TURN>(), Piece::KING>();
+  constexpr ColoredPiece moverKing = coloredPiece<TURN, Piece::KING>();
+  const bool inCheck = can_enemy_attack<TURN>(
+    thread->position_,
+    lsb_i_promise_board_is_not_empty(thread->position_.pieceBitboards_[moverKing])
+  );
   if (moves == end) {
-    constexpr ColoredPiece moverKing = coloredPiece<TURN, Piece::KING>();
-    const bool inCheck = can_enemy_attack<TURN>(
-      thread->position_,
-      lsb_i_promise_board_is_not_empty(thread->position_.pieceBitboards_[moverKing])
-    );
     if (inCheck) {
       if (IS_PRINT_NODE) {
         std::cout << repeat("  ", plyFromRoot) << "Returning (Checkmate detected)." << std::endl;
@@ -532,6 +536,21 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     }
   }
 
+  // Compute futilityPruning boolean.
+  Threats threats;
+  create_threats(thread->position_.pieceBitboards_, thread->position_.colorBitboards_, &threats);
+  bool futilityPruning = false;
+  ColoredEvaluation<TURN> staticEval;
+  #if FUTILITY_MARGIN > 0
+    if (depth == 1 && !inCheck) {
+      staticEval = evaluate<TURN>(thread->position_.evaluator_, thread->position_, threats, plyFromRoot, alpha, beta);
+      if (staticEval + FUTILITY_MARGIN <= alpha) {
+        futilityPruning = true;
+      }
+    }
+  #endif
+
+
   // Internal Iterative Deepening.
   #ifndef NO_IID
     // If we don't have a best move from the TT, we compute one with reduced depth.
@@ -543,8 +562,6 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   #endif
 
   // Add score to each move.
-  Threats threats;
-  create_threats(thread->position_.pieceBitboards_, thread->position_.colorBitboards_, &threats);
   // We never call evaluate in interior nodes, but it behooves us to keep the accumulator
   // up to date so our children/grandchildren can benefit from it.
   thread->position_.evaluator_->update_accumulator(thread->position_, threats, plyFromRoot);
@@ -561,12 +578,6 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     900,  // QUEEN
     2000 // KING
   };
-
-  constexpr ColoredPiece moverKing = coloredPiece<TURN, Piece::KING>();
-  const bool inCheck = can_enemy_attack<TURN>(
-    thread->position_,
-    lsb_i_promise_board_is_not_empty(thread->position_.pieceBitboards_[moverKing])
-  );
 
   // Null move pruning.
   // This is roughly equivalent to having twice as much time.
@@ -687,6 +698,25 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
       }
       continue;
     }
+
+    // Make sure we only skip quiet moves (no captures, no promotions)
+    #if FUTILITY_MARGIN > 0
+      bool isQuiet = (move->capture == ColoredPiece::NO_COLORED_PIECE) && (move->move.moveType != MoveType::PROMOTION);
+      // If the node is futile, skip quiet moves
+      if (futilityPruning && isQuiet) {
+        // We still need to fold the assumed value into our bestResult
+        // just in case ALL moves are pruned and we fail low!
+        if (staticEval > bestResult.evaluation) {
+          bestResult.evaluation = staticEval;
+        }
+        
+        if (IS_PRINT_NODE) {
+          std::cout << repeat("  ", plyFromRoot) << "Skipping move due to futility pruning: " << move->move.uci() << std::endl;
+        }
+        continue; // Skip the rest of the loop for this quiet move
+      }
+    #endif
+
     make_move<TURN>(&thread->position_, move->move);
 
     const bool inCheck = can_enemy_attack<TURN>(
@@ -702,6 +732,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
       undo<TURN>(&thread->position_);
       continue;
     }
+
 
     ColoredEvaluation<TURN> eval;
     int childDepth = depth - 1;
