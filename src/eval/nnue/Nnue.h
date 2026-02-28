@@ -1,6 +1,7 @@
 #ifndef SRC_EVAL_NNUE_NNUE_H
 #define SRC_EVAL_NNUE_NNUE_H
 
+#include "NnueFeatureBitmapType.h"
 #include <cstddef>
 #include <cstdint>
 #include <algorithm>
@@ -382,11 +383,9 @@ inline void matmul(Matrix<HEIGHT, WIDTH, int16_t>& mat, const Vector<WIDTH, int1
   for (size_t i = 0; i < HEIGHT; ++i) {
     int32_t sum = 0;
 #if defined(__ARM_NEON) || defined(__aarch64__)
-    int32x4_t sum0 = vdupq_n_s32(0);
-    int32x4_t sum1 = vdupq_n_s32(0);
-    int32x4_t sum2 = vdupq_n_s32(0);
-    int32x4_t sum3 = vdupq_n_s32(0);
-    for (size_t j = 0; j < WIDTH; j += 32) {
+    int32x4_t sum_vec = vdupq_n_s32(0);
+    size_t j = 0;
+    for (; j + 31 < WIDTH; j += 32) {
       int16x8_t m0 = vld1q_s16(&mat.data[i * WIDTH + j]);
       int16x8_t v0 = vld1q_s16(&vec.data[j]);
       int16x8_t m1 = vld1q_s16(&mat.data[i * WIDTH + j + 8]);
@@ -396,37 +395,62 @@ inline void matmul(Matrix<HEIGHT, WIDTH, int16_t>& mat, const Vector<WIDTH, int1
       int16x8_t m3 = vld1q_s16(&mat.data[i * WIDTH + j + 24]);
       int16x8_t v3 = vld1q_s16(&vec.data[j + 24]);
 
-      sum0 = vmlal_s16(sum0, vget_low_s16(m0), vget_low_s16(v0));
-      sum0 = vmlal_s16(sum0, vget_high_s16(m0), vget_high_s16(v0));
+      sum_vec = vmlal_s16(sum_vec, vget_low_s16(m0), vget_low_s16(v0));
+      sum_vec = vmlal_s16(sum_vec, vget_high_s16(m0), vget_high_s16(v0));
       
-      sum1 = vmlal_s16(sum1, vget_low_s16(m1), vget_low_s16(v1));
-      sum1 = vmlal_s16(sum1, vget_high_s16(m1), vget_high_s16(v1));
+      sum_vec = vmlal_s16(sum_vec, vget_low_s16(m1), vget_low_s16(v1));
+      sum_vec = vmlal_s16(sum_vec, vget_high_s16(m1), vget_high_s16(v1));
 
-      sum2 = vmlal_s16(sum2, vget_low_s16(m2), vget_low_s16(v2));
-      sum2 = vmlal_s16(sum2, vget_high_s16(m2), vget_high_s16(v2));
+      sum_vec = vmlal_s16(sum_vec, vget_low_s16(m2), vget_low_s16(v2));
+      sum_vec = vmlal_s16(sum_vec, vget_high_s16(m2), vget_high_s16(v2));
 
-      sum3 = vmlal_s16(sum3, vget_low_s16(m3), vget_low_s16(v3));
-      sum3 = vmlal_s16(sum3, vget_high_s16(m3), vget_high_s16(v3));
+      sum_vec = vmlal_s16(sum_vec, vget_low_s16(m3), vget_low_s16(v3));
+      sum_vec = vmlal_s16(sum_vec, vget_high_s16(m3), vget_high_s16(v3));
     }
-    int32x4_t sum_vec = vaddq_s32(vaddq_s32(sum0, sum1), vaddq_s32(sum2, sum3));
+    for (; j + 15 < WIDTH; j += 16) {
+      int16x8_t m0 = vld1q_s16(&mat.data[i * WIDTH + j]);
+      int16x8_t v0 = vld1q_s16(&vec.data[j]);
+      int16x8_t m1 = vld1q_s16(&mat.data[i * WIDTH + j + 8]);
+      int16x8_t v1 = vld1q_s16(&vec.data[j + 8]);
+      sum_vec = vmlal_s16(sum_vec, vget_low_s16(m0), vget_low_s16(v0));
+      sum_vec = vmlal_s16(sum_vec, vget_high_s16(m0), vget_high_s16(v0));
+      sum_vec = vmlal_s16(sum_vec, vget_low_s16(m1), vget_low_s16(v1));
+      sum_vec = vmlal_s16(sum_vec, vget_high_s16(m1), vget_high_s16(v1));
+    }
+    for (; j + 7 < WIDTH; j += 8) {
+      int16x8_t m0 = vld1q_s16(&mat.data[i * WIDTH + j]);
+      int16x8_t v0 = vld1q_s16(&vec.data[j]);
+      sum_vec = vmlal_s16(sum_vec, vget_low_s16(m0), vget_low_s16(v0));
+      sum_vec = vmlal_s16(sum_vec, vget_high_s16(m0), vget_high_s16(v0));
+    }
     sum = vaddvq_s32(sum_vec);
+    for (; j < WIDTH; ++j) {
+      sum += static_cast<int32_t>(mat.data[i * WIDTH + j]) * static_cast<int32_t>(vec.data[j]);
+    }
 #elif defined(__AVX2__)
     __m256i sum0 = _mm256_setzero_si256();
-    __m256i sum1 = _mm256_setzero_si256();
-    for (size_t j = 0; j < WIDTH; j += 32) {
+    size_t j = 0;
+    for (; j + 31 < WIDTH; j += 32) {
       __m256i m0 = _mm256_load_si256((const __m256i*)&mat.data[i * WIDTH + j]);
       __m256i v0 = _mm256_load_si256((const __m256i*)&vec.data[j]);
       __m256i m1 = _mm256_load_si256((const __m256i*)&mat.data[i * WIDTH + j + 16]);
       __m256i v1 = _mm256_load_si256((const __m256i*)&vec.data[j + 16]);
 
       sum0 = _mm256_add_epi32(sum0, _mm256_madd_epi16(m0, v0));
-      sum1 = _mm256_add_epi32(sum1, _mm256_madd_epi16(m1, v1));
+      sum0 = _mm256_add_epi32(sum0, _mm256_madd_epi16(m1, v1));
     }
-    __m256i sum_vec_avx = _mm256_add_epi32(sum0, sum1);
-    __m128i sum128 = _mm_add_epi32(_mm256_castsi256_si128(sum_vec_avx), _mm256_extracti128_si256(sum_vec_avx, 1));
+    for (; j + 15 < WIDTH; j += 16) {
+      __m256i m0 = _mm256_load_si256((const __m256i*)&mat.data[i * WIDTH + j]);
+      __m256i v0 = _mm256_load_si256((const __m256i*)&vec.data[j]);
+      sum0 = _mm256_add_epi32(sum0, _mm256_madd_epi16(m0, v0));
+    }
+    __m128i sum128 = _mm_add_epi32(_mm256_castsi256_si128(sum0), _mm256_extracti128_si256(sum0, 1));
     sum128 = _mm_add_epi32(sum128, _mm_shuffle_epi32(sum128, _MM_SHUFFLE(1, 0, 3, 2)));
     sum128 = _mm_add_epi32(sum128, _mm_shuffle_epi32(sum128, _MM_SHUFFLE(2, 3, 0, 1)));
     sum = _mm_cvtsi128_si32(sum128);
+    for (; j < WIDTH; ++j) {
+      sum += static_cast<int32_t>(mat.data[i * WIDTH + j]) * static_cast<int32_t>(vec.data[j]);
+    }
 #else
     for (size_t j = 0; j < WIDTH; ++j) {
       sum += static_cast<int32_t>(mat.data[i * WIDTH + j]) * static_cast<int32_t>(vec.data[j]);
