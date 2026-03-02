@@ -268,7 +268,9 @@ class QuitTask : public Task {
 class StopTask : public Task {
  public:
   void start(UciEngineState *state) {
-    state->stopThinking.store(true);
+    if (state->stopThinking) {
+      state->stopThinking->store(true);
+    }
   }
 };
 
