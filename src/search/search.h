@@ -127,8 +127,9 @@ SearchResult<TURN> search(Thread* thread, std::atomic<bool> *stopThinking, std::
     //  2 Win25     :    -0.5    3.8  1198.0    2400    50
     //  3 Win100    :    -1.1    3.7  1195.0    2400    50
     //  4 Old       :    -6.0    3.7  1173.5    2400    49
-    ColoredEvaluation<TURN> alpha = lastResult.evaluation - 50;
-    ColoredEvaluation<TURN> beta = lastResult.evaluation + 50;
+    constexpr Evaluation kWindowSize = 50;
+    ColoredEvaluation<TURN> alpha = (thread->multiPV_ == 1) ? lastResult.evaluation - kWindowSize : ColoredEvaluation<TURN>(kMinEval);
+    ColoredEvaluation<TURN> beta = (thread->multiPV_ == 1) ? lastResult.evaluation + kWindowSize : ColoredEvaluation<TURN>(kMaxEval);
     while (true) {
       result = negamax<TURN, SearchType::ROOT>(
         thread,
