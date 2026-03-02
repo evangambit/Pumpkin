@@ -667,6 +667,14 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     thread->primaryVariations_.clear();
   }
 
+  const Bitboard theirTargets = (TURN == Color::WHITE) ? threats.blackTargets : threats.whiteTargets;
+  const Bitboard theirPawns = (TURN == Color::WHITE) ? 
+    thread->position_.pieceBitboards_[coloredPiece<Color::BLACK, Piece::PAWN>()] : 
+    thread->position_.pieceBitboards_[coloredPiece<Color::WHITE, Piece::PAWN>()];
+  const Bitboard aheadOfTheirPawns = ((TURN == Color::WHITE) ? 
+    southFill(theirPawns) : northFill(theirPawns)) & ~theirPawns;
+  const Bitboard ourPassedPawnMask = ~(fatten(aheadOfTheirPawns));
+
   // We use kMinEval instead of alpha so that we still get a best move, even if all moves fail low.
   // This is helpful for probing the TT to try and understand why we got a cutoff. I don't think it
   // meaningfully changes the engine's strength, since if all moves fail low, then the TT will just
@@ -707,7 +715,10 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     int childDepth = depth - 1;
 
     // Don't reduce depth for sensible captures (Elo difference: 254.7 +/- 286.2, LOS: 98.7 %)
-    if (move->capture != ColoredPiece::NO_COLORED_PIECE && cp2p(move->capture) > move->piece) {
+    bool isGoodCapture = move->capture != ColoredPiece::NO_COLORED_PIECE && cp2p(move->capture) > move->piece;
+    // Also don't reduce depth for safe passed pawn pushes.
+    bool isSafePassedPawnPush = move->piece == Piece::PAWN && (ourPassedPawnMask & ~theirTargets & bb(move->move.to)) > 0;
+    if (isGoodCapture || isSafePassedPawnPush) {
       childDepth += 1;
     }
 
