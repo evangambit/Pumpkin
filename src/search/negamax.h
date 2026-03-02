@@ -290,8 +290,9 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
     assert(cp2p(move->capture) < Piece::NUM_PIECES);
 
     move->score = kQMoveOrderingPieceValue[cp2p(move->capture)];
+    const int seeValue = see(thread->position_, move->move);
     move->score -= value_or_zero(
-      ((threats.badForOur<TURN>(move->piece) & bb(move->move.to)) > 0),
+      seeValue < 0,
       kQMoveOrderingPieceValue[move->piece]
     );
 
@@ -607,13 +608,14 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   for (ExtMove* move = moves; move < end; ++move) {
     move->score = move->move == entry.bestMove ? 16000 : -16000;
     // Prioritize captures after the TT move.
-    move->score += move->capture != ColoredPiece::NO_COLORED_PIECE ? 8000 : -8000;
+    const int seeValue = see(thread->position_, move->move);
+    move->score += move->capture != ColoredPiece::NO_COLORED_PIECE && seeValue >= 0 ? 8000 : -8000;
 
     // Ranking within captures. Bonus for capturing a high value piece, penalty for
     // taking a piece that is defended.
     move->score += kMoveOrderingPieceValue[cp2p(thread->position_.tiles_[move->move.to])];
     move->score -= value_or_zero(
-      ((threats.badForOur<TURN>(move->piece) & bb(move->move.to)) > 0)
+      seeValue < 0
       &&
       move->capture != ColoredPiece::NO_COLORED_PIECE
     , kMoveOrderingPieceValue[move->piece]);
@@ -623,7 +625,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
 
     // Penalize non-capture moves that move to a defended square.
     move->score -= value_or_zero(
-      ((threats.badForOur<TURN>(move->piece) & bb(move->move.to)) > 0)
+      seeValue < 0
       &&
       move->capture == ColoredPiece::NO_COLORED_PIECE
     , 200);

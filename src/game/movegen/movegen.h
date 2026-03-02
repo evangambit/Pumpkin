@@ -489,4 +489,6 @@ Move uci_to_move(const Position& pos, const std::string& uci);
 
 }  // namespace ChessEngine
 
+#include "see.h"
+
 #endif  // MOVEGEN_H
