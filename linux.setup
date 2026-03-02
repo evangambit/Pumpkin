@@ -48,9 +48,9 @@ cd ~/Pumpkin
 
 
 ../c-chess-cli/c-chess-cli \
--engine cmd="./uci \"evaluator nnue model.bin\" \"setoption name Overhead value 10\"" name="New" tc=3.0+0.03 option.Hash=2048 \
--engine cmd="./old \"evaluator nnue\" \"setoption name Overhead value 10\"" name="Old" tc=3.0+0.03 option.Hash=2048 \
--each -games 400 -repeat -concurrency 14 \
+-engine cmd="./a \"evaluator nnue\" \"setoption name Overhead value 10\"" name="New" tc=3.0+0.03 option.Hash=2048 \
+-engine cmd="./main \"evaluator nnue\" \"setoption name Overhead value 10\"" name="Old" tc=3.0+0.03 option.Hash=2048 \
+-each -games 1600 -repeat -concurrency 14 \
 -openings file=../UHO_4060_v4.epd order=random \
 -pgn scaling_results.pgn 3 \
 -resign count=3 score=700 \
@@ -61,3 +61,6 @@ pip install huggingface-hub
 python3 download.py
 ./p2f --input_path=pgns/ --dedup_cache_size=50000 > data/pos.txt
 shuf data/pos.txt | pv -l -s $(wc -l < data/pos.txt) > data/pos.shuf.txt
+
+zip data/chess-nnue-data.zip data/x-*
+scp -i ~/Downloads/pumpkin-ec2.pem ec2-user@18.116.26.79:/home/ec2-user/Pumpkin/data/chess-nnue-data.zip ./chess-nnue-data.zip
