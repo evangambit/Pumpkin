@@ -83,6 +83,8 @@ inline ChessEngine::Bitboard nnue_feature_to_bitboard(NnueFeatureBitmapType feat
       // open files use the 0th rank and castling rights use the 7th
       // rank). This way the same vertical symmetry that we use for
       // our piece features automatically works for these features too.
+      // We also remove passed pawns from the bitboard, since they are
+      // handled by a separate feature.
       ChessEngine::Bitboard theirPawns = pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_PAWN];
       ChessEngine::Bitboard aheadOfTheirPawns = ChessEngine::shift<ChessEngine::Direction::SOUTH>(ChessEngine::southFill(theirPawns));
       ChessEngine::Bitboard passedPawns = pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_PAWN] & ~ChessEngine::fatten(aheadOfTheirPawns);
@@ -127,6 +129,7 @@ inline ChessEngine::Bitboard nnue_feature_to_bitboard(NnueFeatureBitmapType feat
       return pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_PAWN] & ~ChessEngine::fatten(aheadOfTheirPawns);
     }
     case NF_BLACK_PAWN: {
+      // See comments for white passed pawns.
       ChessEngine::Bitboard theirPawns = pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_PAWN];
       ChessEngine::Bitboard aheadOfTheirPawns = ChessEngine::shift<ChessEngine::Direction::NORTH>(ChessEngine::northFill(theirPawns));
       ChessEngine::Bitboard passedPawns = pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_PAWN] & ~ChessEngine::fatten(aheadOfTheirPawns);
