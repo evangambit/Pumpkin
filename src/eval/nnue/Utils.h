@@ -43,10 +43,10 @@ constexpr int EMBEDDING_DIM = 1024;
 constexpr int HIDDEN1_DIM = 32;
 constexpr int OUTPUT_DIM = 1;
 
-// 32 pieces, 4 castling rights, and 32 hanging pieces.
-// We ignore tha 16 'no pawns on a file' features, since they
+// 32 pieces, 4 castling rights, 32 hanging pieces, and 16 passed pawns.
+// We ignore the 16 'no pawns on a file' features, since they
 // can only become 1 at the expense of making other features 0.
-constexpr int MAX_NUM_ONES_IN_INPUT = 32 + 4 + 32;
+constexpr int MAX_NUM_ONES_IN_INPUT = 32 + 4 + 32 + 16;
 
 constexpr int16_t NNUE_INPUT_DIM = NF_COUNT * 64;
 
@@ -83,7 +83,10 @@ inline ChessEngine::Bitboard nnue_feature_to_bitboard(NnueFeatureBitmapType feat
       // open files use the 0th rank and castling rights use the 7th
       // rank). This way the same vertical symmetry that we use for
       // our piece features automatically works for these features too.
-      ChessEngine::Bitboard r = pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_PAWN];
+      ChessEngine::Bitboard theirPawns = pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_PAWN];
+      ChessEngine::Bitboard aheadOfTheirPawns = ChessEngine::shift<ChessEngine::Direction::SOUTH>(ChessEngine::southFill(theirPawns));
+      ChessEngine::Bitboard passedPawns = pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_PAWN] & ~ChessEngine::fatten(aheadOfTheirPawns);
+      ChessEngine::Bitboard r = pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_PAWN] & ~passedPawns;
       for (int file = 0; file < 8; file++) {
         const bool noWhitePawnsOnFile = (ChessEngine::kFiles[file] & pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_PAWN]) == ChessEngine::kEmptyBitboard;
         r |= ChessEngine::bb(56 + file);
@@ -118,8 +121,16 @@ inline ChessEngine::Bitboard nnue_feature_to_bitboard(NnueFeatureBitmapType feat
       return threats.badForCp(ChessEngine::ColoredPiece::WHITE_QUEEN) & pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_QUEEN];
     case NF_WHITE_HANGING_KINGS:
       return threats.badForCp(ChessEngine::ColoredPiece::WHITE_KING) & pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_KING];
+    case NF_WHITE_PASSED_PAWN: {
+      ChessEngine::Bitboard theirPawns = pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_PAWN];
+      ChessEngine::Bitboard aheadOfTheirPawns = ChessEngine::shift<ChessEngine::Direction::SOUTH>(ChessEngine::southFill(theirPawns));
+      return pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_PAWN] & ~ChessEngine::fatten(aheadOfTheirPawns);
+    }
     case NF_BLACK_PAWN: {
-      ChessEngine::Bitboard r = pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_PAWN];
+      ChessEngine::Bitboard theirPawns = pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_PAWN];
+      ChessEngine::Bitboard aheadOfTheirPawns = ChessEngine::shift<ChessEngine::Direction::NORTH>(ChessEngine::northFill(theirPawns));
+      ChessEngine::Bitboard passedPawns = pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_PAWN] & ~ChessEngine::fatten(aheadOfTheirPawns);
+      ChessEngine::Bitboard r = pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_PAWN] & ~passedPawns;
       for (int file = 0; file < 8; file++) {
         const bool noBlackPawnsOnFile = (ChessEngine::kFiles[file] & pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_PAWN]) == ChessEngine::kEmptyBitboard;
         r |= ChessEngine::bb(file);
@@ -154,6 +165,11 @@ inline ChessEngine::Bitboard nnue_feature_to_bitboard(NnueFeatureBitmapType feat
       return threats.badForCp(ChessEngine::ColoredPiece::BLACK_QUEEN) & pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_QUEEN];
     case NF_BLACK_HANGING_KINGS:
       return threats.badForCp(ChessEngine::ColoredPiece::BLACK_KING) & pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_KING];
+    case NF_BLACK_PASSED_PAWN: {
+      ChessEngine::Bitboard theirPawns = pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_PAWN];
+      ChessEngine::Bitboard aheadOfTheirPawns = ChessEngine::shift<ChessEngine::Direction::NORTH>(ChessEngine::northFill(theirPawns));
+      return pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_PAWN] & ~ChessEngine::fatten(aheadOfTheirPawns);
+    }
     default:
       std::cerr << "Invalid NnueFeatureBitmapType: " << feature << std::endl;
   }
