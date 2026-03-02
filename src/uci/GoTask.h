@@ -161,17 +161,18 @@ class GoTask : public Task {
     );
     this->baseThreadState->depth_ = goCommand.depthLimit;
     this->baseThreadState->nodeLimit_ = goCommand.nodeLimit;
-    state->stopThinking.store(false);
+    state->stopThinking = std::make_shared<std::atomic<bool>>(false);
+    auto currentStopThinking = state->stopThinking;
     if (goCommand.timeLimitMs != (uint64_t)-1) {
       this->baseThreadState->stopTime_ = std::chrono::high_resolution_clock::now() + std::chrono::milliseconds(goCommand.timeLimitMs);
-      std::thread([state, timeLimitMs = goCommand.timeLimitMs]() {
+      std::thread([currentStopThinking, timeLimitMs = goCommand.timeLimitMs]() {
         std::this_thread::sleep_for(std::chrono::milliseconds(timeLimitMs));
-        state->stopThinking.store(true);
+        currentStopThinking->store(true);
       }).detach();
     } else {
       this->baseThreadState->stopTime_ = std::chrono::high_resolution_clock::time_point::max();
     }
-    this->thread = new std::thread(GoTask::_threaded_think, this->baseThreadState.get(), state, &isRunning, isTimeSensitive);
+    this->thread = new std::thread(GoTask::_threaded_think, this->baseThreadState.get(), state, currentStopThinking, &isRunning, isTimeSensitive);
   }
 
   bool is_running() override {
@@ -185,14 +186,14 @@ class GoTask : public Task {
     delete this->thread;
   }
 
-  static void _threaded_think(Thread* baseThread, UciEngineState* state, bool* isRunning, bool timeSensitive) {
+  static void _threaded_think(Thread* baseThread, UciEngineState* state, std::shared_ptr<std::atomic<bool>> stopThinking, bool* isRunning, bool timeSensitive) {
 
     // TODO: support more than one thread.
     Thread thread0 = *baseThread;
 
     auto startTime = std::chrono::high_resolution_clock::now();
 
-    SearchResult<Color::WHITE> result = colorless_search(&thread0, &(state->stopThinking), [state, &thread0, &startTime](int depth, SearchResult<Color::WHITE> result) {
+    SearchResult<Color::WHITE> result = colorless_search(&thread0, stopThinking.get(), [state, &thread0, &startTime](int depth, SearchResult<Color::WHITE> result) {
       auto now = std::chrono::high_resolution_clock::now();
       double secs = std::chrono::duration<double>(now - startTime).count();
       GoTask::_print_variations(depth, secs, result, state, &thread0);

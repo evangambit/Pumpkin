@@ -801,31 +801,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     // Search was stopped externally. We cannot trust the result
     // of our for loop above, so we return early to avoid writing
     // an inaccurate result to the transposition table.
-    if (thread->tt_->probe(key, entry)) {
-      if (IS_PRINT_NODE) {
-        std::cout << repeat("  ", plyFromRoot) << "Search stopped externally. Returning TT best move." << std::endl;
-      }
-      return NegamaxResult<TURN>(entry.bestMove, ColoredEvaluation<TURN>(entry.value).clamp_(originalAlpha, beta));
-    } else {
-      if (IS_PRINT_NODE) {
-        std::cout << repeat("  ", plyFromRoot) << "Search stopped externally. No TT entry found, returning null move." << std::endl;
-      }
-      if (SEARCH_TYPE == SearchType::ROOT) {
-        // Need to always return something sensible from the root.
-        // TODO: this is pretty hacky, since nodeCount is checked inside of negamax, but other conditions
-        // are checked outside of it. We should probably unify this logic better.
-        size_t nodeCount = thread->nodeCount_;
-        size_t nodeLimit = thread->nodeLimit_;
-        thread->nodeCount_ = 0;
-        thread->nodeLimit_ = 10'000'000; // Arbitrary large number to ensure we search at least a little bit.
-        std::atomic<bool> neverStop{false};
-        NegamaxResult<TURN> result = negamax<TURN, SearchType::ROOT>(thread, 1, ColoredEvaluation<TURN>(kMinEval), ColoredEvaluation<TURN>(kMaxEval), plyFromRoot, frame, &neverStop);
-        thread->nodeCount_ += nodeCount;
-        thread->nodeLimit_ = nodeLimit;
-        return result;
-      }
-      return NegamaxResult<TURN>(kNullMove, originalAlpha);
-    }
+    return bestResult;
   }
 
   // Store in Transposition Table

@@ -3,6 +3,7 @@
 
 #include "../eval/nnue/NnueEvaluator.h"
 #include "../eval/pst/PieceSquareEvaluator.h"
+#include "../search/transposition_table.h"
 
 #include <atomic>
 #include <condition_variable>
@@ -67,7 +68,7 @@ struct UciEngineState {
   std::deque<std::shared_ptr<Task>> taskQueue;
   SpinLock taskQueueLock;
   std::shared_ptr<Task> currentTask;
-  std::atomic<bool> stopThinking{false};
+  std::shared_ptr<std::atomic<bool>> stopThinking = std::make_shared<std::atomic<bool>>(false);
 
   std::shared_ptr<TranspositionTable> tt_;
 
