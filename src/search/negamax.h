@@ -605,7 +605,12 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   }
 
   for (ExtMove* move = moves; move < end; ++move) {
-    move->score = move->move == entry.bestMove ? 16000 : -16000;
+    if (move->move == entry.bestMove) {
+      move->score = kMaxEval;
+      continue;
+    }
+    move->score = 0;
+
     // Prioritize captures after the TT move.
     move->score += move->capture != ColoredPiece::NO_COLORED_PIECE ? 8000 : -8000;
 
