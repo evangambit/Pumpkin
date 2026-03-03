@@ -152,7 +152,7 @@ Position::Position(const std::string& fen) {
   
   std::vector<std::string> parts = split(fen, ' ');
   if (parts.size() != 6) {
-    throw std::runtime_error("Position::Position error 1");
+    throw std::runtime_error("Position::Position error 1, parts size: " + std::to_string(parts.size()) + " for FEN: '" + fen + "'");
   }
 
   this->_empty_();

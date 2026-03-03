@@ -1,0 +1,33 @@
+import torch
+from torch.utils.data import IterableDataset
+import os
+import glob
+from typing import List
+
+# Ensure the extension is built via setup.py
+try:
+    from _nnue_dataset import ChunkedDataset
+except ImportError:
+    raise ImportError("C++ extension _nnue_dataset not found. Please run 'python setup.py build_ext --inplace' in the nnue directory first.")
+
+class NnueDataset(IterableDataset):
+    def __init__(self, file_paths: List[str], chunk_size: int = 128):
+        super().__init__()
+        self.file_paths = file_paths
+        self.chunk_size = chunk_size
+
+    def __iter__(self):
+        worker_info = torch.utils.data.get_worker_info()
+        
+        assigned_files = self.file_paths
+        
+        # Split files across workers if using DataLoader
+        if worker_info is not None:
+            num_workers = worker_info.num_workers
+            worker_id = worker_info.id
+            assigned_files = [f for i, f in enumerate(self.file_paths) if i % num_workers == worker_id]
+            
+        if not assigned_files:
+            return iter([])
+            
+        return iter(ChunkedDataset(assigned_files, self.chunk_size))
