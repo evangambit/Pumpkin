@@ -2,6 +2,7 @@
 #define SRC_EVAL_NNUE_UTILS_H
 
 #include "NnueFeatureBitmapType.h"
+#include <vector>
 
 namespace NNUE {
 template<typename T> struct NnueEvaluator;
@@ -43,34 +44,7 @@ constexpr int EMBEDDING_DIM = 1024;
 constexpr int HIDDEN1_DIM = 32;
 constexpr int OUTPUT_DIM = 1;
 
-// 32 pieces, 4 castling rights, 32 hanging pieces, and 16 passed pawns.
-// We ignore the 16 'no pawns on a file' features, since they
-// can only become 1 at the expense of making other features 0.
-constexpr int MAX_NUM_ONES_IN_INPUT = 32 + 4 + 32 + 16;
-
 constexpr int16_t NNUE_INPUT_DIM = NF_COUNT * 64;
-
-struct Features {
-  uint16_t length;
-  uint16_t onIndices[MAX_NUM_ONES_IN_INPUT];
-  Features() : length(0) {
-    std::fill_n(onIndices, MAX_NUM_ONES_IN_INPUT, NNUE_INPUT_DIM);
-  }
-  void addFeature(uint16_t index) {
-    onIndices[length++] = static_cast<uint16_t>(index);
-  }
-  uint16_t operator[](size_t i) const {
-    return onIndices[i];
-  }
-  void flip_() {
-    for (size_t i = 0; i < length; i++) {
-      onIndices[i] = flip_feature_index(onIndices[i]);
-    }
-  }
-  std::vector<uint16_t> to_vector() const {
-    return std::vector<uint16_t>(onIndices, onIndices + length);
-  }
-};
 
 inline ChessEngine::Bitboard nnue_feature_to_bitboard(NnueFeatureBitmapType feature, const ChessEngine::Position& pos, const ChessEngine::Threats& threats) {
   switch (feature) {
@@ -88,7 +62,8 @@ inline ChessEngine::Bitboard nnue_feature_to_bitboard(NnueFeatureBitmapType feat
       ChessEngine::Bitboard theirPawns = pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_PAWN];
       ChessEngine::Bitboard aheadOfTheirPawns = ChessEngine::shift<ChessEngine::Direction::SOUTH>(ChessEngine::southFill(theirPawns));
       ChessEngine::Bitboard passedPawns = pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_PAWN] & ~ChessEngine::fatten(aheadOfTheirPawns);
-      ChessEngine::Bitboard r = pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_PAWN] & ~passedPawns;
+      ChessEngine::Bitboard blockedPawns = pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_PAWN] & ChessEngine::shift<ChessEngine::Direction::SOUTH>(theirPawns);
+      ChessEngine::Bitboard r = pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_PAWN] & ~passedPawns & ~blockedPawns;
       for (int file = 0; file < 8; file++) {
         const bool noWhitePawnsOnFile = (ChessEngine::kFiles[file] & pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_PAWN]) == ChessEngine::kEmptyBitboard;
         r |= ChessEngine::bb(56 + file);
@@ -123,17 +98,22 @@ inline ChessEngine::Bitboard nnue_feature_to_bitboard(NnueFeatureBitmapType feat
       return threats.badForCp(ChessEngine::ColoredPiece::WHITE_QUEEN) & pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_QUEEN];
     case NF_WHITE_HANGING_KINGS:
       return threats.badForCp(ChessEngine::ColoredPiece::WHITE_KING) & pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_KING];
-    case NF_WHITE_PASSED_PAWN: {
+    case NF_WHITE_PASSED_PAWNS: {
       ChessEngine::Bitboard theirPawns = pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_PAWN];
       ChessEngine::Bitboard aheadOfTheirPawns = ChessEngine::shift<ChessEngine::Direction::SOUTH>(ChessEngine::southFill(theirPawns));
       return pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_PAWN] & ~ChessEngine::fatten(aheadOfTheirPawns);
+    }
+    case NF_WHITE_BLOCKED_PAWNS: {
+      ChessEngine::Bitboard theirPawns = pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_PAWN];
+      return pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_PAWN] & ChessEngine::shift<ChessEngine::Direction::SOUTH>(theirPawns);
     }
     case NF_BLACK_PAWN: {
       // See comments for white passed pawns.
       ChessEngine::Bitboard theirPawns = pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_PAWN];
       ChessEngine::Bitboard aheadOfTheirPawns = ChessEngine::shift<ChessEngine::Direction::NORTH>(ChessEngine::northFill(theirPawns));
       ChessEngine::Bitboard passedPawns = pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_PAWN] & ~ChessEngine::fatten(aheadOfTheirPawns);
-      ChessEngine::Bitboard r = pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_PAWN] & ~passedPawns;
+      ChessEngine::Bitboard blockedPawns = pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_PAWN] & ChessEngine::shift<ChessEngine::Direction::NORTH>(theirPawns);
+      ChessEngine::Bitboard r = pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_PAWN] & ~passedPawns & ~blockedPawns;
       for (int file = 0; file < 8; file++) {
         const bool noBlackPawnsOnFile = (ChessEngine::kFiles[file] & pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_PAWN]) == ChessEngine::kEmptyBitboard;
         r |= ChessEngine::bb(file);
@@ -168,10 +148,14 @@ inline ChessEngine::Bitboard nnue_feature_to_bitboard(NnueFeatureBitmapType feat
       return threats.badForCp(ChessEngine::ColoredPiece::BLACK_QUEEN) & pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_QUEEN];
     case NF_BLACK_HANGING_KINGS:
       return threats.badForCp(ChessEngine::ColoredPiece::BLACK_KING) & pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_KING];
-    case NF_BLACK_PASSED_PAWN: {
+    case NF_BLACK_PASSED_PAWNS: {
       ChessEngine::Bitboard theirPawns = pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_PAWN];
       ChessEngine::Bitboard aheadOfTheirPawns = ChessEngine::shift<ChessEngine::Direction::NORTH>(ChessEngine::northFill(theirPawns));
       return pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_PAWN] & ~ChessEngine::fatten(aheadOfTheirPawns);
+    }
+    case NF_BLACK_BLOCKED_PAWNS: {
+      ChessEngine::Bitboard theirPawns = pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_PAWN];
+      return pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_PAWN] & ChessEngine::shift<ChessEngine::Direction::NORTH>(theirPawns);
     }
     default:
       std::cerr << "Invalid NnueFeatureBitmapType: " << feature << std::endl;
@@ -180,16 +164,15 @@ inline ChessEngine::Bitboard nnue_feature_to_bitboard(NnueFeatureBitmapType feat
 }
 
 template<typename T>
-Features pos2features(NnueEvaluator<T> *evaluator, const ChessEngine::Position& pos, const ChessEngine::Threats& threats) {
-  Features features;
+std::vector<uint16_t> pos2features(NnueEvaluator<T> *evaluator, const ChessEngine::Position& pos, const ChessEngine::Threats& threats) {
+  std::vector<uint16_t> features;
   for (NnueFeatureBitmapType i = NnueFeatureBitmapType(0); i < NF_COUNT; i = NnueFeatureBitmapType(i + 1)) {
     ChessEngine::Bitboard bb = nnue_feature_to_bitboard(i, pos, threats);
     while (bb) {
       unsigned sq = ChessEngine::pop_lsb_i_promise_board_is_not_empty(bb);
-      features.addFeature(feature_index(i, sq));
+      features.push_back(feature_index(i, sq));
     }
   }
-
   return features;
 }
 

@@ -19,9 +19,10 @@ enum NnueFeatureBitmapType {
   NF_WHITE_HANGING_ROOKS,
   NF_WHITE_HANGING_QUEENS,
   NF_WHITE_HANGING_KINGS,
-  NF_WHITE_PASSED_PAWN,
-  NF_BLACK_PAWN,
+  NF_WHITE_PASSED_PAWNS,
+  NF_WHITE_BLOCKED_PAWNS,
 
+  NF_BLACK_PAWN,
   NF_BLACK_KNIGHT,
   NF_BLACK_BISHOP,
   NF_BLACK_ROOK,
@@ -33,7 +34,8 @@ enum NnueFeatureBitmapType {
   NF_BLACK_HANGING_ROOKS,
   NF_BLACK_HANGING_QUEENS,
   NF_BLACK_HANGING_KINGS,
-  NF_BLACK_PASSED_PAWN,
+  NF_BLACK_PASSED_PAWNS,
+  NF_BLACK_BLOCKED_PAWNS,
   NF_COUNT
 };
 static_assert(NF_COUNT % 2 == 0, "NF_COUNT must be even");
@@ -85,7 +87,8 @@ inline std::string nnue_feature_to_string(NnueFeatureBitmapType feature) {
     case NF_WHITE_HANGING_ROOKS: return "White Hanging Rooks";
     case NF_WHITE_HANGING_QUEENS: return "White Hanging Queens";
     case NF_WHITE_HANGING_KINGS: return "White Hanging Kings";
-    case NF_WHITE_PASSED_PAWN: return "White Passed Pawn";
+    case NF_WHITE_PASSED_PAWNS: return "White Passed Pawns";
+    case NF_WHITE_BLOCKED_PAWNS: return "White Blocked Pawns";
     case NF_BLACK_PAWN: return "Black Pawn";
     case NF_BLACK_KNIGHT: return "Black Knight";
     case NF_BLACK_BISHOP: return "Black Bishop";
@@ -98,7 +101,8 @@ inline std::string nnue_feature_to_string(NnueFeatureBitmapType feature) {
     case NF_BLACK_HANGING_ROOKS: return "Black Hanging Rooks";
     case NF_BLACK_HANGING_QUEENS: return "Black Hanging Queens";
     case NF_BLACK_HANGING_KINGS: return "Black Hanging Kings";
-    case NF_BLACK_PASSED_PAWN: return "Black Passed Pawn";
+    case NF_BLACK_PASSED_PAWNS: return "Black Passed Pawns";
+    case NF_BLACK_BLOCKED_PAWNS: return "Black Blocked Pawns";
     default:
       std::cerr << "Invalid NnueFeatureBitmapType: " << feature << std::endl;
       return "Invalid Feature";

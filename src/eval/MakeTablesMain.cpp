@@ -37,7 +37,7 @@ using WriterB = ShardedMatrix::Writer<bool>;
 
 struct EvaluatedData {
   bool qstFeatures[Q_NUM_FEATURES * 64];
-  NNUE::Features nnueFeatures;
+  std::vector<uint16_t> nnueFeatures;
   int16_t wdl[3];
   int8_t pieceCounts[10];
   bool valid = true;

@@ -110,12 +110,12 @@ struct NnueEvaluator : public EvaluatorInterface {
 
   // Very slow, but useful for testing (to ensure that incremental updates are correct).
   Evaluation from_scratch(const Position& pos, const Threats& threats) const {
-    Features features;
+    std::vector<uint16_t> features;
     for (NnueFeatureBitmapType i = NnueFeatureBitmapType(0); i < NF_COUNT; i = NnueFeatureBitmapType(i + 1)) {
       Bitboard bb = nnue_feature_to_bitboard(i, pos, threats);
       while (bb) {
         unsigned sq = pop_lsb_i_promise_board_is_not_empty(bb);
-        features.addFeature(feature_index(i, sq));
+        features.push_back(feature_index(i, sq));
       }
     }
     
@@ -123,7 +123,7 @@ struct NnueEvaluator : public EvaluatorInterface {
     Vector<EMBEDDING_DIM, T> blackAcc;
     whiteAcc.setZero();
     blackAcc.setZero();
-    for (int i = 0; i < features.length; i++) {
+    for (int i = 0; i < features.size(); i++) {
       nnue_model->increment(&whiteAcc, &blackAcc, features[i]);
     }
     T score;
