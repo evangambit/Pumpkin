@@ -29,6 +29,7 @@ struct ChunkedDataset {
         std::vector<int16_t> all_values;
         std::vector<int16_t> all_lengths;
         std::vector<float> all_evals;
+        std::vector<int8_t> all_turns;
         
         int lines_read = 0;
         std::string line;
@@ -54,19 +55,17 @@ struct ChunkedDataset {
             float eval = std::stof(eval_str);
 
             Position pos(fen);
-            if (pos.turn_ == Color::BLACK) {
-                eval *= -1.0;
-            }
             Threats threats;
             create_threats(pos.pieceBitboards_, pos.colorBitboards_, &threats);
 
-            NNUE::Features features = NNUE::pos2features<int>(pos, threats);
+            NNUE::Features features = NNUE::pos2features(pos, threats);
             
             for (size_t i = 0; i < features.length; i++) {
                 all_values.push_back(features[i]);
             }
             all_lengths.push_back(features.length);
             all_evals.push_back(eval);
+            all_turns.push_back(static_cast<int8_t>(pos.turn_));
             lines_read++;
         }
 
@@ -83,7 +82,10 @@ struct ChunkedDataset {
         auto evals_tensor = torch::empty({(long)all_evals.size()}, torch::TensorOptions().dtype(torch::kFloat32));
         std::memcpy(evals_tensor.data_ptr<float>(), all_evals.data(), all_evals.size() * sizeof(float));
 
-        return {values_tensor, lengths_tensor, evals_tensor};
+        auto turn_tensor = torch::empty({(long)all_turns.size()}, torch::TensorOptions().dtype(torch::kInt8));
+        std::memcpy(turn_tensor.data_ptr<int8_t>(), all_turns.data(), all_turns.size() * sizeof(int8_t));
+
+        return {values_tensor, lengths_tensor, evals_tensor, turn_tensor};
     }
 };
 
