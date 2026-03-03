@@ -28,6 +28,7 @@ struct ChunkedDataset {
     std::vector<torch::Tensor> next() {
         std::vector<int16_t> all_values;
         std::vector<int16_t> all_lengths;
+        std::vector<float> all_evals;
         
         int lines_read = 0;
         std::string line;
@@ -49,6 +50,8 @@ struct ChunkedDataset {
             if (bar_pos == std::string::npos) continue;
 
             std::string fen = line.substr(0, bar_pos);
+            std::string eval_str = line.substr(bar_pos + 1);
+            float eval = std::stof(eval_str);
 
             Position pos(fen);
             Threats threats;
@@ -60,6 +63,7 @@ struct ChunkedDataset {
                 all_values.push_back(features[i]);
             }
             all_lengths.push_back(features.length);
+            all_evals.push_back(eval);
             lines_read++;
         }
 
@@ -73,7 +77,10 @@ struct ChunkedDataset {
         auto lengths_tensor = torch::empty({(long)all_lengths.size()}, torch::TensorOptions().dtype(torch::kInt16));
         std::memcpy(lengths_tensor.data_ptr<int16_t>(), all_lengths.data(), all_lengths.size() * sizeof(int16_t));
 
-        return {values_tensor, lengths_tensor};
+        auto evals_tensor = torch::empty({(long)all_evals.size()}, torch::TensorOptions().dtype(torch::kFloat32));
+        std::memcpy(evals_tensor.data_ptr<float>(), all_evals.data(), all_evals.size() * sizeof(float));
+
+        return {values_tensor, lengths_tensor, evals_tensor};
     }
 };
 
