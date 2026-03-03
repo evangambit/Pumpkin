@@ -80,7 +80,6 @@ c7c5 g1f3 d7d6" "go depth 7" "lazyquit"
 
 ~/go/bin/pprof -list _evaluate ./uci /tmp/prof.out
 
+# Build dataset
 
-## Known bugs
-
-- Capturing enpassant into check (e.g. "r4Q2/1pk2pp1/8/3qpP1K/8/8/PP5B/n7 w - - 0 25")
+python setup.py build_ext --inplace
