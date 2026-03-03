@@ -54,6 +54,9 @@ struct ChunkedDataset {
             float eval = std::stof(eval_str);
 
             Position pos(fen);
+            if (pos.turn_ == Color::BLACK) {
+                eval *= -1.0;
+            }
             Threats threats;
             create_threats(pos.pieceBitboards_, pos.colorBitboards_, &threats);
 
