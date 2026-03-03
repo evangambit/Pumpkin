@@ -11,10 +11,20 @@ except ImportError:
     raise ImportError("C++ extension _nnue_dataset not found. Please run 'python setup.py build_ext --inplace' in the nnue directory first.")
 
 class NnueDataset(IterableDataset):
-    def __init__(self, file_paths: List[str], chunk_size: int = 128):
+    def __init__(self, file_paths: List[str], chunk_size: int = 128, total_lines: int = None):
         super().__init__()
         self.file_paths = file_paths
         self.chunk_size = chunk_size
+        self.total_lines = total_lines
+
+    def __len__(self):
+        if self.total_lines is None:
+            self.total_lines = 0
+            import subprocess
+            for path in self.file_paths:
+                output = subprocess.check_output(['wc', '-l', path])
+                self.total_lines += int(output.split()[0])
+        return (self.total_lines + self.chunk_size - 1) // self.chunk_size
 
     def __iter__(self):
         worker_info = torch.utils.data.get_worker_info()
