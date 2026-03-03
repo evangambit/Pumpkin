@@ -6,6 +6,7 @@
 #include "nnue/ShardedMatrix.h"
 #include "nnue/Nnue.h"
 #include "nnue/NnueEvaluator.h"
+#include "nnue/Utils.h"
 #include "qst/QstEvaluator.h"
 
 #include <gflags/gflags.h>
@@ -34,6 +35,12 @@ using namespace ChessEngine;
 using WriterI16 = ShardedMatrix::Writer<int16_t>;
 using WriterI8 = ShardedMatrix::Writer<int8_t>;
 using WriterB = ShardedMatrix::Writer<bool>;
+
+void flip(std::vector<uint16_t> *features) {
+  for (size_t i = 0; i < features->size(); i++) {
+    (*features)[i] = NNUE::flip_feature_index((*features)[i]);
+  }
+}
 
 struct EvaluatedData {
   bool qstFeatures[Q_NUM_FEATURES * 64];
@@ -97,7 +104,7 @@ EvaluatedData process_line(
   if (FLAGS_emit_nnue) {
     data.nnueFeatures = NNUE::pos2features(ctx->nnueEvaluator.get(), pos, threats);
     if (pos.turn_ == Color::BLACK) {
-      data.nnueFeatures.flip_();
+      flip(&data.nnueFeatures);
     }
   }
 
@@ -202,8 +209,14 @@ int main(int argc, char *argv[]) {
         qstInputWriter.write_row(results[i].qstFeatures);
       }
       if (FLAGS_emit_nnue) {
-        sparseNnueValueWriter.write(reinterpret_cast<const char*>(results[i].nnueFeatures.onIndices), sizeof(results[i].nnueFeatures.onIndices[0]) * results[i].nnueFeatures.length);
-        sparseNnueLengthWriter.write(reinterpret_cast<const char*>(&results[i].nnueFeatures.length), sizeof(results[i].nnueFeatures.length));
+        sparseNnueValueWriter.write(
+          reinterpret_cast<const char*>(results[i].nnueFeatures.data()),
+          sizeof(results[i].nnueFeatures.data()[0]) * results[i].nnueFeatures.size()
+        );
+        sparseNnueLengthWriter.write(
+          reinterpret_cast<const char*>(results[i].nnueFeatures.data()),
+          sizeof(results[i].nnueFeatures.data()[0]) * results[i].nnueFeatures.size()
+        );
       }
       
       evalWriter.write_row(results[i].wdl);
