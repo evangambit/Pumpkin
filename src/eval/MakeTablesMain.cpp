@@ -95,7 +95,7 @@ EvaluatedData process_line(
   }
 
   if (FLAGS_emit_nnue) {
-    data.nnueFeatures = NNUE::pos2features(ctx->nnueEvaluator.get(), pos, threats);
+    data.nnueFeatures = NNUE::pos2features(pos, threats);
     if (pos.turn_ == Color::BLACK) {
       data.nnueFeatures.flip_();
     }

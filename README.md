@@ -82,4 +82,6 @@ c7c5 g1f3 d7d6" "go depth 7" "lazyquit"
 
 # Build dataset
 
+cd nnue/
 python setup.py build_ext --inplace
+cd ..

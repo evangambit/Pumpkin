@@ -160,8 +160,7 @@ inline ChessEngine::Bitboard nnue_feature_to_bitboard(NnueFeatureBitmapType feat
   return ChessEngine::kEmptyBitboard;
 }
 
-template<typename T>
-Features pos2features(NnueEvaluator<T> *evaluator, const ChessEngine::Position& pos, const ChessEngine::Threats& threats) {
+inline Features pos2features(const ChessEngine::Position& pos, const ChessEngine::Threats& threats) {
   Features features;
   for (NnueFeatureBitmapType i = NnueFeatureBitmapType(0); i < NF_COUNT; i = NnueFeatureBitmapType(i + 1)) {
     ChessEngine::Bitboard bb = nnue_feature_to_bitboard(i, pos, threats);

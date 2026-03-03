@@ -5,6 +5,9 @@ sudo dnf install gflags-devel zlib-devel -y
 # For debugging
 sudo dnf install gdb -y
 
+# For nnue/dataset
+sudo dnf install python3-devel
+
 # For progress bar while shuffling.
 sudo dnf install pv  # or 'sudo yum install pv'
 
