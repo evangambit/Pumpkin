@@ -16,6 +16,7 @@ from features import board2x, x2board
 from accumulator import Emb
 from nnue_model import NNUE
 
+import dataset as ndata
 
 def save_tensor(tensor: torch.Tensor, name: str, out: io.BufferedWriter):
   tensor = tensor.cpu().detach().numpy()
@@ -65,12 +66,7 @@ os.makedirs(run_dir, exist_ok=True)
 device = torch.device('mps' if torch.backends.mps.is_available() else 'cuda' if torch.cuda.is_available() else 'cpu')
 
 print("Loading dataset...")
-dataset = ShardedMatricesIterableDataset(
-  DynamicShardedMatrixIterator(f'data/x-nnue-sparse', chunk_size=CHUNK_SIZE),
-  SingleShardedMatrixIterator(f'data/x-eval', chunk_size=CHUNK_SIZE),
-  SingleShardedMatrixIterator(f'data/x-piece-counts', chunk_size=CHUNK_SIZE),
-)
-
+dataset = ndata.NnueDataset(['../data/pos.shuf.txt'])
 
 print(f'Dataset loaded with {len(dataset) * CHUNK_SIZE} rows.')
 
