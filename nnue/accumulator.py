@@ -10,22 +10,7 @@ from torch import nn
 from features import kRoughEstimateOfNumberOfOnesInInput
 
 
-class SumBag(nn.Module):
-  """
-  Similar to EmbeddingBag but without the actual embedding lookup. Instead,
-  we assume you've already done the embedding lookup and are passing in the values directly.
-  """
-  def forward(self, values: torch.Tensor, lengths: torch.Tensor):
-    assert values.dim() == 2
-    assert lengths.dim() == 1
-    assert lengths.sum() == values.shape[0]
-    indicies = torch.repeat_interleave(
-        torch.arange(len(lengths), device=values.device), 
-        lengths
-    )
-    out = torch.zeros(len(lengths), values.shape[1], device=values.device, dtype=values.dtype)
-    out.index_add_(0, indicies, values)    
-    return out
+import torch.nn.functional as F
 
 class Emb(nn.Module):
   def __init__(self, dout):
@@ -54,7 +39,7 @@ class Emb(nn.Module):
       self.factorization_mask[i,7,:,:] = 0.0
       self.factorization_mask[j,0,:,:] = 0.0
       self.factorization_mask[j,7,:,:] = 0.0
-    self.bagger = SumBag()
+
   
   def zero_(self):
     with torch.no_grad():
@@ -83,7 +68,12 @@ class Emb(nn.Module):
     merged_tiles = self.merged_tiles()
     w = self.weight(merged_tiles)
     flipped = self.flipped_weight(merged_tiles)
-    a = self.bagger(w[values.to(torch.int64)], lengths.to(torch.int64))
-    b = self.bagger(flipped[values.to(torch.int64)], lengths.to(torch.int64))
+
+    # Convert lengths to offsets for embedding_bag
+    # lengths: [3, 2, 4] -> offsets: [0, 3, 5]
+    offsets = lengths.cumsum(0) - lengths
+    
+    a = F.embedding_bag(values.to(torch.int64), w, offsets=offsets.to(torch.int64), mode='sum')
+    b = F.embedding_bag(values.to(torch.int64), flipped, offsets=offsets.to(torch.int64), mode='sum')
     return a.clip(0, 1), b.clip(0, 1)
 Emb.k = 24
