@@ -86,7 +86,7 @@ inline ChessEngine::Bitboard nnue_feature_to_bitboard(NnueFeatureBitmapType feat
       ChessEngine::Bitboard r = pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_PAWN];
       for (int file = 0; file < 8; file++) {
         const bool noWhitePawnsOnFile = (ChessEngine::kFiles[file] & pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_PAWN]) == ChessEngine::kEmptyBitboard;
-        r |= ChessEngine::bb(56 + file);
+        r |= ChessEngine::bb(56 + file) * noWhitePawnsOnFile;
       }
       if (pos.currentState_.castlingRights & ChessEngine::kCastlingRights_WhiteKing) {
         r |= ChessEngine::bb(0);
@@ -122,7 +122,7 @@ inline ChessEngine::Bitboard nnue_feature_to_bitboard(NnueFeatureBitmapType feat
       ChessEngine::Bitboard r = pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_PAWN];
       for (int file = 0; file < 8; file++) {
         const bool noBlackPawnsOnFile = (ChessEngine::kFiles[file] & pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_PAWN]) == ChessEngine::kEmptyBitboard;
-        r |= ChessEngine::bb(file);
+        r |= ChessEngine::bb(file) * noBlackPawnsOnFile;
       }
       if (pos.currentState_.castlingRights & ChessEngine::kCastlingRights_BlackKing) {
         r |= ChessEngine::bb(56);
