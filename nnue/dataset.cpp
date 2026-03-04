@@ -59,6 +59,9 @@ struct ChunkedDataset {
             create_threats(pos.pieceBitboards_, pos.colorBitboards_, &threats);
 
             NNUE::Features features = NNUE::pos2features(pos, threats);
+            if (pos.turn_ == Color::BLACK) {
+                features.flip_();
+            }
             
             for (size_t i = 0; i < features.length; i++) {
                 all_values.push_back(features[i]);
