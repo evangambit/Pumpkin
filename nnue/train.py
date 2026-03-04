@@ -8,6 +8,7 @@ from tqdm import tqdm
 import io
 import os
 import datetime
+import time
 
 import torch.utils.data as tdata
 from sharded_matrix import ShardedLoader
@@ -123,7 +124,10 @@ if __name__ == "__main__":
   metrics = defaultdict(list)
   for epoch in range(NUM_EPOCHS):
     print(f"Starting Epoch {epoch+1}/{NUM_EPOCHS}")
+    t0 = time.time()
     for batch_idx, batch in tqdm(enumerate(dataloader), total=len(dataloader)):
+      t_data = time.time()
+      
       opt.zero_grad()
       
       # Update learning rate
@@ -131,6 +135,7 @@ if __name__ == "__main__":
       
       batch = [x.to(device) for x in batch]
       values, lengths, label, turn = batch
+      t_transfer = time.time()
 
       output, layers = model(values, lengths)
 
@@ -145,16 +150,23 @@ if __name__ == "__main__":
       loss = nn.functional.mse_loss(
         output, label, reduction='mean',
       )
+      t_forward = time.time()
+      
       mse = loss.item()
       baseline = ((label - label.mean()) ** 2).mean().item()
 
       (loss + penalty * 0.02).backward()
       opt.step()
+      t_backward = time.time()
       metrics["loss"].append(loss.item())
       metrics["mse"].append(mse / baseline)
       metrics["penalty"].append(penalty.item())
+      if batch_idx < 10:
+        print(f"\nBatch {batch_idx}: data={t_data-t0:.4f}s transfer={t_transfer-t_data:.4f}s forward={t_forward-t_transfer:.4f}s backward={t_backward-t_forward:.4f}s")
       if (batch_idx + 1) % 500 == 0:
         print(f"loss: {np.mean(metrics['loss'][-1000:]):.4f}, mse: {np.mean(metrics['mse'][-1000:]):.4f}, penalty: {np.mean(metrics['penalty'][-1000:]):.4f}")
+      
+      t0 = time.time()
 
   # Save the model
 
