@@ -87,7 +87,7 @@ if __name__ == "__main__":
   dataloader = tdata.DataLoader(dataset, batch_size=BATCH_SIZE//CHUNK_SIZE, shuffle=False, num_workers=0, pin_memory=True, drop_last=True, collate_fn=collate_fn)
 
   print("Creating model...")
-  model = NNUE(hidden_sizes=[512, 8], output_size=1).to(device)
+  model = NNUE(hidden_sizes=[1024, 32], output_size=1).to(device)
 
   print("Creating optimizer...")
   opt = torch.optim.AdamW(model.parameters(), lr=0.0, weight_decay=0.1)
