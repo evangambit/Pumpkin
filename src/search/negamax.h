@@ -595,7 +595,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   // ±16000: best move from transposition table
   // +8000: is capture
   // deltas for ranking captures can range from -4000 to 4000
-  constexpr Evaluation kMoveOrderingPieceValue[Piece::NUM_PIECES] = {
+  static constexpr Evaluation kMoveOrderingPieceValue[Piece::NUM_PIECES] = {
     0,    // NO_PIECE
     100,  // PAWN
     320,  // KNIGHT
