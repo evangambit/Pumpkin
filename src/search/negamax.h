@@ -548,19 +548,6 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   // We never call evaluate in interior nodes, but it behooves us to keep the accumulator
   // up to date so our children/grandchildren can benefit from it.
   thread->position_.evaluator_->update_accumulator(thread->position_, threats, plyFromRoot);
-  const Move lastMove = SEARCH_TYPE == SearchType::ROOT ? kNullMove : thread->position_.history_.back().move;
-  // ±16000: best move from transposition table
-  // +8000: is capture
-  // deltas for ranking captures can range from -4000 to 4000
-  constexpr Evaluation kMoveOrderingPieceValue[Piece::NUM_PIECES] = {
-    0,    // NO_PIECE
-    100,  // PAWN
-    320,  // KNIGHT
-    330,  // BISHOP
-    500,  // ROOK
-    900,  // QUEEN
-    2000 // KING
-  };
 
   constexpr ColoredPiece moverKing = coloredPiece<TURN, Piece::KING>();
   const bool inCheck = can_enemy_attack<TURN>(
@@ -603,6 +590,20 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
       high = std::max<int32_t>(high, staticScores[move - moves].value);
     }
   }
+
+  const Move lastMove = SEARCH_TYPE == SearchType::ROOT ? kNullMove : thread->position_.history_.back().move;
+  // ±16000: best move from transposition table
+  // +8000: is capture
+  // deltas for ranking captures can range from -4000 to 4000
+  constexpr Evaluation kMoveOrderingPieceValue[Piece::NUM_PIECES] = {
+    0,    // NO_PIECE
+    100,  // PAWN
+    320,  // KNIGHT
+    330,  // BISHOP
+    500,  // ROOK
+    900,  // QUEEN
+    2000 // KING
+  };
 
   for (ExtMove* move = moves; move < end; ++move) {
     if (move->move == entry.bestMove) {
