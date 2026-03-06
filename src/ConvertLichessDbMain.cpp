@@ -7,6 +7,15 @@
 
 using json = nlohmann::json;
 
+/*
+# https://database.lichess.org/#evals
+wget https://database.lichess.org/lichess_db_eval.jsonl.zst
+
+g++ -std=c++20 -O3 -march=native src/ConvertLichessDbMain.cpp -o convert_lichess -I/opt/homebrew/include -L/opt/homebrew/lib -lzstd
+
+./convert_lichess path/to/lichess_db_eval.jsonl.zst output.txt
+*/
+
 void process_line(const std::string& line, std::ofstream& out) {
     if (line.empty()) return;
     try {
@@ -16,6 +25,11 @@ void process_line(const std::string& line, std::ofstream& out) {
         std::string fen = j["fen"];
         auto evals = j["evals"];
         if (evals.empty()) return;
+        
+        if (evals[0].contains("depth")) {
+            int depth = evals[0]["depth"];
+            if (depth < 12) return;
+        }
         
         auto pvs = evals[0]["pvs"];
         if (pvs.empty()) return;
