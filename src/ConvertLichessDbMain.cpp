@@ -119,6 +119,9 @@ int main(int argc, char** argv) {
                 if (c == '\n') {
                     if (process_line(uncompressed_buffer, out)) {
                         num_processed++;
+                        if (num_processed % 100000 == 0) {
+                            std::cout << "Processed " << num_processed << " positions...\n";
+                        }
                         if (FLAGS_limit > 0 && num_processed >= FLAGS_limit) {
                             goto finish;
                         }
