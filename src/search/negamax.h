@@ -321,7 +321,7 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
   }
 
   for (ExtMove* move = moves; move < end; ++move) {
-    if (move->score < 0) {
+    if (move->score <= 0) {
       // Don't consider moves that lose material according to move ordering heuristic.
       continue;
     }
