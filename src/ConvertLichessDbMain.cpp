@@ -52,6 +52,12 @@ bool process_line(const std::string& line, std::ofstream& out) {
         }
         
         char buf[64];
+        
+        bool is_black_turn = fen.find(" b ") != std::string::npos;
+        if (is_black_turn) {
+            score = -score;
+        }
+
         snprintf(buf, sizeof(buf), "%+.2f", score);
         out << fen << "|" << buf << "\n";
         return true;
