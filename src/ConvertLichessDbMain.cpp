@@ -4,35 +4,38 @@
 #include <string>
 #include <zstd.h>
 #include <nlohmann/json.hpp>
+#include <gflags/gflags.h>
 
 using json = nlohmann::json;
+
+DEFINE_int32(limit, 0, "Maximum number of positions to convert; 0 for no limit");
 
 /*
 # https://database.lichess.org/#evals
 wget https://database.lichess.org/lichess_db_eval.jsonl.zst
 
-g++ -std=c++20 -O3 -march=native src/ConvertLichessDbMain.cpp -o convert_lichess -I/opt/homebrew/include -L/opt/homebrew/lib -lzstd
+g++ -std=c++20 -O3 -march=native src/ConvertLichessDbMain.cpp -o convert_lichess -L/usr/bin -I/usr/include -I/usr/local/include -lzstd -lgflags
 
 ./convert_lichess path/to/lichess_db_eval.jsonl.zst output.txt
 */
 
-void process_line(const std::string& line, std::ofstream& out) {
-    if (line.empty()) return;
+bool process_line(const std::string& line, std::ofstream& out) {
+    if (line.empty()) return false;
     try {
         auto j = json::parse(line);
-        if (!j.contains("fen") || !j.contains("evals")) return;
+        if (!j.contains("fen") || !j.contains("evals")) return false;
         
         std::string fen = j["fen"];
         auto evals = j["evals"];
-        if (evals.empty()) return;
+        if (evals.empty()) return false;
         
         if (evals[0].contains("depth")) {
             int depth = evals[0]["depth"];
-            if (depth < 12) return;
+            if (depth < 12) return false;
         }
         
         auto pvs = evals[0]["pvs"];
-        if (pvs.empty()) return;
+        if (pvs.empty()) return false;
         
         auto pv = pvs[0];
         float score = 0.0f;
@@ -45,20 +48,24 @@ void process_line(const std::string& line, std::ofstream& out) {
             int cp = pv["cp"];
             score = cp / 100.0f;
         } else {
-            return;
+            return false;
         }
         
         char buf[64];
         snprintf(buf, sizeof(buf), "%+.2f", score);
         out << fen << "|" << buf << "\n";
+        return true;
     } catch (const std::exception& e) {
         // ignore parsing errors and continue
+        return false;
     }
 }
 
 int main(int argc, char** argv) {
+    gflags::ParseCommandLineFlags(&argc, &argv, true);
+    
     if (argc < 3) {
-        std::cerr << "Usage: " << argv[0] << " <input.jsonl.zst> <output.txt>\n";
+        std::cerr << "Usage: " << argv[0] << " <input.jsonl.zst> <output.txt> [--limit=<num>]\n";
         return 1;
     }
     
@@ -89,6 +96,7 @@ int main(int argc, char** argv) {
     std::string uncompressed_buffer;
     size_t toRead = buffInSize;
     size_t readCount;
+    int num_processed = 0;
     
     while (in) {
         in.read(buffIn.data(), buffInSize);
@@ -109,7 +117,12 @@ int main(int argc, char** argv) {
             for (size_t i = 0; i < output.pos; ++i) {
                 char c = ((char*)output.dst)[i];
                 if (c == '\n') {
-                    process_line(uncompressed_buffer, out);
+                    if (process_line(uncompressed_buffer, out)) {
+                        num_processed++;
+                        if (FLAGS_limit > 0 && num_processed >= FLAGS_limit) {
+                            goto finish;
+                        }
+                    }
                     uncompressed_buffer.clear();
                 } else {
                     uncompressed_buffer += c;
@@ -119,10 +132,13 @@ int main(int argc, char** argv) {
     }
     
     if (!uncompressed_buffer.empty()) {
-        process_line(uncompressed_buffer, out);
+        if (process_line(uncompressed_buffer, out)) {
+            num_processed++;
+        }
     }
     
+finish:
     ZSTD_freeDCtx(dctx);
-    std::cout << "Successfully converted " << argv[1] << " to " << argv[2] << "\n";
+    std::cout << "Successfully converted " << num_processed << " positions from " << argv[1] << " to " << argv[2] << "\n";
     return 0;
 }
