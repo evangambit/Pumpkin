@@ -63,10 +63,10 @@ struct ChunkedDataset {
                 features.flip_();
             }
             
-            for (size_t i = 0; i < features.length; i++) {
+            for (size_t i = 0; i < features.size(); i++) {
                 all_values.push_back(features[i]);
             }
-            all_lengths.push_back(features.length);
+            all_lengths.push_back(features.size());
             all_evals.push_back(eval);
             all_turns.push_back(static_cast<int8_t>(pos.turn_));
             lines_read++;

@@ -51,24 +51,26 @@ constexpr int MAX_NUM_ONES_IN_INPUT = 32 + 4 + 32;
 constexpr int16_t NNUE_INPUT_DIM = NF_COUNT * 64;
 
 struct Features {
-  uint16_t length;
-  uint16_t onIndices[MAX_NUM_ONES_IN_INPUT];
-  Features() : length(0) {
-    std::fill_n(onIndices, MAX_NUM_ONES_IN_INPUT, NNUE_INPUT_DIM);
+  std::vector<uint16_t> onIndices;
+  Features() {
+    onIndices.reserve(MAX_NUM_ONES_IN_INPUT);
   }
   void addFeature(uint16_t index) {
-    onIndices[length++] = static_cast<uint16_t>(index);
+    onIndices.push_back(index);
   }
   uint16_t operator[](size_t i) const {
     return onIndices[i];
   }
   void flip_() {
-    for (size_t i = 0; i < length; i++) {
+    for (size_t i = 0; i < onIndices.size(); i++) {
       onIndices[i] = flip_feature_index(onIndices[i]);
     }
   }
   std::vector<uint16_t> to_vector() const {
-    return std::vector<uint16_t>(onIndices, onIndices + length);
+    return onIndices;
+  }
+  size_t size() const {
+    return onIndices.size();
   }
 };
 
