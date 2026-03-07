@@ -122,6 +122,8 @@ if __name__ == "__main__":
     return win_mover_perspective + draw_mover_perspective * 0.5
 
   metrics = defaultdict(list)
+  num_models_saved = 0
+  last_save_time = 0
   for epoch in range(NUM_EPOCHS):
     print(f"Starting Epoch {epoch+1}/{NUM_EPOCHS}")
     t0 = time.time()
@@ -166,6 +168,17 @@ if __name__ == "__main__":
       if (batch_idx + 1) % 500 == 0:
         print(f"loss: {np.mean(metrics['loss'][-1000:]):.4f}, mse: {np.mean(metrics['mse'][-1000:]):.4f}, penalty: {np.mean(metrics['penalty'][-1000:]):.4f}")
       
+      # Save a model every 10 minutes.
+      if time.time() - last_save_time > 10 * 60:
+        with open(os.path.join(run_dir, f'model-{num_models_saved}.bin'), 'wb') as f:
+          save_tensor(model.emb.weight(model.emb.merged_tiles())[:-1], 'embedding', f)
+          for i, layer in enumerate(model.mlp[::2]):
+            assert isinstance(layer, nn.Linear)
+            save_tensor(layer.weight, f'linear{i}.weight', f)
+            save_tensor(layer.bias, f'linear{i}.bias', f)
+        num_models_saved += 1
+        last_save_time = time.time()
+      
       t0 = time.time()
 
   # Save the model
@@ -175,10 +188,10 @@ if __name__ == "__main__":
 
   with open(os.path.join(run_dir, 'model.bin'), 'wb') as f:
     save_tensor(model.emb.weight(model.emb.merged_tiles())[:-1], 'embedding', f)
-    save_tensor(model.mlp[0].weight, 'linear0.weight', f)
-    save_tensor(model.mlp[0].bias, 'linear0.bias', f)
-    save_tensor(model.mlp[2].weight, 'linear1.weight', f)
-    save_tensor(model.mlp[2].bias, 'linear1.bias', f)
+    for i, layer in enumerate(model.mlp[::2]):
+      assert isinstance(layer, nn.Linear)
+      save_tensor(layer.weight, f'linear{i}.weight', f)
+      save_tensor(layer.bias, f'linear{i}.bias', f)
 
   plt.figure(figsize=(10,10))
   output = output.squeeze().cpu().detach().numpy()
