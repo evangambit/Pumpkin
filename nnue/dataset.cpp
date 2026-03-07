@@ -6,6 +6,7 @@
 
 #include "../src/game/Position.h"
 #include "../src/game/Threats.h"
+#include "../src/eval/PawnAnalysis.h"
 #include "../src/game/CreateThreats.h"
 #include "../src/eval/nnue/Utils.h"
 
@@ -56,9 +57,10 @@ struct ChunkedDataset {
 
             Position pos(fen);
             Threats threats;
+            PawnAnalysis<Color::WHITE> pawnAnalysis;
             create_threats(pos.pieceBitboards_, pos.colorBitboards_, &threats);
 
-            NNUE::Features features = NNUE::pos2features(pos, threats);
+            NNUE::Features features = NNUE::pos2features(pos, threats, pawnAnalysis);
             if (pos.turn_ == Color::BLACK) {
                 features.flip_();
             }
