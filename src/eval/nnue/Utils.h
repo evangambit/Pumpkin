@@ -2,6 +2,7 @@
 #define SRC_EVAL_NNUE_UTILS_H
 
 #include "NnueFeatureBitmapType.h"
+#include "../PawnAnalysis.h"
 
 namespace NNUE {
 template<typename T> struct NnueEvaluator;
@@ -43,18 +44,10 @@ constexpr int EMBEDDING_DIM = 1024;
 constexpr int HIDDEN1_DIM = 32;
 constexpr int OUTPUT_DIM = 1;
 
-// 32 pieces, 4 castling rights, and 32 hanging pieces.
-// We ignore tha 16 'no pawns on a file' features, since they
-// can only become 1 at the expense of making other features 0.
-constexpr int MAX_NUM_ONES_IN_INPUT = 32 + 4 + 32;
-
 constexpr int16_t NNUE_INPUT_DIM = NF_COUNT * 64;
 
 struct Features {
   std::vector<uint16_t> onIndices;
-  Features() {
-    onIndices.reserve(MAX_NUM_ONES_IN_INPUT);
-  }
   void addFeature(uint16_t index) {
     onIndices.push_back(index);
   }
@@ -74,7 +67,7 @@ struct Features {
   }
 };
 
-inline ChessEngine::Bitboard nnue_feature_to_bitboard(NnueFeatureBitmapType feature, const ChessEngine::Position& pos, const ChessEngine::Threats& threats) {
+inline ChessEngine::Bitboard nnue_feature_to_bitboard(NnueFeatureBitmapType feature, const ChessEngine::Position& pos, const ChessEngine::Threats& threats, const ChessEngine::PawnAnalysis<ChessEngine::Color::WHITE>& pawnAnalysis) {
   switch (feature) {
     case NF_WHITE_PAWN: {
       // We use the 7th rank (56 - 63) to store whether there are any
@@ -85,11 +78,8 @@ inline ChessEngine::Bitboard nnue_feature_to_bitboard(NnueFeatureBitmapType feat
       // open files use the 0th rank and castling rights use the 7th
       // rank). This way the same vertical symmetry that we use for
       // our piece features automatically works for these features too.
-      ChessEngine::Bitboard r = pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_PAWN];
-      for (int file = 0; file < 8; file++) {
-        const bool noWhitePawnsOnFile = (ChessEngine::kFiles[file] & pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_PAWN]) == ChessEngine::kEmptyBitboard;
-        r |= ChessEngine::bb(56 + file);
-      }
+      ChessEngine::Bitboard r = pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_PAWN] & ~pawnAnalysis.ourPassedPawns;
+      r |= pawnAnalysis.filesWithoutOurPawns & ChessEngine::kRanks[7];
       if (pos.currentState_.castlingRights & ChessEngine::kCastlingRights_WhiteKing) {
         r |= ChessEngine::bb(0);
       }
@@ -120,12 +110,11 @@ inline ChessEngine::Bitboard nnue_feature_to_bitboard(NnueFeatureBitmapType feat
       return threats.badForCp(ChessEngine::ColoredPiece::WHITE_QUEEN) & pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_QUEEN];
     case NF_WHITE_HANGING_KINGS:
       return threats.badForCp(ChessEngine::ColoredPiece::WHITE_KING) & pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_KING];
+    case NF_WHITE_PASSED_PAWNS:
+      return pawnAnalysis.ourPassedPawns;
     case NF_BLACK_PAWN: {
-      ChessEngine::Bitboard r = pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_PAWN];
-      for (int file = 0; file < 8; file++) {
-        const bool noBlackPawnsOnFile = (ChessEngine::kFiles[file] & pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_PAWN]) == ChessEngine::kEmptyBitboard;
-        r |= ChessEngine::bb(file);
-      }
+      ChessEngine::Bitboard r = pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_PAWN] & ~pawnAnalysis.ourPassedPawns;
+      r |= pawnAnalysis.filesWithoutOurPawns & ChessEngine::kRanks[0];
       if (pos.currentState_.castlingRights & ChessEngine::kCastlingRights_BlackKing) {
         r |= ChessEngine::bb(56);
       }
@@ -156,16 +145,18 @@ inline ChessEngine::Bitboard nnue_feature_to_bitboard(NnueFeatureBitmapType feat
       return threats.badForCp(ChessEngine::ColoredPiece::BLACK_QUEEN) & pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_QUEEN];
     case NF_BLACK_HANGING_KINGS:
       return threats.badForCp(ChessEngine::ColoredPiece::BLACK_KING) & pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_KING];
+    case NF_BLACK_PASSED_PAWNS:
+      return pawnAnalysis.ourPassedPawns;
     default:
       std::cerr << "Invalid NnueFeatureBitmapType: " << feature << std::endl;
   }
   return ChessEngine::kEmptyBitboard;
 }
 
-inline Features pos2features(const ChessEngine::Position& pos, const ChessEngine::Threats& threats) {
+inline Features pos2features(const ChessEngine::Position& pos, const ChessEngine::Threats& threats, const ChessEngine::PawnAnalysis<ChessEngine::Color::WHITE>& pawnAnalysis) {
   Features features;
   for (NnueFeatureBitmapType i = NnueFeatureBitmapType(0); i < NF_COUNT; i = NnueFeatureBitmapType(i + 1)) {
-    ChessEngine::Bitboard bb = nnue_feature_to_bitboard(i, pos, threats);
+    ChessEngine::Bitboard bb = nnue_feature_to_bitboard(i, pos, threats, pawnAnalysis);
     while (bb) {
       unsigned sq = ChessEngine::pop_lsb_i_promise_board_is_not_empty(bb);
       features.addFeature(feature_index(i, sq));

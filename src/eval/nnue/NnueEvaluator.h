@@ -109,10 +109,10 @@ struct NnueEvaluator : public EvaluatorInterface {
   }
 
   // Very slow, but useful for testing (to ensure that incremental updates are correct).
-  Evaluation from_scratch(const Position& pos, const Threats& threats) const {
+  Evaluation from_scratch(const Position& pos, const Threats& threats, const PawnAnalysis<Color::WHITE>& pawnAnalysis) const {
     Features features;
     for (NnueFeatureBitmapType i = NnueFeatureBitmapType(0); i < NF_COUNT; i = NnueFeatureBitmapType(i + 1)) {
-      Bitboard bb = nnue_feature_to_bitboard(i, pos, threats);
+      Bitboard bb = nnue_feature_to_bitboard(i, pos, threats, pawnAnalysis);
       while (bb) {
         unsigned sq = pop_lsb_i_promise_board_is_not_empty(bb);
         features.addFeature(feature_index(i, sq));
@@ -148,6 +148,7 @@ struct NnueEvaluator : public EvaluatorInterface {
         return Evaluation(0);
       }
     }
+    PawnAnalysis<Color::WHITE> pawnAnalysis(pos);
     Frame<T> *lastFrame = frames + plyFromRoot;
     Frame<T> *currentFrame = frames + plyFromRoot + 1;
     currentFrame->whiteAcc = lastFrame->whiteAcc;
@@ -155,7 +156,7 @@ struct NnueEvaluator : public EvaluatorInterface {
     currentFrame->pieceBitboards = lastFrame->pieceBitboards;
     for (NnueFeatureBitmapType i = static_cast<NnueFeatureBitmapType>(0); i < NF_COUNT; i = static_cast<NnueFeatureBitmapType>(i + 1)) {
       const Bitboard oldBitboard = lastFrame->pieceBitboards[i];
-      const Bitboard newBitboard = nnue_feature_to_bitboard(i, pos, threats);
+      const Bitboard newBitboard = nnue_feature_to_bitboard(i, pos, threats, pawnAnalysis);
       Bitboard diff = oldBitboard & ~newBitboard;
       while (diff) {
         const SafeSquare sq = pop_lsb_i_promise_board_is_not_empty(diff);
@@ -192,7 +193,7 @@ struct NnueEvaluator : public EvaluatorInterface {
     }
 
     #ifndef NDEBUG
-      Evaluation score2 = this->from_scratch(pos, threats);
+      Evaluation score2 = this->from_scratch(pos, threats, pawnAnalysis);
       bool mismatch;
       if (std::is_same<T, int16_t>::value) {
         mismatch = score != score2;
