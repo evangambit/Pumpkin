@@ -462,6 +462,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
             }
             return NegamaxResult<TURN>(entry.bestMove, beta);
           }
+	  alpha = ColoredEvaluation<TURN>(entry.value).clamp_(alpha, beta);
         } else if (entry.bound == BoundType::UPPER) {
           if (entry.value <= alpha.value) {
           if (IS_PRINT_NODE) {
@@ -469,6 +470,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
             }
             return NegamaxResult<TURN>(entry.bestMove, alpha);
           }
+	  beta = ColoredEvaluation<TURN>(entry.value).clamp_(alpha, beta);
         }
       }
     } else {
