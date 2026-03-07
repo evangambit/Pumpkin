@@ -57,7 +57,7 @@ struct ChunkedDataset {
 
             Position pos(fen);
             Threats threats;
-            PawnAnalysis<Color::WHITE> pawnAnalysis;
+            PawnAnalysis<Color::WHITE> pawnAnalysis(pos);
             create_threats(pos.pieceBitboards_, pos.colorBitboards_, &threats);
 
             NNUE::Features features = NNUE::pos2features(pos, threats, pawnAnalysis);
