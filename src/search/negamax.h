@@ -568,7 +568,8 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   //  3 uci-100    :     0.2    1.8  6660.5   13329    50
   //  4 uci-200    :    -1.7    2.9  2388.0    4800    50
   //  5 old        :    -2.6    1.9  5803.0   11729    49
-  if (depth == 1 && SEARCH_TYPE == SearchType::NULL_WINDOW_SEARCH && frame->staticEval < alpha.value - 50) {
+  static constexpr int kRazoringMargin = 50;
+  if (depth == 1 && SEARCH_TYPE == SearchType::NULL_WINDOW_SEARCH && frame->staticEval < alpha.value - kRazoringMargin) {
     return qsearch<TURN>(thread, alpha, beta, plyFromRoot, 0, frame, stopThinking);
   }
 
