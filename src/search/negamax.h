@@ -71,6 +71,7 @@ struct Frame {
   Move responseFrom[Piece::NUM_PIECES][64];
   uint64_t hash;
   bool inCheck;
+  Evaluation staticEval;
 };
 
 /**
@@ -558,7 +559,18 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   create_threats(thread->position_.pieceBitboards_, thread->position_.colorBitboards_, &threats);
   // We never call evaluate in interior nodes, but it behooves us to keep the accumulator
   // up to date so our children/grandchildren can benefit from it.
-  thread->position_.evaluator_->update_accumulator(thread->position_, threats, plyFromRoot);
+  frame->staticEval = evaluate<TURN>(thread->position_.evaluator_, thread->position_, threats, plyFromRoot, alpha, beta).value;
+
+  // Razoring.
+  //  # PLAYER     :  RATING  ERROR  POINTS  PLAYED   (%)
+  //  1 uci-50     :     2.7    1.8  7267.5   14400    50
+  //  2 uci-150    :     1.5    2.3  4010.0    8000    50
+  //  3 uci-100    :     0.2    1.8  6660.5   13329    50
+  //  4 uci-200    :    -1.7    2.9  2388.0    4800    50
+  //  5 old        :    -2.6    1.9  5803.0   11729    49
+  if (depth == 1 && SEARCH_TYPE == SearchType::NULL_WINDOW_SEARCH && frame->staticEval < alpha.value - 50) {
+    return qsearch<TURN>(thread, alpha, beta, plyFromRoot, 0, frame, stopThinking);
+  }
 
   // Null move pruning.
   // This is roughly equivalent to having twice as much time.
