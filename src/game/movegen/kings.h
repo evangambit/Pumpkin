@@ -105,7 +105,7 @@ ExtMove *compute_king_moves(const Position& pos, ExtMove *moves, Bitboard target
     }
     while (tos) {
       SafeSquare to = pop_lsb_i_promise_board_is_not_empty(tos);
-      *moves++ = ExtMove(Piece::KING, pos.tiles_[to], Move{from, MoveType::NORMAL, to, 0});
+      *moves++ = ExtMove(Piece::KING, pos.tiles_[to], Move::create(from, to));
     }
   }
 

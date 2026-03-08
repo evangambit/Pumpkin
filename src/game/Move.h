@@ -22,6 +22,10 @@ struct Move {
 
   std::string uci() const;
 
+  static inline Move create(SafeSquare from, SafeSquare to) {
+    return Move{from, MoveType::NORMAL, to, 0};
+  }
+
   bool operator==(const Move& a) const {
     return from == a.from && to == a.to && promotion == a.promotion && moveType == a.moveType;
   }
@@ -49,7 +53,7 @@ static_assert(sizeof(ExtMove) == 8);
 std::ostream& operator<<(std::ostream& stream, const Move move);
 std::ostream& operator<<(std::ostream& stream, const ExtMove move);
 
-const Move kNullMove = Move{SafeSquare(0), MoveType::NORMAL, SafeSquare(0), 0};
+const Move kNullMove = Move::create(SafeSquare(0), SafeSquare(0));
 const ExtMove kNullExtMove = ExtMove(Piece::NO_PIECE, kNullMove);
 
 }  // namespace ChessEngine
