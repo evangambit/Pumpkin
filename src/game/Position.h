@@ -25,6 +25,7 @@ struct PositionState {
   uint8_t halfMoveCounter;
   UnsafeSquare epSquare;
   uint64_t hash;  // Required for 3-move draw.
+  uint64_t pawnHash;
 };
 
 std::ostream& operator<<(std::ostream& stream, const PositionState& state);
@@ -32,6 +33,7 @@ struct Position;
 std::ostream& operator<<(std::ostream& stream, const Position& pos);
 
 extern uint64_t kZorbristNumbers[kNumColoredPieces][kNumSquares];
+extern uint64_t kZorbristPawnNumbers[kNumColoredPieces][kNumSquares];
 extern uint64_t kZorbristCastling[16];
 extern uint64_t kZorbristEnpassant[8];
 extern uint64_t kZorbristTurn;

@@ -89,7 +89,7 @@ constexpr CastlingRights kCastlingRights_NoRights = 0;
 constexpr Evaluation kWhiteWins = 32767;
 constexpr Evaluation kBlackWins = -32767;
 
-enum Piece {
+enum Piece : uint8_t {
   NO_PIECE = 0,
   PAWN = 1,
   KNIGHT = 2,
@@ -99,6 +99,24 @@ enum Piece {
   KING = 6,
   NUM_PIECES = 7,
 };
+
+enum SafePiece : uint8_t {
+  S_PAWN = 0,
+  S_KNIGHT = 1,
+  S_BISHOP = 2,
+  S_ROOK = 3,
+  S_QUEEN = 4,
+  S_KING = 5,
+  S_NUM_PIECES = 6,
+};
+
+constexpr Piece to_piece(SafePiece sp) {
+  return Piece(uint8_t(sp) + 1);
+}
+
+constexpr SafePiece to_safe_piece(Piece p) {
+  return SafePiece(uint8_t(p) - 1);
+}
 
 const unsigned kNumColoredPieces = 13;
 

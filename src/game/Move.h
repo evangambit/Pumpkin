@@ -7,7 +7,7 @@
 
 namespace ChessEngine {
 
-enum MoveType {
+enum MoveType : uint8_t {
   NORMAL = 0,
   EN_PASSANT = 1,
   CASTLE = 2,
@@ -16,9 +16,9 @@ enum MoveType {
 
 struct Move {
   SafeSquare from : 6;
-  SafeSquare to : 6;
-  unsigned promotion : 2;  // knight, bishop, rook, queen
   MoveType moveType : 2;
+  SafeSquare to : 6;
+  uint8_t promotion : 2;  // knight, bishop, rook, queen
 
   std::string uci() const;
 
@@ -28,6 +28,7 @@ struct Move {
 
   static Move fromUci(const std::string& uci);
 };
+static_assert(sizeof(Move) == 2);
 
 struct ExtMove {
   ExtMove() {}
@@ -48,7 +49,7 @@ struct ExtMove {
 std::ostream& operator<<(std::ostream& stream, const Move move);
 std::ostream& operator<<(std::ostream& stream, const ExtMove move);
 
-const Move kNullMove = Move{SafeSquare(0), SafeSquare(0), 0, MoveType::NORMAL};
+const Move kNullMove = Move{SafeSquare(0), MoveType::NORMAL, SafeSquare(0), 0};
 const ExtMove kNullExtMove = ExtMove(Piece::NO_PIECE, kNullMove);
 
 }  // namespace ChessEngine
