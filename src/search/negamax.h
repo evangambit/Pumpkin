@@ -246,7 +246,6 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
   // Validate move count is within bounds
   assert(end >= moves && end <= moves + kMaxNumMoves);
 
-  constexpr ColoredPiece enemyKing = coloredPiece<opposite_color<TURN>(), Piece::KING>();
   if (IS_PRINT_QNODE) {
     std::cout << repeat("  ", plyFromRoot) << "In check: " << frame->inCheck << "; numMoves = " << (end - moves) << std::endl;
   }
@@ -530,14 +529,8 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     }
   }
 
-  constexpr ColoredPiece enemyKing = coloredPiece<opposite_color<TURN>(), Piece::KING>();
   if (moves == end) {
-    constexpr ColoredPiece moverKing = coloredPiece<TURN, Piece::KING>();
-    const bool inCheck = can_enemy_attack<TURN>(
-      thread->position_,
-      lsb_i_promise_board_is_not_empty(thread->position_.pieceBitboards_[moverKing])
-    );
-    if (inCheck) {
+    if (frame->inCheck) {
       if (IS_PRINT_NODE) {
         std::cout << repeat("  ", plyFromRoot) << "Returning (Checkmate detected)." << std::endl;
       }
@@ -706,13 +699,8 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   NegamaxResult<TURN> bestResult(kNullMove, ColoredEvaluation<TURN>(kMinEval));
   uint8_t numQuietMovesSearched = 0;
   for (ExtMove* move = moves; move < end; ++move) {
-    if (thread->position_.pieceBitboards_[enemyKing] & bb(move->move.to)) {
-      // Don't capture the king. TODO: remove this check by fixing move generation.
-      if (IS_PRINT_NODE) {
-        std::cout << repeat("  ", plyFromRoot) << "Skipping illegal move " << move->move.uci() << " that captures the king: " << move->move.uci() << std::endl;
-      }
-      continue;
-    }
+    constexpr ColoredPiece enemyKing = coloredPiece<opposite_color<TURN>(), Piece::KING>();
+    assert((thread->position_.pieceBitboards_[enemyKing] & bb(move->move.to)) == 0);
     make_move<TURN>(&thread->position_, move->move);
 
     const bool inCheck = can_enemy_attack<TURN>(

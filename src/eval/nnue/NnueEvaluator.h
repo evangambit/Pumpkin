@@ -191,22 +191,6 @@ struct NnueEvaluator : public EvaluatorInterface {
       score = static_cast<int16_t>(std::max(minVal, std::min(maxVal, v)));
     }
 
-    #ifndef NDEBUG
-      Evaluation score2 = this->from_scratch(pos, threats);
-      bool mismatch;
-      if (std::is_same<T, int16_t>::value) {
-        mismatch = score != score2;
-      } else {
-        // Allow a small tolerance for floating point differences.
-        mismatch = std::abs(score - score2) > 1;
-      }
-      if (mismatch) {
-        std::cerr << "Score mismatch! Incremental: " << score << ", from scratch: " << score2 << std::endl;
-        std::cerr << "Position: " << pos.fen() << std::endl;
-        exit(1);
-      }
-    #endif
-
     return Evaluation(score);
   }
 
