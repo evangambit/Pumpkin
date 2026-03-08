@@ -70,6 +70,7 @@ struct Frame {
   Move responseTo[Piece::NUM_PIECES][64];
   Move responseFrom[Piece::NUM_PIECES][64];
   uint64_t hash;
+  bool inCheck;
 };
 
 /**
@@ -182,12 +183,11 @@ ColoredEvaluation<opposite_color<TURN>()> to_child_eval(ColoredEvaluation<TURN> 
 
 template<Color TURN>
 NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, ColoredEvaluation<TURN> beta, int plyFromRoot, int quiescenceDepth, Frame *frame, std::atomic<bool> *stopThinking) {
-  frame->hash = thread->position_.currentState_.hash;
   if (IS_PRINT_QNODE) {
     std::cout << repeat("  ", plyFromRoot) << "Quiescence search called: alpha=" << alpha.value << " beta=" << beta.value << " plyFromRoot=" << plyFromRoot << " quiescenceDepth=" << quiescenceDepth << " history" << thread->position_.history_ << std::endl;
   }
 
-  // This can happen when we've already found a checkmate in a previous sibling node.
+  // This can happen when we've already found a checkmate in a previous sibling/ancestor node.
   if (alpha >= beta) {
     if (IS_PRINT_QNODE) {
       std::cout << repeat("  ", plyFromRoot) << "Alpha-beta window is invalid (alpha >= beta). Returning beta." << std::endl;
@@ -204,6 +204,13 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
     create_threats(thread->position_.pieceBitboards_, thread->position_.colorBitboards_, &threats);
     return NegamaxResult<TURN>(kNullMove, evaluate<TURN>(thread->position_.evaluator_, thread->position_, threats, plyFromRoot, alpha, beta).clamp_(alpha, beta));
   }
+
+  frame->hash = thread->position_.currentState_.hash;
+  constexpr ColoredPiece moverKing = coloredPiece<TURN, Piece::KING>();
+  frame->inCheck = can_enemy_attack<TURN>(
+    thread->position_,
+    lsb_i_promise_board_is_not_empty(thread->position_.pieceBitboards_[moverKing])
+  );
 
   // Transposition Table probe
   TTEntry entry;
@@ -240,15 +247,10 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
   assert(end >= moves && end <= moves + kMaxNumMoves);
 
   constexpr ColoredPiece enemyKing = coloredPiece<opposite_color<TURN>(), Piece::KING>();
-  constexpr ColoredPiece moverKing = coloredPiece<TURN, Piece::KING>();
-  const bool inCheck = can_enemy_attack<TURN>(
-    thread->position_,
-    lsb_i_promise_board_is_not_empty(thread->position_.pieceBitboards_[moverKing])
-  );
   if (IS_PRINT_QNODE) {
-    std::cout << repeat("  ", plyFromRoot) << "In check: " << inCheck << "; numMoves = " << (end - moves) << std::endl;
+    std::cout << repeat("  ", plyFromRoot) << "In check: " << frame->inCheck << "; numMoves = " << (end - moves) << std::endl;
   }
-  if (moves == end && inCheck) {
+  if (moves == end && frame->inCheck) {
     if (IS_PRINT_QNODE) {
       std::cout << repeat("  ", plyFromRoot) << "Checkmate detected in quiescence search." << std::endl;
     }
@@ -264,7 +266,7 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
   if (IS_PRINT_QNODE) {
     std::cout << repeat("  ", plyFromRoot) << "Static evaluation: " << bestResult.evaluation.value << " (hash = " << frame->hash << ")" << std::endl;
   }
-  if (!inCheck) {
+  if (!frame->inCheck) {
     if (bestResult.evaluation >= beta) {
       bestResult.evaluation = beta;
       return bestResult;
@@ -420,8 +422,9 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   }
   const ColoredEvaluation<TURN> originalAlpha = alpha;
   const uint64_t key = thread->position_.currentState_.hash;
-  frame->hash = key;
 
+  // Because of how we handle checkmate values, this condition is basically
+  // how we avoid looking for mate-in-5 if we already found mate-in-4.
   if (alpha >= beta) {
     if (IS_PRINT_QNODE) {
       std::cout << repeat("  ", plyFromRoot) << "Alpha-beta window is invalid (alpha >= beta). Returning beta." << std::endl;
@@ -429,6 +432,23 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     return NegamaxResult<TURN>(kNullMove, beta);
   }
 
+  if (depth == 0) {
+    auto r = qsearch(thread, alpha, beta, plyFromRoot, 0, frame, stopThinking);
+    if (IS_PRINT_NODE) {
+      std::cout << repeat("  ", plyFromRoot) << "Returning from quiescence search: " << r << std::endl;
+    }
+    return r;
+  }
+
+  // TODO: Check if any move leads to a draw by repetition.
+  // If so, set alpha to kDraw.
+
+  frame->hash = key;
+  constexpr ColoredPiece moverKing = coloredPiece<TURN, Piece::KING>();
+  frame->inCheck = can_enemy_attack<TURN>(
+    thread->position_,
+    lsb_i_promise_board_is_not_empty(thread->position_.pieceBitboards_[moverKing])
+  );
 
   if (SEARCH_TYPE != SearchType::ROOT && stopThinking->load()) {
     if (IS_PRINT_NODE) {
@@ -437,8 +457,11 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     return NegamaxResult<TURN>(kNullMove, originalAlpha);
   }
 
-  // TODO: We need to check this *after* we do the checkmate test above, since you can win on the 50th move.
-  if (thread->position_.is_draw_assuming_no_checkmate(plyFromRoot) || thread->position_.is_material_draw()) {
+  // Check if draw by repetition or insufficient material.
+  bool isDraw = thread->position_.is_3fold_repetition(plyFromRoot);
+  isDraw |= !frame->inCheck && thread->position_.is_fifty_move_rule();
+  isDraw |= thread->position_.is_material_draw();
+  if (isDraw) {
     if (IS_PRINT_NODE) {
       std::cout << repeat("  ", plyFromRoot) << "Returning (Draw detected)." << std::endl;
     }
@@ -462,7 +485,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
             }
             return NegamaxResult<TURN>(entry.bestMove, beta);
           }
-	  alpha = ColoredEvaluation<TURN>(entry.value).clamp_(alpha, beta);
+          alpha = ColoredEvaluation<TURN>(entry.value).clamp_(alpha, beta);
         } else if (entry.bound == BoundType::UPPER) {
           if (entry.value <= alpha.value) {
           if (IS_PRINT_NODE) {
@@ -470,7 +493,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
             }
             return NegamaxResult<TURN>(entry.bestMove, alpha);
           }
-	  beta = ColoredEvaluation<TURN>(entry.value).clamp_(alpha, beta);
+          beta = ColoredEvaluation<TURN>(entry.value).clamp_(alpha, beta);
         }
       }
     } else {
@@ -483,14 +506,6 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   thread->nodeCount_++;
   if (thread->nodeCount_ >= thread->nodeLimit_) {
     stopThinking->store(true);
-  }
-
-  if (depth == 0) {
-    auto r = qsearch(thread, alpha, beta, plyFromRoot, 0, frame, stopThinking);
-    if (IS_PRINT_NODE) {
-      std::cout << repeat("  ", plyFromRoot) << "Returning from quiescence search: " << r << std::endl;
-    }
-    return r;
   }
 
   ExtMove moves[kMaxNumMoves];
@@ -552,12 +567,6 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   // up to date so our children/grandchildren can benefit from it.
   thread->position_.evaluator_->update_accumulator(thread->position_, threats, plyFromRoot);
 
-  constexpr ColoredPiece moverKing = coloredPiece<TURN, Piece::KING>();
-  const bool inCheck = can_enemy_attack<TURN>(
-    thread->position_,
-    lsb_i_promise_board_is_not_empty(thread->position_.pieceBitboards_[moverKing])
-  );
-
   // Null move pruning.
   // This is roughly equivalent to having twice as much time.
   //  # PLAYER       :  RATING  ERROR  POINTS  PLAYED   (%)
@@ -566,7 +575,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   //  3 main-slow    :    -4.1    5.5  2364.0    4800    49
   //  4 main-fast    :   -62.3    5.4  1852.0    4800    39
   const int myPieceCount = std::popcount(thread->position_.colorBitboards_[TURN] & ~thread->position_.pieceBitboards_[coloredPiece<TURN, Piece::PAWN>()]);
-  if (SEARCH_TYPE == SearchType::NULL_WINDOW_SEARCH && !inCheck && myPieceCount > 0 && depth > 0) {
+  if (SEARCH_TYPE == SearchType::NULL_WINDOW_SEARCH && !frame->inCheck && myPieceCount > 0 && depth > 0) {
     constexpr int reduction = 4;
     const int reducedDepth = std::max(0, depth - reduction);
     make_nullmove<TURN>(&thread->position_);
