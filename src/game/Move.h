@@ -44,7 +44,7 @@ struct ExtMove {
   Move move;  // 16 bits
   Evaluation score;  // 16 bits
 };
-
+static_assert(sizeof(ExtMove) == 8);
 
 std::ostream& operator<<(std::ostream& stream, const Move move);
 std::ostream& operator<<(std::ostream& stream, const ExtMove move);
