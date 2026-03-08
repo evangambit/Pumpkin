@@ -125,7 +125,7 @@ ExtMove *compute_rook_like_moves(const Position& pos, ExtMove *moves, Bitboard t
 
     while (tos) {
       SafeSquare to = pop_lsb_i_promise_board_is_not_empty(tos);
-      *moves++ = ExtMove(piece, pos.tiles_[to], Move{from, to, 0, MoveType::NORMAL});
+      *moves++ = ExtMove(piece, pos.tiles_[to], Move{from, MoveType::NORMAL, to, 0});
     }
 
   }

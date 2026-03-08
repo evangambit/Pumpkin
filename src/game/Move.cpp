@@ -57,7 +57,7 @@ Move Move::fromUci(const std::string& uci) {
       default: throw std::invalid_argument("Invalid promotion piece in UCI");
     }
   }
-  return Move{from, to, promotion, moveType};
+  return Move{from, moveType, to, (uint8_t)promotion};
 }
 
 std::ostream& operator<<(std::ostream& stream, const Move move) {
