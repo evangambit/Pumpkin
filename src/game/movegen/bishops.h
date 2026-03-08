@@ -353,7 +353,7 @@ ExtMove *compute_bishop_like_moves(const Position& pos, ExtMove *moves, Bitboard
 
     while (tos) {
       SafeSquare to = pop_lsb_i_promise_board_is_not_empty(tos);
-      *moves++ = ExtMove(piece, pos.tiles_[to], Move{from, MoveType::NORMAL, to, 0});
+      *moves++ = ExtMove(piece, pos.tiles_[to], Move::create(from, to));
     }
   }
 

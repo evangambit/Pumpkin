@@ -83,11 +83,11 @@ ExtMove *compute_pawn_moves(const Position& pos, ExtMove *moves, Bitboard target
 
     while (b1) {
       SafeSquare to = pop_lsb_i_promise_board_is_not_empty(b1);
-      *moves++ = ExtMove(Piece::PAWN, Move{to - FORWARD, MoveType::NORMAL, to, 0});
+      *moves++ = ExtMove(Piece::PAWN, Move::create(to - FORWARD, to));
     }
     while (b2) {
       SafeSquare to = pop_lsb_i_promise_board_is_not_empty(b2);
-      *moves++ = ExtMove(Piece::PAWN, Move{to - FORWARD - FORWARD, MoveType::NORMAL, to, 0});
+      *moves++ = ExtMove(Piece::PAWN, Move::create(to - FORWARD - FORWARD, to));
     }
   }
 
@@ -114,7 +114,7 @@ ExtMove *compute_pawn_moves(const Position& pos, ExtMove *moves, Bitboard target
     }
     while (b1) {
       SafeSquare to = pop_lsb_i_promise_board_is_not_empty(b1);
-      *moves++ = ExtMove(Piece::PAWN, pos.tiles_[to], Move{to - CAPTURE_NE, MoveType::NORMAL, to, 0});
+      *moves++ = ExtMove(Piece::PAWN, pos.tiles_[to], Move::create(to - CAPTURE_NE, to));
     }
 
     b1 = shift<CAPTURE_NW>(pawns & ~(pm.vertical | pm.northeast)) & (enemies | epLoc);
@@ -132,7 +132,7 @@ ExtMove *compute_pawn_moves(const Position& pos, ExtMove *moves, Bitboard target
     while (b1) {
       SafeSquare to = pop_lsb_i_promise_board_is_not_empty(b1);
       ColoredPiece capture = pos.tiles_[to];
-      *moves++ = ExtMove(Piece::PAWN, capture, Move{to - CAPTURE_NW, MoveType::NORMAL, to, 0});
+      *moves++ = ExtMove(Piece::PAWN, capture, Move::create(to - CAPTURE_NW, to));
     }
   }
 
