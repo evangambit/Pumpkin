@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <memory>
+#include <stdexcept>
 #include <vector>
 
 #if defined(__ARM_NEON) || defined(__aarch64__)
@@ -42,13 +43,27 @@ struct Matrix {
 
   Matrix(Matrix&& other) = default;
 
+  T operator()(size_t y, size_t x) const {
+    return data[y * WIDTH + x];
+  }
+
   void setZero() {
     std::fill(data, data + HEIGHT * WIDTH, T(0));
   }
 
-  void load_from_stream(std::istream& in) {
+  void load_from_stream(std::istream& in, std::string expectedName = "") {
     char name[16];
     in.read(name, 16);
+    if (expectedName.size() > 0) {
+      while (expectedName.size() < 16) {
+        expectedName += " ";
+      }
+      std::string actualName(name, 16);
+      // Compare names.
+      if (actualName != expectedName) {
+        throw std::runtime_error("Unexpected matrix name: \"" + std::string(actualName) + "\" != \"" + expectedName + "\"");
+      }
+    }
 
     uint32_t degree;
     in.read(reinterpret_cast<char*>(&degree), sizeof(uint32_t));
@@ -182,9 +197,19 @@ struct Vector {
     }
   }
 
-  void load_from_stream(std::istream& in) {
+  void load_from_stream(std::istream& in, std::string expectedName = "") {
     char name[16];
     in.read(name, 16);
+    if (expectedName.size() > 0) {
+      while (expectedName.size() < 16) {
+        expectedName += " ";
+      }
+      std::string actualName(name, 16);
+      // Compare names.
+      if (actualName != expectedName) {
+        throw std::runtime_error("Unexpected matrix name: \"" + std::string(actualName) + "\" != \"" + expectedName + "\"");
+      }
+    }
 
     uint32_t degree;
     in.read(reinterpret_cast<char*>(&degree), sizeof(uint32_t));

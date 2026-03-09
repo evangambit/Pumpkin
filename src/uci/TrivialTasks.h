@@ -300,8 +300,21 @@ class SetEvaluatorTask : public Task {
       state->position.set_listener(std::make_shared<PieceSquareEvaluator>());
       std::cout << "Evaluator set to pst." << std::endl;
     } else if (evaluatorName == "byhand") {
-      state->position.set_listener(std::make_shared<ByHand::ByHandEvaluator>());
+      auto evaluator = std::make_shared<ByHand::ByHandEvaluator>();
+      state->position.set_listener(evaluator);
       std::cout << "Evaluator set to byhand." << std::endl;
+      if (command.size() > 0) {
+        std::string modelFile = command.at(0);
+        command.pop_front();
+        std::ifstream f(modelFile, std::ios::binary);
+        if (!f) {
+          std::cout << "Error: could not open model file \"" << modelFile << "\"" << std::endl;
+          return;
+        }
+        evaluator->load_from_stream(f);
+      } else {
+        std::cout << "Error: must provide weights (no built-in model yet)" << std::endl;
+      }
     } else if (evaluatorName == "nnue") {
       std::shared_ptr<NNUE::Nnue<int16_t>> nnue_model = std::make_shared<NNUE::Nnue<int16_t>>();
       if (command.size() > 0) {
