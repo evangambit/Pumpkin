@@ -1,14 +1,17 @@
 #ifndef SRC_EVAL_BYHAND_BYHAND_H
 #define SRC_EVAL_BYHAND_BYHAND_H
 
+#include <cstdint>
 #include <memory>
 #include <bit>
 #include "../../game/Position.h"
 #include "../../game/Utils.h"
 #include "../../game/BoardListener.h"
+#include "../../game/movegen/bishops.h"
 #include "../Evaluator.h"
 #include "../ColoredEvaluation.h"
 #include "../pst/PieceSquareEvaluator.h"
+#include "../nnue/Nnue.h"
 #include "../PawnAnalysis.h"
 
 namespace ChessEngine {
@@ -91,10 +94,10 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
   static constexpr Color THEM = opposite_color<US>();
   static constexpr Direction FORWARD = US == Color::WHITE ? Direction::NORTH : Direction::SOUTH;
   static constexpr Direction BACKWARD = US == Color::WHITE ? Direction::SOUTH : Direction::NORTH;
-  static constexpr Direction FORWARD_EAST = US == Color::WHITE ? Direction::NORTHEAST : Direction::SOUTHEAST;
-  static constexpr Direction BACKWARD_EAST = US == Color::WHITE ? Direction::SOUTHEAST : Direction::NORTHEAST;
-  static constexpr Direction FORWARD_WEST = US == Color::WHITE ? Direction::NORTHWEST : Direction::SOUTHWEST;
-  static constexpr Direction BACKWARD_WEST = US == Color::WHITE ? Direction::SOUTHWEST : Direction::NORTHWEST;
+  static constexpr Direction FORWARD_EAST = US == Color::WHITE ? Direction::NORTH_EAST : Direction::SOUTH_EAST;
+  static constexpr Direction BACKWARD_EAST = US == Color::WHITE ? Direction::SOUTH_EAST : Direction::NORTH_EAST;
+  static constexpr Direction FORWARD_WEST = US == Color::WHITE ? Direction::NORTH_WEST : Direction::SOUTH_WEST;
+  static constexpr Direction BACKWARD_WEST = US == Color::WHITE ? Direction::SOUTH_WEST : Direction::NORTH_WEST;
 
   assert(pos.pieceBitboards_[ColoredPiece::WHITE_KING] > 0);
   assert(pos.pieceBitboards_[ColoredPiece::BLACK_KING] > 0);
@@ -115,7 +118,16 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
   const Bitboard theirQueens = pos.pieceBitboards_[coloredPiece<THEM, Piece::QUEEN>()];
   const Bitboard theirKings = pos.pieceBitboards_[coloredPiece<THEM, Piece::KING>()];
 
-  PawnAnalysis<US> pawnAnalysis(pos);
+  static const Bitboard ourTargets = US == Color::WHITE ? threats.whiteTargets : threats.blackTargets;
+  static const Bitboard theirTargets = US == Color::WHITE ? threats.blackTargets : threats.whiteTargets;
+
+  const Bitboard our1stRank = US == Color::WHITE ? kRanks[7] : kRanks[0];
+  const Bitboard their1stRank = US == Color::WHITE ? kRanks[0] : kRanks[7];
+  const Bitboard our7thRank = US == Color::WHITE ? kRanks[1] : kRanks[6];
+  const Bitboard their7thRank = US == Color::WHITE ? kRanks[6] : kRanks[1];
+  const Bitboard our6thRank = US == Color::WHITE ? kRanks[2] : kRanks[5];
+  const Bitboard their6thRank = US == Color::WHITE ? kRanks[5] : kRanks[2];
+  const PawnAnalysis<US> pawnAnalysis(pos);
 
   out[EF::OUR_PAWNS] = std::popcount(ourPawns);
   out[EF::OUR_KNIGHTS] = std::popcount(ourKnights);
@@ -134,15 +146,6 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
   } else {
     out[EF::KING_ACTIVE] = (ourKingSq / 8 > 2) - (theirKingSq / 8 < 5);
   }
-
-  const Bitboard ourTargets = US == Color::WHITE ? threats.whiteTargets : threats.blackTargets;
-  const Bitboard theirTargets = US == Color::WHITE ? threats.blackTargets : threats.whiteTargets;
-  const Bitboard our1stRank = US == Color::WHITE ? kRanks[7] : kRanks[0];
-  const Bitboard their1stRank = US == Color::WHITE ? kRanks[0] : kRanks[7];
-  const Bitboard our7thRank = US == Color::WHITE ? kRanks[1] : kRanks[6];
-  const Bitboard their7thRank = US == Color::WHITE ? kRanks[6] : kRanks[1];
-  const Bitboard our6thRank = US == Color::WHITE ? kRanks[2] : kRanks[5];
-  const Bitboard their6thRank = US == Color::WHITE ? kRanks[5] : kRanks[2];
 
   out[EF::THREATS_NEAR_KING_2] = std::popcount(kNearby[2][ourKingSq] & theirTargets & ~ourTargets) - std::popcount(kNearby[2][theirKingSq] & ourTargets & ~theirTargets);
   out[EF::THREATS_NEAR_KING_3] = std::popcount(kNearby[3][ourKingSq] & theirTargets & ~ourTargets) - std::popcount(kNearby[3][theirKingSq] & ourTargets & ~theirTargets);
@@ -224,13 +227,45 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
 }
 
 struct ByHandEvaluator : public PieceSquareEvaluator {
+  NNUE::Matrix<2, EF::EF_COUNT, int16_t> weights;
+  NNUE::Vector<2, int16_t> bias;
+  NNUE::Vector<EF::EF_COUNT, int8_t> x;
   ColoredEvaluation<Color::WHITE> evaluate_white(const Position& pos, const Threats& threats, int plyFromRoot, ColoredEvaluation<Color::WHITE> alpha, ColoredEvaluation<Color::WHITE> beta) override {
-    ColoredEvaluation<Color::WHITE> pst = PieceSquareEvaluator::evaluate_white(pos, threats, plyFromRoot, alpha, beta);
-    return pst;
+    return _evaluate<Color::WHITE>(pos, threats, alpha, beta);
+  }
+  ColoredEvaluation<Color::BLACK> evaluate_black(const Position& pos, const Threats& threats, int plyFromRoot, ColoredEvaluation<Color::BLACK> alpha, ColoredEvaluation<Color::BLACK> beta) override {
+    return _evaluate<Color::BLACK>(pos, threats, alpha, beta);
+  }
+
+  template<Color US>
+  ColoredEvaluation<US> _evaluate(const Position& pos, const Threats& threats, ColoredEvaluation<US> alpha, ColoredEvaluation<US> beta) {
+    pos2features<US>(pos, threats, x.data_ptr());
+    int32_t late = bias[1];
+    int32_t early = bias[0];
+    for (size_t i = 0; i < EF::EF_COUNT; ++i) {
+      late += x[i] * weights(0, i);
+      early += x[i] * weights(1, i);
+    }
+    int32_t earliness = 0;
+    earliness += x[EF::OUR_KNIGHTS] + x[EF::OUR_BISHOPS] + x[EF::OUR_ROOKS] + x[EF::OUR_QUEENS] * 3;
+    earliness += x[EF::THEIR_KNIGHTS] + x[EF::THEIR_BISHOPS] + x[EF::THEIR_ROOKS] + x[EF::THEIR_QUEENS] * 3;
+    earliness = std::min(18, earliness);
+    int32_t r = (early * earliness + late * (18 - earliness)) / 18;
+    if constexpr (US == Color::WHITE) {
+      r += PieceSquareEvaluator::evaluate_white(pos, threats, 0, alpha, beta).value / 10;
+    } else {
+      r += PieceSquareEvaluator::evaluate_black(pos, threats, 0, alpha, beta).value / 10;
+    }
+    return ColoredEvaluation<US>(r);
   }
 
   std::shared_ptr<EvaluatorInterface> clone() const override {
     return std::make_shared<ByHandEvaluator>();
+  }
+
+  void load_from_stream(std::istream& in) {
+    weights.load_from_stream(in, "weights");
+    bias.load_from_stream(in, "bias");
   }
 
   std::string to_string() const override {

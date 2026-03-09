@@ -14,6 +14,15 @@ BATCH_SIZE = 2048
 CHUNK_SIZE = 128
 assert BATCH_SIZE % CHUNK_SIZE == 0
 
+def save_tensor(tensor: torch.Tensor, name: str, out: io.BufferedWriter):
+  tensor = tensor.cpu().detach().numpy()
+  name = name.ljust(16)
+  assert len(name) == 16
+  out.write(np.array([ord(c) for c in name], dtype=np.uint8).tobytes())
+  out.write(np.array(len(tensor.shape), dtype=np.int32).tobytes())
+  out.write(np.array(tensor.shape, dtype=np.int32).tobytes())
+  out.write(tensor.tobytes())
+
 def collate_fn(rows):
     values, labels, turns = zip(*rows)
     values = torch.cat(values, dim=0)
@@ -96,14 +105,14 @@ if __name__ == "__main__":
             values, labels, turns = [x.to(device) for x in batch]
             values = values.to(torch.float32)
 
-            lateness = values[:,1] + values[:,2] + values[:,3] + values[:,4] * 3
-            lateness += values[:,6] + values[:,7] + values[:,8] + values[:,9] * 3
-            lateness = lateness.clip(0, 18) / 18
+            earliness = values[:,1] + values[:,2] + values[:,3] + values[:,4] * 3
+            earliness += values[:,6] + values[:,7] + values[:,8] + values[:,9] * 3
+            earliness = earliness.clip(0, 18) / 18
             
             # Predict
             # Convert values to float for Linear layer
             output = model(values.float())
-            output = output[:,0] * (1.0 - lateness) + output[:,1] * lateness
+            output = output[:,0] * (1.0 - earliness) + output[:,1] * earliness
             
             # Use Sigmoid to match eval output
             output_sig = torch.sigmoid(output)
@@ -123,10 +132,14 @@ if __name__ == "__main__":
     with open(os.path.join(run_dir, 'model.pt'), 'wb') as f:
         torch.save(model.state_dict(), f)
 
+    with open(os.path.join(run_dir, 'model.bin'), 'wb') as f:
+        save_tensor(model.weight.data, 'weights', f)
+        save_tensor(model.bias.data, 'bias', f)
+
     # Print out learned feature weights
     print("\nLearned Weights:")
-    weights = model.weight.data.squeeze().cpu().numpy()
-    bias = model.bias.item()
+    weights = model.weight.data.detach().cpu().numpy()
+    bias = model.bias.detach().cpu().numpy()
     for i, w in enumerate(weights.T):
         print(f"Feature {i}: {np.round(w * 100)}")
-    print(f"Bias: {bias:.5f}")
+    print(f"Bias: {np.round(bias * 100)}")
