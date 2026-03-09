@@ -132,11 +132,11 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
   out[EF::DOUBLED_PAWNS] = std::popcount(pawnAnalysis.ourDoubledPawns) - std::popcount(pawnAnalysis.theirDoubledPawns);
   out[EF::DOUBLE_ISOLATED_PAWNS] = std::popcount(pawnAnalysis.ourDoubledPawns & pawnAnalysis.ourIsolatedPawns) - std::popcount(pawnAnalysis.theirDoubledPawns & pawnAnalysis.theirIsolatedPawns);
 
-  out[EF::HANGING_PAWN] = std::popcount(threats.badFor<coloredPiece<US, Piece::PAWN>>() & ourPawns) - std::popcount(threats.badFor<coloredPiece<THEM, Piece::PAWN>>() & theirPawns);
-  out[EF::HANGING_KNIGHT] = std::popcount(threats.badFor<coloredPiece<US, Piece::KNIGHT>>() & ourKnights) - std::popcount(threats.badFor<coloredPiece<THEM, Piece::KNIGHT>>() & theirKnights);
-  out[EF::HANGING_BISHOP] = std::popcount(threats.badFor<coloredPiece<US, Piece::BISHOP>>() & ourBishops) - std::popcount(threats.badFor<coloredPiece<THEM, Piece::BISHOP>>() & theirBishops);
-  out[EF::HANGING_ROOK] = std::popcount(threats.badFor<coloredPiece<US, Piece::ROOK>>() & ourRooks) - std::popcount(threats.badFor<coloredPiece<THEM, Piece::ROOK>>() & theirRooks);
-  out[EF::HANGING_QUEEN] = std::popcount(threats.badFor<coloredPiece<US, Piece::QUEEN>>() & ourQueens) - std::popcount(threats.badFor<coloredPiece<THEM, Piece::QUEEN>>() & theirQueens);
+  out[EF::HANGING_PAWN] = std::popcount(threats.badForOur<US>(Piece::PAWN) & ourPawns) - std::popcount(threats.badForOur<THEM>(Piece::PAWN) & theirPawns);
+  out[EF::HANGING_KNIGHT] = std::popcount(threats.badForOur<US>(Piece::KNIGHT) & ourKnights) - std::popcount(threats.badForOur<THEM>(Piece::KNIGHT) & theirKnights);
+  out[EF::HANGING_BISHOP] = std::popcount(threats.badForOur<US>(Piece::BISHOP) & ourBishops) - std::popcount(threats.badForOur<THEM>(Piece::BISHOP) & theirBishops);
+  out[EF::HANGING_ROOK] = std::popcount(threats.badForOur<US>(Piece::ROOK) & ourRooks) - std::popcount(threats.badForOur<THEM>(Piece::ROOK) & theirRooks);
+  out[EF::HANGING_QUEEN] = std::popcount(threats.badForOur<US>(Piece::QUEEN) & ourQueens) - std::popcount(threats.badForOur<THEM>(Piece::QUEEN) & theirQueens);
 
   out[EF::PAWNxPAWN] = out[EF::OUR_PAWNS] * out[EF::OUR_PAWNS] - out[EF::THEIR_PAWNS] * out[EF::THEIR_PAWNS];
   out[EF::PAWNxKNIGHT] = out[EF::OUR_PAWNS] * out[EF::OUR_KNIGHTS] - out[EF::THEIR_PAWNS] * out[EF::THEIR_KNIGHTS];
