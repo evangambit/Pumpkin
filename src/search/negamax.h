@@ -90,6 +90,7 @@ struct Thread {
   uint64_t nodeLimit_{(uint64_t)-1};
   Frame buffer[4];  // Empty buffer so that frames_[plyFromRoot - 4] is valid.
   Frame frames_[kMaxPlyFromRoot];
+  int32_t quietHistory_[Piece::NUM_PIECES][64];
 
   // This pointer should be considered non-owning. The TranspositionTable should created and
   // managed elsewhere since it should be shared across threads and searches.
@@ -101,7 +102,9 @@ struct Thread {
     uint64_t multiPV,
     const std::unordered_set<Move>& permittedMoves,
     TranspositionTable* tt
-  ) : id_(id), position_(pos), permittedMoves_(permittedMoves), multiPV_(multiPV), tt_(tt) {}
+  ) : id_(id), position_(pos), permittedMoves_(permittedMoves), multiPV_(multiPV), tt_(tt) {
+    std::fill(&quietHistory_[0][0], &quietHistory_[0][0] + sizeof(quietHistory_) / sizeof(int32_t), 0);
+  }
   
   Thread(const Thread& other)
   : id_(other.id_),
@@ -113,7 +116,9 @@ struct Thread {
     nodeCount_(other.nodeCount_),
     qNodeCount_(other.qNodeCount_),
     nodeLimit_(other.nodeLimit_),
-    tt_(other.tt_) {}
+    tt_(other.tt_) {
+      std::memcpy(quietHistory_, other.quietHistory_, sizeof(quietHistory_));
+    }
 
   // TODO: when we add multi-threading, we should share stopSearchFlag across threads.
   std::atomic<bool> stopSearchFlag{false};
@@ -649,6 +654,10 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     // Prioritize the killer move(s) as equivalent to a non-sacking capture.
     move->score += thread->frames_[plyFromRoot].killers.contains(move->move) ? 8000 : 0;
 
+    if (move->capture == ColoredPiece::NO_COLORED_PIECE) {
+      move->score += thread->quietHistory_[move->piece][move->move.to] / 64;
+    }
+
     // Penalize non-capture moves that move to a defended square.
     move->score -= value_or_zero(
       ((threats.badForOur<TURN>(move->piece) & bb(move->move.to)) > 0)
@@ -791,7 +800,8 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     }
 
     undo<TURN>(&thread->position_);
-    numQuietMovesSearched += (move->capture == ColoredPiece::NO_COLORED_PIECE) && (move->move.moveType != MoveType::PROMOTION);
+    bool isQuiet = (move->capture == ColoredPiece::NO_COLORED_PIECE) && (move->move.moveType != MoveType::PROMOTION);
+    numQuietMovesSearched += isQuiet;
     if (eval > bestResult.evaluation) {
       bestResult.bestMove = move->move;
       bestResult.evaluation = eval;
@@ -823,6 +833,11 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
       }
       if (alpha >= beta) {
         // TODO: check if this move is quiet. Probably also check if we've already added it as a killer.
+        if (isQuiet) {
+          int32_t bonus = std::min(depth * depth, 400);
+          int32_t& hist = thread->quietHistory_[move->piece][move->move.to];
+          hist += bonus - hist * std::abs(bonus) / 16384;
+        }
         frame->killers.add(move->move);
         frame->responseTo[move->piece][lastMove.to] = move->move;
         frame->responseFrom[move->piece][lastMove.from] = move->move;
