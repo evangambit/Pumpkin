@@ -574,7 +574,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   }
   // Reverse futility pruning (+29.6 ± 2.7)
   if (depth == 1 && frame->staticEval > beta.value + kRazoringMargin) {
-    return qsearch<TURN>(thread, alpha, beta, plyFromRoot, 0, frame, stopThinking);
+    return NegamaxResult<TURN>(kNullMove, beta);
   }
 
   // Null move pruning.
