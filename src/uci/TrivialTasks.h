@@ -21,6 +21,7 @@ extern unsigned int qst_bin_len;
 
 #include "Task.h"
 #include "../eval/Evaluator.h"
+#include "../eval/byhand/byhand.h"
 #include "../eval/nnue/NnueEvaluator.h"
 #include "../eval/pst/PieceSquareEvaluator.h"
 #include "../eval/qst/QstEvaluator.h"
@@ -298,6 +299,9 @@ class SetEvaluatorTask : public Task {
     } else if (evaluatorName == "pst") {
       state->position.set_listener(std::make_shared<PieceSquareEvaluator>());
       std::cout << "Evaluator set to pst." << std::endl;
+    } else if (evaluatorName == "byhand") {
+      state->position.set_listener(std::make_shared<ByHand::ByHandEvaluator>());
+      std::cout << "Evaluator set to byhand." << std::endl;
     } else if (evaluatorName == "nnue") {
       std::shared_ptr<NNUE::Nnue<int16_t>> nnue_model = std::make_shared<NNUE::Nnue<int16_t>>();
       if (command.size() > 0) {
