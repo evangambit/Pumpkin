@@ -28,7 +28,6 @@ enum EF {
   THEIR_QUEENS,
 
   KING_ON_BACK_RANK,
-  KING_ON_CENTER_FILE,
   KING_ACTIVE,
   THREATS_NEAR_KING_2,
   THREATS_NEAR_KING_3,
@@ -59,7 +58,6 @@ enum EF {
   QUEENxROOK,
 
   // Interaction terms with opponent's pawn and queen.
-  THEIR_PAWNxPAWN,
   THEIR_PAWNxKNIGHT,
   THEIR_PAWNxBISHOP,
   THEIR_PAWNxROOK,
@@ -68,12 +66,35 @@ enum EF {
   THEIR_QUEENxBISHOP,
   THEIR_QUEENxROOK,
 
+  NUM_PAWN_TARGETS,
+  NUM_KNIGHT_TARGETS,
+  NUM_BISHOP_TARGETS,
+  NUM_ROOK_TARGETS,
+  NUM_QUEEN_TARGETS,
+
+  NUM_PAWN_TARGETS_ON_THEIR_SIDE,
+  NUM_KNIGHT_TARGETS_ON_THEIR_SIDE,
+  NUM_BISHOP_TARGETS_ON_THEIR_SIDE,
+  NUM_ROOK_TARGETS_ON_THEIR_SIDE,
+  NUM_QUEEN_TARGETS_ON_THEIR_SIDE,
+
+  NUM_SCARY_BISHOPS,
+  NUM_SCARY_ROOKS,
+  ROOKS_ON_OPEN_FILE,
+  ROOKS_ON_SEMI_OPEN_FILE,
+
   EF_COUNT
 };
 
 template<Color US>
 void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
-  constexpr Color THEM = opposite_color<US>();
+  static constexpr Color THEM = opposite_color<US>();
+  static constexpr Direction FORWARD = US == Color::WHITE ? Direction::NORTH : Direction::SOUTH;
+  static constexpr Direction BACKWARD = US == Color::WHITE ? Direction::SOUTH : Direction::NORTH;
+  static constexpr Direction FORWARD_EAST = US == Color::WHITE ? Direction::NORTHEAST : Direction::SOUTHEAST;
+  static constexpr Direction BACKWARD_EAST = US == Color::WHITE ? Direction::SOUTHEAST : Direction::NORTHEAST;
+  static constexpr Direction FORWARD_WEST = US == Color::WHITE ? Direction::NORTHWEST : Direction::SOUTHWEST;
+  static constexpr Direction BACKWARD_WEST = US == Color::WHITE ? Direction::SOUTHWEST : Direction::NORTHWEST;
 
   assert(pos.pieceBitboards_[ColoredPiece::WHITE_KING] > 0);
   assert(pos.pieceBitboards_[ColoredPiece::BLACK_KING] > 0);
@@ -107,16 +128,17 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
   out[EF::THEIR_ROOKS] = std::popcount(theirRooks);
   out[EF::THEIR_QUEENS] = std::popcount(theirQueens);
 
+  out[EF::KING_ON_BACK_RANK] = std::popcount(our1stRank & ourKings) - std::popcount(their1stRank & theirKings);
   if (US == Color::WHITE) {
-    out[EF::KING_ON_BACK_RANK] = (ourKingSq / 8 == 7) - (theirKingSq / 8 == 0);
     out[EF::KING_ACTIVE] = (ourKingSq / 8 < 5) - (theirKingSq / 8 > 2);
   } else {
-    out[EF::KING_ON_BACK_RANK] = (ourKingSq / 8 == 0) - (theirKingSq / 8 == 7);
     out[EF::KING_ACTIVE] = (ourKingSq / 8 > 2) - (theirKingSq / 8 < 5);
   }
 
   const Bitboard ourTargets = US == Color::WHITE ? threats.whiteTargets : threats.blackTargets;
   const Bitboard theirTargets = US == Color::WHITE ? threats.blackTargets : threats.whiteTargets;
+  const Bitboard our1stRank = US == Color::WHITE ? kRanks[7] : kRanks[0];
+  const Bitboard their1stRank = US == Color::WHITE ? kRanks[0] : kRanks[7];
   const Bitboard our7thRank = US == Color::WHITE ? kRanks[1] : kRanks[6];
   const Bitboard their7thRank = US == Color::WHITE ? kRanks[6] : kRanks[1];
   const Bitboard our6thRank = US == Color::WHITE ? kRanks[2] : kRanks[5];
@@ -138,6 +160,7 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
   out[EF::HANGING_ROOK] = std::popcount(threats.badForOur<US>(Piece::ROOK) & ourRooks) - std::popcount(threats.badForOur<THEM>(Piece::ROOK) & theirRooks);
   out[EF::HANGING_QUEEN] = std::popcount(threats.badForOur<US>(Piece::QUEEN) & ourQueens) - std::popcount(threats.badForOur<THEM>(Piece::QUEEN) & theirQueens);
 
+  out[EF::BISHOP_PAIR] = ((ourBishops & kWhiteSquares) && (ourBishops & kBlackSquares)) - ((theirBishops & kWhiteSquares) && (theirBishops & kBlackSquares));
   out[EF::PAWNxPAWN] = out[EF::OUR_PAWNS] * out[EF::OUR_PAWNS] - out[EF::THEIR_PAWNS] * out[EF::THEIR_PAWNS];
   out[EF::PAWNxKNIGHT] = out[EF::OUR_PAWNS] * out[EF::OUR_KNIGHTS] - out[EF::THEIR_PAWNS] * out[EF::THEIR_KNIGHTS];
   out[EF::PAWNxBISHOP] = out[EF::OUR_PAWNS] * out[EF::OUR_BISHOPS] - out[EF::THEIR_PAWNS] * out[EF::THEIR_BISHOPS];
@@ -147,7 +170,6 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
   out[EF::QUEENxBISHOP] = out[EF::OUR_QUEENS] * out[EF::OUR_BISHOPS] - out[EF::THEIR_QUEENS] * out[EF::THEIR_BISHOPS];
   out[EF::QUEENxROOK] = out[EF::OUR_QUEENS] * out[EF::OUR_ROOKS] - out[EF::THEIR_QUEENS] * out[EF::THEIR_ROOKS];
 
-  out[EF::THEIR_PAWNxPAWN] = out[EF::THEIR_PAWNS] * out[EF::OUR_PAWNS] - out[EF::OUR_PAWNS] * out[EF::THEIR_PAWNS];
   out[EF::THEIR_PAWNxKNIGHT] = out[EF::THEIR_PAWNS] * out[EF::OUR_KNIGHTS] - out[EF::OUR_PAWNS] * out[EF::THEIR_KNIGHTS];
   out[EF::THEIR_PAWNxBISHOP] = out[EF::THEIR_PAWNS] * out[EF::OUR_BISHOPS] - out[EF::OUR_PAWNS] * out[EF::THEIR_BISHOPS];
   out[EF::THEIR_PAWNxROOK] = out[EF::THEIR_PAWNS] * out[EF::OUR_ROOKS] - out[EF::OUR_PAWNS] * out[EF::THEIR_ROOKS];
@@ -156,6 +178,49 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
   out[EF::THEIR_QUEENxBISHOP] = out[EF::THEIR_QUEENS] * out[EF::OUR_BISHOPS] - out[EF::OUR_QUEENS] * out[EF::THEIR_BISHOPS];
   out[EF::THEIR_QUEENxROOK] = out[EF::THEIR_QUEENS] * out[EF::OUR_ROOKS] - out[EF::OUR_QUEENS] * out[EF::THEIR_ROOKS];
   
+  const Bitboard ourPawnTargets = US == Color::WHITE ? threats.whitePawnTargets : threats.blackPawnTargets;
+  const Bitboard theirPawnTargets = US == Color::WHITE ? threats.blackPawnTargets : threats.whitePawnTargets;
+  const Bitboard ourKnightTargets = US == Color::WHITE ? threats.whiteKnightTargets : threats.blackKnightTargets;
+  const Bitboard theirKnightTargets = US == Color::WHITE ? threats.blackKnightTargets : threats.whiteKnightTargets;
+  const Bitboard ourBishopTargets = US == Color::WHITE ? threats.whiteBishopTargets : threats.blackBishopTargets;
+  const Bitboard theirBishopTargets = US == Color::WHITE ? threats.blackBishopTargets : threats.whiteBishopTargets;
+  const Bitboard ourRookTargets = US == Color::WHITE ? threats.whiteRookTargets : threats.blackRookTargets;
+  const Bitboard theirRookTargets = US == Color::WHITE ? threats.blackRookTargets : threats.whiteRookTargets;
+  const Bitboard ourQueenTargets = US == Color::WHITE ? threats.whiteQueenTargets : threats.blackQueenTargets;
+  const Bitboard theirQueenTargets = US == Color::WHITE ? threats.blackQueenTargets : threats.whiteQueenTargets;
+
+  constexpr Bitboard theirSide = US == Color::WHITE ? (kRanks[0] | kRanks[1] | kRanks[2] | kRanks[3]) : (kRanks[7] | kRanks[6] | kRanks[5] | kRanks[4]);
+  constexpr Bitboard ourSide = ~theirSide;
+
+  out[EF::NUM_PAWN_TARGETS] = std::popcount(ourPawnTargets) - std::popcount(theirPawnTargets);
+  out[EF::NUM_KNIGHT_TARGETS] = std::popcount(ourKnightTargets) - std::popcount(theirKnightTargets);
+  out[EF::NUM_BISHOP_TARGETS] = std::popcount(ourBishopTargets) - std::popcount(theirBishopTargets);
+  out[EF::NUM_ROOK_TARGETS] = std::popcount(ourRookTargets) - std::popcount(theirRookTargets);
+  out[EF::NUM_QUEEN_TARGETS] = std::popcount(ourQueenTargets) - std::popcount(theirQueenTargets);
+
+  out[EF::NUM_PAWN_TARGETS_ON_THEIR_SIDE] = std::popcount(ourPawnTargets & theirSide) - std::popcount(theirPawnTargets & ourSide);
+  out[EF::NUM_KNIGHT_TARGETS_ON_THEIR_SIDE] = std::popcount(ourKnightTargets & theirSide) - std::popcount(theirKnightTargets & ourSide);
+  out[EF::NUM_BISHOP_TARGETS_ON_THEIR_SIDE] = std::popcount(ourBishopTargets & theirSide) - std::popcount(theirBishopTargets & ourSide);
+  out[EF::NUM_ROOK_TARGETS_ON_THEIR_SIDE] = std::popcount(ourRookTargets & theirSide) - std::popcount(theirRookTargets & ourSide);
+  out[EF::NUM_QUEEN_TARGETS_ON_THEIR_SIDE] = std::popcount(ourQueenTargets & theirSide) - std::popcount(theirQueenTargets & ourSide);
+
+  // Pawns that cannot move (forward or diagonally).
+  const Bitboard ourBlockadedPawns = shift<BACKWARD>(theirPawns) & ourPawns & ~shift<BACKWARD_EAST>(theirPawns) & ~shift<BACKWARD_WEST>(theirPawns);
+  const Bitboard theirBlockadedPawns = shift<FORWARD>(ourPawns) & theirPawns & ~shift<FORWARD_EAST>(ourPawns) & ~shift<FORWARD_WEST>(ourPawns);
+  const Bitboard ourBishopTargetsIgnoringNonBlockades = compute_bishoplike_targets(ourBishops, ourBlockadedPawns);
+  const Bitboard theirBishopTargetsIgnoringNonBlockades = compute_bishoplike_targets(theirBishops, theirBlockadedPawns);
+
+  const Bitboard ourRoyalty = ourQueens | ourKings;
+  const Bitboard theirRoyalty = theirQueens | theirKings;
+  const Bitboard ourHeavies = ourRoyalty | ourRooks;
+  const Bitboard theirHeavies = theirRoyalty | theirRooks;
+
+  out[EF::NUM_SCARY_BISHOPS] = std::popcount(ourBishopTargetsIgnoringNonBlockades & theirHeavies) - std::popcount(theirBishopTargetsIgnoringNonBlockades & ourHeavies);
+  out[EF::NUM_SCARY_ROOKS] = std::popcount(ourRookTargets & theirRoyalty) - std::popcount(theirRookTargets & ourRoyalty);
+
+  const Bitboard openFiles = pawnAnalysis.filesWithoutOurPawns & pawnAnalysis.filesWithoutTheirPawns;
+  out[EF::ROOKS_ON_OPEN_FILE] = std::popcount(ourRooks & openFiles) - std::popcount(theirRooks & openFiles);
+  out[EF::ROOKS_ON_SEMI_OPEN_FILE] = std::popcount(ourRooks & pawnAnalysis.filesWithoutOurPawns & ~pawnAnalysis.filesWithoutTheirPawns) - std::popcount(theirRooks & pawnAnalysis.filesWithoutTheirPawns & ~pawnAnalysis.filesWithoutOurPawns);
 }
 
 struct ByHandEvaluator : public PieceSquareEvaluator {
