@@ -62,7 +62,7 @@ if __name__ == "__main__":
     num_features = values.shape[1]
     print(f"Number of features: {num_features}")
 
-    model = nn.Linear(num_features, 1).to(device)
+    model = nn.Linear(num_features, 2).to(device)
     
     # Optional: Initialize weights with small values
     nn.init.normal_(model.weight, 0, 0.01)
@@ -94,10 +94,16 @@ if __name__ == "__main__":
             scheduler.step()
             
             values, labels, turns = [x.to(device) for x in batch]
+            values = values.to(torch.float32)
+
+            lateness = values[:,1] + values[:,2] + values[:,3] + values[:,4] * 3
+            lateness += values[:,6] + values[:,7] + values[:,8] + values[:,9] * 3
+            lateness = lateness.clip(0, 18) / 18
             
             # Predict
             # Convert values to float for Linear layer
             output = model(values.float()).squeeze(-1)
+            output = output[:,0] * (1.0 - lateness) + output[:,1] * lateness
             
             # Use Sigmoid to match eval output
             output_sig = torch.sigmoid(output)
