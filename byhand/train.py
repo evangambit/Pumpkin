@@ -102,7 +102,7 @@ if __name__ == "__main__":
             
             # Predict
             # Convert values to float for Linear layer
-            output = model(values.float()).squeeze(-1)
+            output = model(values.float())
             output = output[:,0] * (1.0 - lateness) + output[:,1] * lateness
             
             # Use Sigmoid to match eval output
@@ -127,6 +127,6 @@ if __name__ == "__main__":
     print("\nLearned Weights:")
     weights = model.weight.data.squeeze().cpu().numpy()
     bias = model.bias.item()
-    for i, w in enumerate(weights):
-        print(f"Feature {i}: {w:.5f}")
+    for i, w in enumerate(weights.T):
+        print(f"Feature {i}: {np.round(w * 100)}")
     print(f"Bias: {bias:.5f}")
