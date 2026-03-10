@@ -8,6 +8,9 @@ extern unsigned int model_bin_len;
 extern const char qst_bin[];
 extern unsigned int qst_bin_len;
 
+extern const char byhand_bin[];
+extern unsigned int byhand_bin_len;
+
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -313,7 +316,8 @@ class SetEvaluatorTask : public Task {
         }
         evaluator->load_from_stream(f);
       } else {
-        std::cout << "Error: must provide weights (no built-in model yet)" << std::endl;
+        std::istringstream f(std::string(byhand_bin, byhand_bin_len));
+        evaluator->load_from_stream(f);
       }
     } else if (evaluatorName == "nnue") {
       std::shared_ptr<NNUE::Nnue<int16_t>> nnue_model = std::make_shared<NNUE::Nnue<int16_t>>();
