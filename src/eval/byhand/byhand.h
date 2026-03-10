@@ -280,6 +280,7 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
 
   PinMasks ourPinnedMask = compute_pin_masks<US>(pos, ourKingSq);
   PinMasks theirPinnedMask = compute_pin_masks<THEM>(pos, theirKingSq);
+
   out[EF::PINNED_MINORS] = 
     std::popcount((ourPinnedMask.all & ourKnights) | ((ourPinnedMask.horizontal | ourPinnedMask.vertical) & ourBishops))
     -
