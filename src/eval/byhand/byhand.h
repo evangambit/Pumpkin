@@ -1,3 +1,4 @@
+
 #ifndef SRC_EVAL_BYHAND_BYHAND_H
 #define SRC_EVAL_BYHAND_BYHAND_H
 
@@ -96,6 +97,9 @@ enum EF {
   NUM_SCARY_ROOKS,
   ROOKS_ON_OPEN_FILE,
   ROOKS_ON_SEMI_OPEN_FILE,
+  CONNECTED_ROOKS,
+
+  PINNED_MINORS,
 
   EF_COUNT
 };
@@ -150,6 +154,13 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
   const Bitboard theirRooks = pos.pieceBitboards_[coloredPiece<THEM, Piece::ROOK>()];
   const Bitboard theirQueens = pos.pieceBitboards_[coloredPiece<THEM, Piece::QUEEN>()];
   const Bitboard theirKings = pos.pieceBitboards_[coloredPiece<THEM, Piece::KING>()];
+
+  const Bitboard ourRoyalty = ourQueens | ourKings;
+  const Bitboard theirRoyalty = theirQueens | theirKings;
+  const Bitboard ourHeavies = ourRoyalty | ourRooks;
+  const Bitboard theirHeavies = theirRoyalty | theirRooks;
+  const Bitboard ourMinors = ourKnights | ourBishops;
+  const Bitboard theirMinors = theirKnights | theirBishops;
 
   static const Bitboard ourTargets = US == Color::WHITE ? threats.whiteTargets : threats.blackTargets;
   static const Bitboard theirTargets = US == Color::WHITE ? threats.blackTargets : threats.whiteTargets;
@@ -248,11 +259,7 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
   const Bitboard ourBishopTargetsIgnoringNonBlockades = compute_bishoplike_targets(ourBishops, ourBlockadedPawns);
   const Bitboard theirBishopTargetsIgnoringNonBlockades = compute_bishoplike_targets(theirBishops, theirBlockadedPawns);
 
-  const Bitboard ourRoyalty = ourQueens | ourKings;
-  const Bitboard theirRoyalty = theirQueens | theirKings;
-  const Bitboard ourHeavies = ourRoyalty | ourRooks;
-  const Bitboard theirHeavies = theirRoyalty | theirRooks;
-  static const Bitboard edges = kRanks[0] | kRanks[1] | kFiles[FILE_A] | kFiles[FILE_B];
+  static const Bitboard edges = kRanks[0] | kRanks[7] | kFiles[FILE_A] | kFiles[FILE_H];
 
   out[EF::NUM_PAWNS_4th_RANK] = std::popcount(ourPawns & ourRanks[3]) - std::popcount(theirPawns & theirRanks[3]);
   out[EF::NUM_PAWNS_5th_RANK] = std::popcount(ourPawns & ourRanks[4]) - std::popcount(theirPawns & theirRanks[4]);
@@ -265,6 +272,18 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
   const Bitboard openFiles = pawnAnalysis.filesWithoutOurPawns & pawnAnalysis.filesWithoutTheirPawns;
   out[EF::ROOKS_ON_OPEN_FILE] = std::popcount(ourRooks & openFiles) - std::popcount(theirRooks & openFiles);
   out[EF::ROOKS_ON_SEMI_OPEN_FILE] = std::popcount(ourRooks & pawnAnalysis.filesWithoutOurPawns & ~pawnAnalysis.filesWithoutTheirPawns) - std::popcount(theirRooks & pawnAnalysis.filesWithoutTheirPawns & ~pawnAnalysis.filesWithoutOurPawns);
+
+  UnsafeSquare ourRookSq = lsb_or_none(ourRooks);
+  UnsafeSquare theirRookSq = lsb_or_none(theirRooks);
+  // Note: "kFiles[ourRookSq % 8]" will return kFiles[0] if ourRookSq == NO_SQUARE, but this is fine, since "& ourRooks" will always return zero.
+  out[EF::CONNECTED_ROOKS] = (std::popcount((kFiles[File(ourRookSq % 8)] | square2rank(ourRookSq)) & ourRooks) >= 2) - (std::popcount((kFiles[File(theirRookSq % 8)] | square2rank(theirRookSq)) & theirRooks) >= 2);
+
+  PinMasks ourPinnedMask = compute_pin_masks<US>(pos, ourKingSq);
+  PinMasks theirPinnedMask = compute_pin_masks<THEM>(pos, theirKingSq);
+  out[EF::PINNED_MINORS] = 
+    std::popcount((ourPinnedMask.all & ourKnights) | ((ourPinnedMask.horizontal | ourPinnedMask.vertical) & ourBishops))
+    -
+    std::popcount((theirPinnedMask.all & theirKnights) | ((theirPinnedMask.horizontal | theirPinnedMask.vertical) & theirBishops));
 }
 
 struct ByHandEvaluator : public EvaluatorInterface {
