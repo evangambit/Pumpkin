@@ -2,10 +2,13 @@
 #define SRC_EVAL_NNUE_UTILS_H
 
 #include "NnueFeatureBitmapType.h"
+#include "../../game/Geometry.h"
 
 namespace NNUE {
 template<typename T> struct NnueEvaluator;
 }
+
+typedef ChessEngine::File File;
 
 #include <cstdint>
 #include <algorithm>
@@ -84,7 +87,7 @@ inline ChessEngine::Bitboard nnue_feature_to_bitboard(NnueFeatureBitmapType feat
       // rank). This way the same vertical symmetry that we use for
       // our piece features automatically works for these features too.
       ChessEngine::Bitboard r = pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_PAWN];
-      for (int file = 0; file < 8; file++) {
+      for (File file = File(0); file <= File(7); file = File(file + 1)) {
         const bool noWhitePawnsOnFile = (ChessEngine::kFiles[file] & pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_PAWN]) == ChessEngine::kEmptyBitboard;
         r |= ChessEngine::bb(56 + file);
       }
@@ -120,7 +123,7 @@ inline ChessEngine::Bitboard nnue_feature_to_bitboard(NnueFeatureBitmapType feat
       return threats.badForCp(ChessEngine::ColoredPiece::WHITE_KING) & pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_KING];
     case NF_BLACK_PAWN: {
       ChessEngine::Bitboard r = pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_PAWN];
-      for (int file = 0; file < 8; file++) {
+      for (File file = File(0); file <= File(7); file = File(file + 1)) {
         const bool noBlackPawnsOnFile = (ChessEngine::kFiles[file] & pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_PAWN]) == ChessEngine::kEmptyBitboard;
         r |= ChessEngine::bb(file);
       }

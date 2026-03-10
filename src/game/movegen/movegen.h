@@ -26,7 +26,7 @@ inline void initialize_movegen() {
     const Bitboard b = bb(sq);
     kFreePieceMoves[Piece::NO_PIECE][sq] = kEmptyBitboard;
     kFreePieceMoves[Piece::PAWN][sq] = kKingMoves[sq];  // Obviously this is wrong, but what can you do?
-    kFreePieceMoves[Piece::KNIGHT][sq] = kKnightMoves[sq];
+    kFreePieceMoves[Piece::KNIGHT][sq] = kKnightMoves[to_unsafe_square((sq))];
     kFreePieceMoves[Piece::BISHOP][sq] = compute_bishoplike_targets(b, kEmptyBitboard);
     kFreePieceMoves[Piece::ROOK][sq] = compute_rooklike_targets(b, kEmptyBitboard);
     kFreePieceMoves[Piece::QUEEN][sq] = kFreePieceMoves[Piece::BISHOP][sq] | kFreePieceMoves[Piece::ROOK][sq];
@@ -110,7 +110,7 @@ int static_exchange(Position *pos) {
   const Bitboard theirRooks = pos->pieceBitboards_[coloredPiece<THEM, Piece::ROOK>()];
   while (ourKnights) {
     const SafeSquare sq = pop_lsb_i_promise_board_is_not_empty(ourKnights);
-    const Bitboard to = kKnightMoves[sq] & theirRooks;
+    const Bitboard to = kKnightMoves[to_unsafe_square(sq)] & theirRooks;
     if (to) {
       simple_make_move<US>(pos, sq, lsb_i_promise_board_is_not_empty(to));
       int r = kPieceValues[Piece::ROOK] - static_exchange<THEM>(pos);
@@ -187,7 +187,7 @@ Bitboard compute_attackers(const Position& pos, const SafeSquare sq) {
   const Bitboard friends = pos.colorBitboards_[THEM] & ~loc;
 
   Bitboard attackers = kEmptyBitboard;
-  attackers |= (kKnightMoves[sq] & pos.pieceBitboards_[coloredPiece<US, Piece::KNIGHT>()]);
+  attackers |= (kKnightMoves[to_unsafe_square(sq)] & pos.pieceBitboards_[coloredPiece<US, Piece::KNIGHT>()]);
   attackers |= (kKingMoves[sq] & pos.pieceBitboards_[coloredPiece<US, Piece::KING>()]);
 
   attackers |= compute_pawn_attackers<US>(pos, loc);
@@ -205,10 +205,10 @@ Bitboard compute_attackers(const Position& pos, const SafeSquare sq) {
   {  // North/south attackers
     const uint8_t x = (sq % 8);
     const unsigned columnShift = 7 - x;
-    uint8_t fromByte = (((loc << columnShift) & kFiles[7]) * kRookMagic) >> 56;
-    uint8_t occ = ((((enemies | friends) << columnShift) & kFiles[7]) * kRookMagic) >> 56;
+    uint8_t fromByte = (((loc << columnShift) & kFiles[FILE_H]) * kRookMagic) >> 56;
+    uint8_t occ = ((((enemies | friends) << columnShift) & kFiles[FILE_H]) * kRookMagic) >> 56;
     uint8_t toByte = sliding_moves(fromByte, occ);
-    Bitboard to = (((Bitboard(toByte & 254) * kRookMagic) & kFiles[0]) | (toByte & 1)) << x;
+    Bitboard to = (((Bitboard(toByte & 254) * kRookMagic) & kFiles[FILE_A]) | (toByte & 1)) << x;
     attackers |= (to & ourRooks);
   }
 
@@ -240,7 +240,7 @@ CheckMap compute_potential_attackers(const Position& pos, const SafeSquare sq) {
 
   CheckMap r;
 
-  r.data[Piece::KNIGHT] = kKnightMoves[sq];
+  r.data[Piece::KNIGHT] = kKnightMoves[to_unsafe_square(sq)];
   r.data[Piece::KING] = kKingMoves[sq];
 
   // todo: pawns
@@ -264,10 +264,10 @@ CheckMap compute_potential_attackers(const Position& pos, const SafeSquare sq) {
   {
     const uint8_t x = (sq % 8);
     const unsigned columnShift = 7 - x;
-    uint8_t fromByte = (((loc << columnShift) & kFiles[7]) * kRookMagic) >> 56;
-    uint8_t occ = (((everyone << columnShift) & kFiles[7]) * kRookMagic) >> 56;
+    uint8_t fromByte = (((loc << columnShift) & kFiles[FILE_H]) * kRookMagic) >> 56;
+    uint8_t occ = (((everyone << columnShift) & kFiles[FILE_H]) * kRookMagic) >> 56;
     uint8_t toByte = sliding_moves(fromByte, occ);
-    r.data[Piece::ROOK] |= (((Bitboard(toByte & 254) * kRookMagic) & kFiles[0]) | (toByte & 1)) << x;
+    r.data[Piece::ROOK] |= (((Bitboard(toByte & 254) * kRookMagic) & kFiles[FILE_A]) | (toByte & 1)) << x;
   }
 
   r.data[Piece::BISHOP] = 0;
@@ -319,11 +319,11 @@ inline PinMasks compute_pin_masks(const SafeSquare sq, const Bitboard occ, const
 
   {  // Compute north/south moves.
     const unsigned columnShift = 7 - x;
-    uint8_t kingByte = (((sqBitboard << columnShift) & kFiles[7]) * kRookMagic) >> 56;
-    uint8_t occByte = (((occ << columnShift) & kFiles[7]) * kRookMagic) >> 56;
-    uint8_t enemiesByte = (((enemyRooks << columnShift) & kFiles[7]) * kRookMagic) >> 56;
+    uint8_t kingByte = (((sqBitboard << columnShift) & kFiles[FILE_H]) * kRookMagic) >> 56;
+    uint8_t occByte = (((occ << columnShift) & kFiles[FILE_H]) * kRookMagic) >> 56;
+    uint8_t enemiesByte = (((enemyRooks << columnShift) & kFiles[FILE_H]) * kRookMagic) >> 56;
     uint8_t toByte = sliding_pinmask(kingByte, occByte, enemiesByte);
-    r.vertical = (((Bitboard(toByte & 254) * kRookMagic) & kFiles[0]) | (toByte & 1)) << x;
+    r.vertical = (((Bitboard(toByte & 254) * kRookMagic) & kFiles[FILE_A]) | (toByte & 1)) << x;
   }
 
   {  // Southeast/Northwest diagonal.

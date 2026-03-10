@@ -3,26 +3,11 @@
 
 #include "Utils.h"
 #include "Geometry.h"
+#include "../TypeSafeArray.h"
 
 namespace ChessEngine {
 
-template<typename T, size_t NUM_BOARDS, typename INDEX_TYPE>
-struct TypeSafeArray {
-  void fill(const T& value) {
-    std::fill_n(values_, NUM_BOARDS, value);
-  }
 
-  inline T& operator[](INDEX_TYPE index) {
-    return values_[index];
-  }
-
-  inline const T& operator[](INDEX_TYPE index) const {
-    return values_[index];
-  }
-
- private:
-  T values_[NUM_BOARDS];
-};
 
 inline Bitboard at_least_two(Bitboard a, Bitboard b) {
   return a & b;

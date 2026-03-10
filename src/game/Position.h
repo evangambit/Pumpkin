@@ -17,6 +17,7 @@
 #include "Utils.h"
 #include "Threats.h"
 #include "../StringUtils.h"
+#include "../TypeSafeArray.h"
 
 namespace ChessEngine {
 
