@@ -40,6 +40,12 @@
 // #define IS_PRINT_QNODE ((frame - quiescenceDepth)->hash == 17514877330620511575ULL)
 #endif
 
+// If EVAL_AGNOSTIC, we disable optimizations that require tuning for
+// the evaluation. This makes comparing evaluators more fair.
+#ifndef EVAL_AGNOSTIC
+#define EVAL_AGNOSTIC 0
+#endif
+
 namespace ChessEngine {
 
 /**
@@ -284,14 +290,14 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
   // Move ordering: captures that capture higher value pieces first.
   assert(!thread->position_.history_.empty() && "qsearch requires history to have at least one move");
   const Move lastMove = thread->position_.history_.back().move;
-  assert(lastMove.from < 64 && lastMove.to < 64);
+  assert(lastMove.from < kNumSquares && lastMove.to < kNumSquares);
   for (ExtMove* move = moves; move < end; ++move) {
     if (move->move == entry.bestMove) {
       move->score = kMaxEval;
       continue;
     }
-    assert(move->move.from < 64);
-    assert(move->move.to < 64);
+    assert(move->move.from < kNumSquares);
+    assert(move->move.to < kNumSquares);
     assert(move->piece >= Piece::NO_PIECE && move->piece < Piece::NUM_PIECES);
     Piece capturedPiece = cp2p(thread->position_.tiles_[move->move.to]);
     assert(capturedPiece < Piece::NUM_PIECES);
@@ -573,6 +579,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   //  3 uci-100    :     0.2    1.8  6660.5   13329    50
   //  4 uci-200    :    -1.7    2.9  2388.0    4800    50
   //  5 old        :    -2.6    1.9  5803.0   11729    49
+  #if EVAL_AGNOSTIC == 0
   static constexpr int kRazoringMargin = 50;
   if (depth == 1 && frame->staticEval < alpha.value - kRazoringMargin) {
     return qsearch<TURN>(thread, alpha, beta, plyFromRoot, 0, frame, stopThinking);
@@ -581,6 +588,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   if (depth == 1 && frame->staticEval > beta.value + kRazoringMargin) {
     return NegamaxResult<TURN>(kNullMove, beta);
   }
+  #endif
 
   // Null move pruning.
   // This is roughly equivalent to having twice as much time.
