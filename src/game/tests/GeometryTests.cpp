@@ -40,8 +40,8 @@ TEST_F(GeometryTest, Shift) {
   EXPECT_BB_EQ(shift<Direction::EAST>(bb(SH1)), kEmptyBitboard);
   EXPECT_BB_EQ(shift<Direction::SOUTH>(bb(SH1)), kEmptyBitboard);
   // Full board tests.
-  EXPECT_BB_EQ(shift_ew<Direction::EAST>(kUniverse, 1), kUniverse & ~kFiles[0]);
-  EXPECT_BB_EQ(shift_ew<Direction::WEST>(kUniverse, 1), kUniverse & ~kFiles[7]);
+  EXPECT_BB_EQ(shift_ew<Direction::EAST>(kUniverse, 1), kUniverse & ~kFiles[FILE_A]);
+  EXPECT_BB_EQ(shift_ew<Direction::WEST>(kUniverse, 1), kUniverse & ~kFiles[FILE_H]);
   EXPECT_BB_EQ(shift<Direction::NORTH>(kUniverse), kUniverse & ~kRanks[7]);
   EXPECT_BB_EQ(shift<Direction::SOUTH>(kUniverse), kUniverse & ~kRanks[0]);
 }
@@ -54,10 +54,10 @@ TEST_F(GeometryTest, Shift_EW) {
   EXPECT_BB_EQ(shift_ew<Direction::EAST>(bb(SE2) | bb(SF2), 3), bb(SH2));
   EXPECT_BB_EQ(shift_ew<Direction::WEST>(bb(SC2) | bb(SD2), 3), bb(SA2));
   // Full board tests.
-  EXPECT_BB_EQ(shift_ew<Direction::EAST>(kUniverse, 1), kUniverse & ~kFiles[0]);
-  EXPECT_BB_EQ(shift_ew<Direction::EAST>(kUniverse, 2), kUniverse & ~kFiles[0] & ~kFiles[1]);
-  EXPECT_BB_EQ(shift_ew<Direction::WEST>(kUniverse, 1), kUniverse & ~kFiles[7]);
-  EXPECT_BB_EQ(shift_ew<Direction::WEST>(kUniverse, 2), kUniverse & ~kFiles[7] & ~kFiles[6]);
+  EXPECT_BB_EQ(shift_ew<Direction::EAST>(kUniverse, 1), kUniverse & ~kFiles[FILE_A]);
+  EXPECT_BB_EQ(shift_ew<Direction::EAST>(kUniverse, 2), kUniverse & ~kFiles[FILE_A] & ~kFiles[FILE_B]);
+  EXPECT_BB_EQ(shift_ew<Direction::WEST>(kUniverse, 1), kUniverse & ~kFiles[FILE_H]);
+  EXPECT_BB_EQ(shift_ew<Direction::WEST>(kUniverse, 2), kUniverse & ~kFiles[FILE_H] & ~kFiles[FILE_G]);
 }
 
 TEST_F(GeometryTest, FlipVertically) {

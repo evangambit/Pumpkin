@@ -26,10 +26,10 @@ inline Bitboard compute_single_rook_moves(SafeSquare rookSquare, const Bitboard 
 
   {  // Compute north/south moves.
     const unsigned columnShift = 7 - x;
-    uint8_t fromByte = (((fromLoc << columnShift) & kFiles[7]) * kRookMagic) >> 56;
-    uint8_t enemiesByte = (((occupied << columnShift) & kFiles[7]) * kRookMagic) >> 56;
+    uint8_t fromByte = (((fromLoc << columnShift) & kFiles[FILE_H]) * kRookMagic) >> 56;
+    uint8_t enemiesByte = (((occupied << columnShift) & kFiles[FILE_H]) * kRookMagic) >> 56;
     uint8_t toByte = sliding_moves(fromByte, enemiesByte);
-    r |= (((Bitboard(toByte & 254) * kRookMagic) & kFiles[0]) | (toByte & 1)) << x;
+    r |= (((Bitboard(toByte & 254) * kRookMagic) & kFiles[FILE_A]) | (toByte & 1)) << x;
   }
 
   return r;
@@ -65,10 +65,10 @@ inline Bitboard compute_rook_check_mask(const SafeSquare kingSq, const Bitboard 
   {  // North/south
     const unsigned x = kingSq % 8;
     const unsigned columnShift = 7 - x;
-    uint8_t fromByte = (((king << columnShift) & kFiles[7]) * kRookMagic) >> 56;
-    uint8_t occupied = ((((everyone & ~king) << columnShift) & kFiles[7]) * kRookMagic) >> 56;
+    uint8_t fromByte = (((king << columnShift) & kFiles[FILE_H]) * kRookMagic) >> 56;
+    uint8_t occupied = ((((everyone & ~king) << columnShift) & kFiles[FILE_H]) * kRookMagic) >> 56;
     uint8_t toByte = sliding_moves(fromByte, occupied);
-    checkMask |= (((Bitboard(toByte & 254) * kRookMagic) & kFiles[0]) | (toByte & 1)) << x;
+    checkMask |= (((Bitboard(toByte & 254) * kRookMagic) & kFiles[FILE_A]) | (toByte & 1)) << x;
   }
   return checkMask;
 }
@@ -109,10 +109,10 @@ ExtMove *compute_rook_like_moves(const Position& pos, ExtMove *moves, Bitboard t
 
     {  // Compute north/south moves.
       const unsigned columnShift = 7 - x;
-      uint8_t fromByte = (((fromLoc << columnShift) & kFiles[7]) * kRookMagic) >> 56;
-      uint8_t occByte = ((((enemies | (friends & ~fromLoc)) << columnShift) & kFiles[7]) * kRookMagic) >> 56;
+      uint8_t fromByte = (((fromLoc << columnShift) & kFiles[FILE_H]) * kRookMagic) >> 56;
+      uint8_t occByte = ((((enemies | (friends & ~fromLoc)) << columnShift) & kFiles[FILE_H]) * kRookMagic) >> 56;
       uint8_t toByte = sliding_moves(fromByte, occByte);
-      tos |= ((((Bitboard(toByte & 254) * kRookMagic) & kFiles[0]) | (toByte & 1)) << x) & ~friends;
+      tos |= ((((Bitboard(toByte & 254) * kRookMagic) & kFiles[FILE_A]) | (toByte & 1)) << x) & ~friends;
     }
 
     if (MGT == MoveGenType::CAPTURES) {

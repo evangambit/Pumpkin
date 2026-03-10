@@ -252,7 +252,7 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
   const Bitboard theirRoyalty = theirQueens | theirKings;
   const Bitboard ourHeavies = ourRoyalty | ourRooks;
   const Bitboard theirHeavies = theirRoyalty | theirRooks;
-  static constexpr Bitboard edges = kRanks[0] | kRanks[1] | kFiles[0] | kFiles[1];
+  static const Bitboard edges = kRanks[0] | kRanks[1] | kFiles[FILE_A] | kFiles[FILE_B];
 
   out[EF::NUM_PAWNS_4th_RANK] = std::popcount(ourPawns & ourRanks[3]) - std::popcount(theirPawns & theirRanks[3]);
   out[EF::NUM_PAWNS_5th_RANK] = std::popcount(ourPawns & ourRanks[4]) - std::popcount(theirPawns & theirRanks[4]);

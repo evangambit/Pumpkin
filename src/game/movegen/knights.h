@@ -3,10 +3,11 @@
 
 #include "../Position.h"
 #include "../Utils.h"
+#include "../../TypeSafeArray.h"
 
 namespace ChessEngine {
 
-constexpr Bitboard kKnightMoves[UnsafeSquare::UNO_SQUARE + 1] = {
+const TypeSafeArray<Bitboard, kNumSquares + 1, UnsafeSquare> kKnightMoves = {
   0x0000000000020400,
   0x0000000000050800,
   0x00000000000a1100,
@@ -82,7 +83,7 @@ Bitboard compute_knight_targets(const Position& pos) {
   Bitboard r = kEmptyBitboard;
   while (knights) {
     const SafeSquare sq = pop_lsb_i_promise_board_is_not_empty(knights);
-    r |= kKnightMoves[sq];
+    r |= kKnightMoves[to_unsafe_square(sq)];
   }
   return r;
 }
@@ -98,14 +99,15 @@ ExtMove *compute_knight_moves(const Position& pos, ExtMove *moves, Bitboard targ
   } else if (MGT == MoveGenType::CAPTURES) {
     target &= enemies;
   } else if (MGT == MoveGenType::CHECKS_AND_CAPTURES) {
-    const Bitboard checkMask = kKnightMoves[lsb_i_promise_board_is_not_empty(pos.pieceBitboards_[coloredPiece<opposite_color<US>(), Piece::KING>()])];
+    const SafeSquare kingSq = lsb_i_promise_board_is_not_empty(pos.pieceBitboards_[coloredPiece<opposite_color<US>(), Piece::KING>()]);
+    const Bitboard checkMask = kKnightMoves[to_unsafe_square(kingSq)];
     target &= enemies | (checkMask & notfriends);
   }
 
   Bitboard knights = pos.pieceBitboards_[cp] & ~pm.all;
   while (knights) {
     const SafeSquare from = pop_lsb_i_promise_board_is_not_empty(knights);
-    Bitboard tos = kKnightMoves[from] & target;
+    Bitboard tos = kKnightMoves[to_unsafe_square(from)] & target;
     while (tos) {
       SafeSquare to = pop_lsb_i_promise_board_is_not_empty(tos);
       *moves++ = ExtMove(Piece::KNIGHT, pos.tiles_[to], Move::create(from, to));

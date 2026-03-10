@@ -81,7 +81,7 @@ TEST_F(PawnAnalysisTests, FilesWithoutPawns) {
     Position pos("8/8/8/2p1p3/8/8/8/8 w - - 0 1");
     PawnAnalysis<Color::WHITE> analysis(pos);
     EXPECT_BB_EQ(analysis.filesWithoutOurPawns, kUniverse);
-    EXPECT_BB_EQ(analysis.filesWithoutTheirPawns, kFiles[0] | kFiles[1] | kFiles[3] | kFiles[5] | kFiles[6] | kFiles[7]);
+    EXPECT_BB_EQ(analysis.filesWithoutTheirPawns, kFiles[FILE_A] | kFiles[FILE_B] | kFiles[FILE_D] | kFiles[FILE_F] | kFiles[FILE_G] | kFiles[FILE_H]);
   }
 }
 

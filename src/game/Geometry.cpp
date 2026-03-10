@@ -253,16 +253,16 @@ Bitboard northFill(Bitboard b) {
 }
 
 Bitboard eastFill(Bitboard b) {
-  b |= (b & ~kFiles[7]) << 1;
-  b |= (b & ~(kFiles[7] | kFiles[6])) << 2;
-  b |= (b & ~(kFiles[7] | kFiles[6] | kFiles[5] | kFiles[4])) << 4;
+  b |= (b & ~kFiles[FILE_H]) << 1;
+  b |= (b & ~(kFiles[FILE_H] | kFiles[FILE_G])) << 2;
+  b |= (b & ~(kFiles[FILE_H] | kFiles[FILE_G] | kFiles[FILE_F] | kFiles[FILE_E])) << 4;
   return b;
 }
 
 Bitboard westFill(Bitboard b) {
-  b |= (b & ~kFiles[0]) >> 1;
-  b |= (b & ~(kFiles[0] | kFiles[1])) >> 2;
-  b |= (b & ~(kFiles[0] | kFiles[1] | kFiles[2] | kFiles[3])) >> 4;
+  b |= (b & ~kFiles[FILE_A]) >> 1;
+  b |= (b & ~(kFiles[FILE_A] | kFiles[FILE_B])) >> 2;
+  b |= (b & ~(kFiles[FILE_A] | kFiles[FILE_B] | kFiles[FILE_C] | kFiles[FILE_D])) >> 4;
   return b;
 }
 

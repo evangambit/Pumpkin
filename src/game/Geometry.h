@@ -8,6 +8,7 @@
 #include <string>
 
 #include "Utils.h"
+#include "../TypeSafeArray.h"
 
 namespace ChessEngine {
 
@@ -41,44 +42,6 @@ struct PinMasks {
   }
 };
 
-
-constexpr Bitboard kEmptyBitboard = 0;
-constexpr Bitboard kUniverse = ~Bitboard(0);
-constexpr Bitboard kFiles[8] = {
-  0x0101010101010101ULL,
-  0x0202020202020202ULL,
-  0x0404040404040404ULL,
-  0x0808080808080808ULL,
-  0x1010101010101010ULL,
-  0x2020202020202020ULL,
-  0x4040404040404040ULL,
-  0x8080808080808080ULL,
-};
-
-constexpr Bitboard kRanks[9] = {
-  0x00000000000000ffULL,
-  0x000000000000ff00ULL,
-  0x0000000000ff0000ULL,
-  0x00000000ff000000ULL,
-  0x000000ff00000000ULL,
-  0x0000ff0000000000ULL,
-  0x00ff000000000000ULL,
-  0xff00000000000000ULL,
-  0x0000000000000000ULL,  // Maps NO_SQUARE / 8 maps to 0.
-};
-
-constexpr Bitboard kCenter16 = (kFiles[2] | kFiles[3] | kFiles[4] | kFiles[5]) & (kRanks[2] | kRanks[3] | kRanks[4] | kRanks[5]);
-constexpr Bitboard kCenter4 = (kFiles[3] | kFiles[4]) & (kRanks[3] | kRanks[4]);
-
-const Bitboard kWhiteSquares = 0xaa55aa55aa55aa55;
-const Bitboard kBlackSquares = 0x55aa55aa55aa55aa;
-const Bitboard kWhiteSide = 0xffffffff00000000;
-const Bitboard kBlackSide = 0x00000000ffffffff;
-
-constexpr Bitboard kOuterRing = kFiles[0] | kFiles[7] | kRanks[0] | kRanks[7];
-
-constexpr int kNumSquares = 64;
-
 enum SafeSquare : uint8_t {
   SA8, SB8, SC8, SD8, SE8, SF8, SG8, SH8,
   SA7, SB7, SC7, SD7, SE7, SF7, SG7, SH7,
@@ -101,6 +64,62 @@ enum UnsafeSquare : uint8_t {
   UA1, UB1, UC1, UD1, UE1, UF1, UG1, UH1,
   UNO_SQUARE,
 };
+
+inline UnsafeSquare to_unsafe_square(SafeSquare sq) {
+  return UnsafeSquare(sq);
+}
+
+enum File {
+  FILE_A,
+  FILE_B,
+  FILE_C,
+  FILE_D,
+  FILE_E,
+  FILE_F,
+  FILE_G,
+  FILE_H,
+};
+
+constexpr Bitboard kEmptyBitboard = 0;
+constexpr Bitboard kUniverse = ~Bitboard(0);
+const TypeSafeArray<Bitboard, 8, File> kFiles = {
+  0x0101010101010101ULL,
+  0x0202020202020202ULL,
+  0x0404040404040404ULL,
+  0x0808080808080808ULL,
+  0x1010101010101010ULL,
+  0x2020202020202020ULL,
+  0x4040404040404040ULL,
+  0x8080808080808080ULL,
+};
+
+constexpr Bitboard kRanks[9] = {
+  0x00000000000000ffULL,
+  0x000000000000ff00ULL,
+  0x0000000000ff0000ULL,
+  0x00000000ff000000ULL,
+  0x000000ff00000000ULL,
+  0x0000ff0000000000ULL,
+  0x00ff000000000000ULL,
+  0xff00000000000000ULL,
+  0x0000000000000000ULL,  // Maps NO_SQUARE / 8 maps to 0.
+};
+
+inline Bitboard square2rank(UnsafeSquare sq) {
+  return kRanks[sq / 8];
+}
+
+const Bitboard kCenter16 = (kFiles[FILE_C] | kFiles[FILE_D] | kFiles[FILE_E] | kFiles[FILE_F]) & (kRanks[2] | kRanks[3] | kRanks[4] | kRanks[5]);
+const Bitboard kCenter4 = (kFiles[FILE_D] | kFiles[FILE_E]) & (kRanks[3] | kRanks[4]);
+
+const Bitboard kWhiteSquares = 0xaa55aa55aa55aa55;
+const Bitboard kBlackSquares = 0x55aa55aa55aa55aa;
+const Bitboard kWhiteSide = 0xffffffff00000000;
+const Bitboard kBlackSide = 0x00000000ffffffff;
+
+const Bitboard kOuterRing = kFiles[FILE_A] | kFiles[FILE_H] | kRanks[0] | kRanks[7];
+
+constexpr int kNumSquares = 64;
 
 /**
  * Flips a square vertically (a1 -> a8, b1 -> b8, etc.)
@@ -221,7 +240,7 @@ constexpr Location bb(unsigned sq) {
   return Location(1) << sq;
 }
 
-constexpr Bitboard kRookFiles = kFiles[0] | kFiles[7];
+const Bitboard kRookFiles = kFiles[FILE_A] | kFiles[FILE_H];
 
 extern Bitboard kKingDist[8][64];
 extern Bitboard kManhattanDist[15][64];
@@ -235,26 +254,26 @@ extern Bitboard kSquareRuleTheirTurn[Color::NUM_COLORS][64];
 
 extern Bitboard kKingHome[64];
 
-constexpr Bitboard kMaskFromWest[8] = {
-  kFiles[0],
-  kFiles[0] | kFiles[1],
-  kFiles[0] | kFiles[1] | kFiles[2],
-  kFiles[0] | kFiles[1] | kFiles[2] | kFiles[3],
-  kFiles[0] | kFiles[1] | kFiles[2] | kFiles[3] | kFiles[4],
-  kFiles[0] | kFiles[1] | kFiles[2] | kFiles[3] | kFiles[4] | kFiles[5],
-  kFiles[0] | kFiles[1] | kFiles[2] | kFiles[3] | kFiles[4] | kFiles[5] | kFiles[6],
-  kFiles[0] | kFiles[1] | kFiles[2] | kFiles[3] | kFiles[4] | kFiles[5] | kFiles[6] | kFiles[7],
+const Bitboard kMaskFromWest[8] = {
+  kFiles[FILE_A],
+  kFiles[FILE_A] | kFiles[FILE_B],
+  kFiles[FILE_A] | kFiles[FILE_B] | kFiles[FILE_C],
+  kFiles[FILE_A] | kFiles[FILE_B] | kFiles[FILE_C] | kFiles[FILE_D],
+  kFiles[FILE_A] | kFiles[FILE_B] | kFiles[FILE_C] | kFiles[FILE_D] | kFiles[FILE_E],
+  kFiles[FILE_A] | kFiles[FILE_B] | kFiles[FILE_C] | kFiles[FILE_D] | kFiles[FILE_E] | kFiles[FILE_F],
+  kFiles[FILE_A] | kFiles[FILE_B] | kFiles[FILE_C] | kFiles[FILE_D] | kFiles[FILE_E] | kFiles[FILE_F] | kFiles[FILE_G],
+  kFiles[FILE_A] | kFiles[FILE_B] | kFiles[FILE_C] | kFiles[FILE_D] | kFiles[FILE_E] | kFiles[FILE_F] | kFiles[FILE_G] | kFiles[FILE_H],
 };
 
-constexpr Bitboard kMaskFromEast[8] = {
-  kFiles[7],
-  kFiles[7] | kFiles[6],
-  kFiles[7] | kFiles[6] | kFiles[5],
-  kFiles[7] | kFiles[6] | kFiles[5] | kFiles[4],
-  kFiles[7] | kFiles[6] | kFiles[5] | kFiles[4] | kFiles[3],
-  kFiles[7] | kFiles[6] | kFiles[5] | kFiles[4] | kFiles[3] | kFiles[2],
-  kFiles[7] | kFiles[6] | kFiles[5] | kFiles[4] | kFiles[3] | kFiles[2] | kFiles[1],
-  kFiles[7] | kFiles[6] | kFiles[5] | kFiles[4] | kFiles[3] | kFiles[2] | kFiles[1] | kFiles[0],
+const Bitboard kMaskFromEast[8] = {
+  kFiles[FILE_H],
+  kFiles[FILE_H] | kFiles[FILE_G],
+  kFiles[FILE_H] | kFiles[FILE_G] | kFiles[FILE_F],
+  kFiles[FILE_H] | kFiles[FILE_G] | kFiles[FILE_F] | kFiles[FILE_E],
+  kFiles[FILE_H] | kFiles[FILE_G] | kFiles[FILE_F] | kFiles[FILE_E] | kFiles[FILE_D],
+  kFiles[FILE_H] | kFiles[FILE_G] | kFiles[FILE_F] | kFiles[FILE_E] | kFiles[FILE_D] | kFiles[FILE_C],
+  kFiles[FILE_H] | kFiles[FILE_G] | kFiles[FILE_F] | kFiles[FILE_E] | kFiles[FILE_D] | kFiles[FILE_C] | kFiles[FILE_B],
+  kFiles[FILE_H] | kFiles[FILE_G] | kFiles[FILE_F] | kFiles[FILE_E] | kFiles[FILE_D] | kFiles[FILE_C] | kFiles[FILE_B] | kFiles[FILE_A],
 };
 
 void initialize_geometry();
@@ -275,16 +294,16 @@ template<Direction dir>
 Bitboard shift(Bitboard b) {
   b = (dir > 0) ? (b << dir) : (b >> (-dir));
   if ((dir + 16) % 8 == 1) {
-    b &= ~kFiles[0];
+    b &= ~kFiles[FILE_A];
   }
   if ((dir + 16) % 8 == 2) {
-    b &= ~(kFiles[0] | kFiles[1]);
+    b &= ~(kFiles[FILE_A] | kFiles[FILE_B]);
   }
   if ((dir + 16) % 8 == 7) {
-    b &= ~kFiles[7];
+    b &= ~kFiles[FILE_H];
   }
   if ((dir + 16) % 8 == 6) {
-    b &= ~(kFiles[7] | kFiles[6]);
+    b &= ~(kFiles[FILE_H] | kFiles[FILE_G]);
   }
   return b;
 }
