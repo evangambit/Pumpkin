@@ -81,12 +81,45 @@ enum EF {
   NUM_ROOK_TARGETS_ON_THEIR_SIDE,
   NUM_QUEEN_TARGETS_ON_THEIR_SIDE,
 
+  NUM_PAWN_TARGETS_IN_CENTER,
+  NUM_KNIGHT_TARGETS_IN_CENTER,
+  NUM_BISHOP_TARGETS_IN_CENTER,
+  NUM_ROOK_TARGETS_IN_CENTER,
+  NUM_QUEEN_TARGETS_IN_CENTER,
+
+  NUM_PAWNS_4th_RANK,
+  NUM_PAWNS_5th_RANK,
+  NUM_PAWNS_6th_RANK,
+  NUM_KNIGHTS_ON_EDGE,
+
   NUM_SCARY_BISHOPS,
   NUM_SCARY_ROOKS,
   ROOKS_ON_OPEN_FILE,
   ROOKS_ON_SEMI_OPEN_FILE,
 
   EF_COUNT
+};
+
+static constexpr Bitboard kWhiteRanks[8] = {
+  kRanks[7],
+  kRanks[6],
+  kRanks[5],
+  kRanks[4],
+  kRanks[3],
+  kRanks[2],
+  kRanks[1],
+  kRanks[0],
+};
+
+static constexpr Bitboard kBlackRanks[8] = {
+  kRanks[0],
+  kRanks[1],
+  kRanks[2],
+  kRanks[3],
+  kRanks[4],
+  kRanks[5],
+  kRanks[6],
+  kRanks[7],
 };
 
 template<Color US>
@@ -121,12 +154,8 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
   static const Bitboard ourTargets = US == Color::WHITE ? threats.whiteTargets : threats.blackTargets;
   static const Bitboard theirTargets = US == Color::WHITE ? threats.blackTargets : threats.whiteTargets;
 
-  const Bitboard our1stRank = US == Color::WHITE ? kRanks[7] : kRanks[0];
-  const Bitboard their1stRank = US == Color::WHITE ? kRanks[0] : kRanks[7];
-  const Bitboard our7thRank = US == Color::WHITE ? kRanks[1] : kRanks[6];
-  const Bitboard their7thRank = US == Color::WHITE ? kRanks[6] : kRanks[1];
-  const Bitboard our6thRank = US == Color::WHITE ? kRanks[2] : kRanks[5];
-  const Bitboard their6thRank = US == Color::WHITE ? kRanks[5] : kRanks[2];
+  const auto *ourRanks = US == Color::WHITE ? kWhiteRanks : kBlackRanks;
+  const auto *theirRanks = US == Color::WHITE ? kBlackRanks : kWhiteRanks;
   const PawnAnalysis<US> pawnAnalysis(pos);
 
   out[EF::OUR_PAWNS] = std::popcount(ourPawns);
@@ -140,7 +169,7 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
   out[EF::THEIR_ROOKS] = std::popcount(theirRooks);
   out[EF::THEIR_QUEENS] = std::popcount(theirQueens);
 
-  out[EF::KING_ON_BACK_RANK] = std::popcount(our1stRank & ourKings) - std::popcount(their1stRank & theirKings);
+  out[EF::KING_ON_BACK_RANK] = std::popcount(ourRanks[0] & ourKings) - std::popcount(theirRanks[0] & theirKings);
   if (US == Color::WHITE) {
     out[EF::KING_ACTIVE] = (ourKingSq / 8 < 5) - (theirKingSq / 8 > 2);
   } else {
@@ -151,8 +180,8 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
   out[EF::THREATS_NEAR_KING_3] = std::popcount(kNearby[3][ourKingSq] & theirTargets & ~ourTargets) - std::popcount(kNearby[3][theirKingSq] & ourTargets & ~theirTargets);
 
   out[EF::PASSED_PAWNS] = std::popcount(pawnAnalysis.ourPassedPawns) - std::popcount(pawnAnalysis.theirPassedPawns);
-  out[EF::PASSED_PAWNS_7TH_RANK] = std::popcount(pawnAnalysis.ourPassedPawns & our7thRank) - std::popcount(pawnAnalysis.theirPassedPawns & their7thRank);
-  out[EF::PASSED_PAWNS_6TH_RANK] = std::popcount(pawnAnalysis.ourPassedPawns & our6thRank) - std::popcount(pawnAnalysis.theirPassedPawns & their6thRank);
+  out[EF::PASSED_PAWNS_7TH_RANK] = std::popcount(pawnAnalysis.ourPassedPawns & ourRanks[6]) - std::popcount(pawnAnalysis.theirPassedPawns & theirRanks[6]);
+  out[EF::PASSED_PAWNS_6TH_RANK] = std::popcount(pawnAnalysis.ourPassedPawns & ourRanks[5]) - std::popcount(pawnAnalysis.theirPassedPawns & theirRanks[5]);
   out[EF::ISOLATED_PAWNS] = std::popcount(pawnAnalysis.ourIsolatedPawns) - std::popcount(pawnAnalysis.theirIsolatedPawns);
   out[EF::DOUBLED_PAWNS] = std::popcount(pawnAnalysis.ourDoubledPawns) - std::popcount(pawnAnalysis.theirDoubledPawns);
   out[EF::DOUBLE_ISOLATED_PAWNS] = std::popcount(pawnAnalysis.ourDoubledPawns & pawnAnalysis.ourIsolatedPawns) - std::popcount(pawnAnalysis.theirDoubledPawns & pawnAnalysis.theirIsolatedPawns);
@@ -207,6 +236,12 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
   out[EF::NUM_ROOK_TARGETS_ON_THEIR_SIDE] = std::popcount(ourRookTargets & theirSide) - std::popcount(theirRookTargets & ourSide);
   out[EF::NUM_QUEEN_TARGETS_ON_THEIR_SIDE] = std::popcount(ourQueenTargets & theirSide) - std::popcount(theirQueenTargets & ourSide);
 
+  out[EF::NUM_PAWN_TARGETS_IN_CENTER] = std::popcount(ourPawnTargets & kCenter4) - std::popcount(theirPawnTargets & kCenter4);
+  out[EF::NUM_KNIGHT_TARGETS_IN_CENTER] = std::popcount(ourKnightTargets & kCenter4) - std::popcount(theirKnightTargets & kCenter4);
+  out[EF::NUM_BISHOP_TARGETS_IN_CENTER] = std::popcount(ourBishopTargets & kCenter4) - std::popcount(theirBishopTargets & kCenter4);
+  out[EF::NUM_ROOK_TARGETS_IN_CENTER] = std::popcount(ourRookTargets & kCenter4) - std::popcount(theirRookTargets & kCenter4);
+  out[EF::NUM_QUEEN_TARGETS_IN_CENTER] = std::popcount(ourQueenTargets & kCenter4) - std::popcount(theirQueenTargets & kCenter4);
+
   // Pawns that cannot move (forward or diagonally).
   const Bitboard ourBlockadedPawns = shift<BACKWARD>(theirPawns) & ourPawns & ~shift<BACKWARD_EAST>(theirPawns) & ~shift<BACKWARD_WEST>(theirPawns);
   const Bitboard theirBlockadedPawns = shift<FORWARD>(ourPawns) & theirPawns & ~shift<FORWARD_EAST>(ourPawns) & ~shift<FORWARD_WEST>(ourPawns);
@@ -217,6 +252,12 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
   const Bitboard theirRoyalty = theirQueens | theirKings;
   const Bitboard ourHeavies = ourRoyalty | ourRooks;
   const Bitboard theirHeavies = theirRoyalty | theirRooks;
+  static constexpr Bitboard edges = kRanks[0] | kRanks[1] | kFiles[0] | kFiles[1];
+
+  out[EF::NUM_PAWNS_4th_RANK] = std::popcount(ourPawns & ourRanks[3]) - std::popcount(theirPawns & theirRanks[3]);
+  out[EF::NUM_PAWNS_5th_RANK] = std::popcount(ourPawns & ourRanks[4]) - std::popcount(theirPawns & theirRanks[4]);
+  out[EF::NUM_PAWNS_6th_RANK] = std::popcount(ourPawns & ourRanks[5]) - std::popcount(theirPawns & theirRanks[5]);
+  out[EF::NUM_KNIGHTS_ON_EDGE] = std::popcount(ourKnights & edges) - std::popcount(theirKnights & edges);
 
   out[EF::NUM_SCARY_BISHOPS] = std::popcount(ourBishopTargetsIgnoringNonBlockades & theirHeavies) - std::popcount(theirBishopTargetsIgnoringNonBlockades & ourHeavies);
   out[EF::NUM_SCARY_ROOKS] = std::popcount(ourRookTargets & theirRoyalty) - std::popcount(theirRookTargets & ourRoyalty);
@@ -226,7 +267,7 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
   out[EF::ROOKS_ON_SEMI_OPEN_FILE] = std::popcount(ourRooks & pawnAnalysis.filesWithoutOurPawns & ~pawnAnalysis.filesWithoutTheirPawns) - std::popcount(theirRooks & pawnAnalysis.filesWithoutTheirPawns & ~pawnAnalysis.filesWithoutOurPawns);
 }
 
-struct ByHandEvaluator : public PieceSquareEvaluator {
+struct ByHandEvaluator : public EvaluatorInterface {
   NNUE::Matrix<2, EF::EF_COUNT, int16_t> weights;
   NNUE::Vector<2, int16_t> bias;
   NNUE::Vector<EF::EF_COUNT, int8_t> x;
@@ -251,16 +292,14 @@ struct ByHandEvaluator : public PieceSquareEvaluator {
     earliness += x[EF::THEIR_KNIGHTS] + x[EF::THEIR_BISHOPS] + x[EF::THEIR_ROOKS] + x[EF::THEIR_QUEENS] * 3;
     earliness = std::min(18, earliness);
     int32_t r = (early * earliness + late * (18 - earliness)) / 18;
-    if constexpr (US == Color::WHITE) {
-      r += PieceSquareEvaluator::evaluate_white(pos, threats, 0, alpha, beta).value / 10;
-    } else {
-      r += PieceSquareEvaluator::evaluate_black(pos, threats, 0, alpha, beta).value / 10;
-    }
     return ColoredEvaluation<US>(r);
   }
 
   std::shared_ptr<EvaluatorInterface> clone() const override {
-    return std::make_shared<ByHandEvaluator>();
+    auto copy = std::make_shared<ByHandEvaluator>();
+    copy->weights = this->weights;
+    copy->bias = this->bias;
+    return copy;
   }
 
   void load_from_stream(std::istream& in) {
@@ -271,6 +310,12 @@ struct ByHandEvaluator : public PieceSquareEvaluator {
   std::string to_string() const override {
     return "ByHandEvaluator";
   }
+
+  void place_piece(ColoredPiece cp, SafeSquare square) override {}
+  void remove_piece(ColoredPiece cp, SafeSquare square) override {}
+  void place_piece(SafeColoredPiece cp, SafeSquare square) override {}
+  void remove_piece(SafeColoredPiece cp, SafeSquare square) override {}
+  void empty() override {}
 };
 
 };  // namespace ByHand
