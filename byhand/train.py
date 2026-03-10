@@ -129,9 +129,11 @@ if __name__ == "__main__":
                 print(f"Step {batch_idx + 1}/{total_steps} | Loss: {np.mean(epoch_losses[-1000:]):.4f}")
 
     # Save the model
+    print("Saving model to " + os.path.join(run_dir, 'model.pt'))
     with open(os.path.join(run_dir, 'model.pt'), 'wb') as f:
         torch.save(model.state_dict(), f)
 
+    print("Saving model to " + os.path.join(run_dir, 'model.bin'))
     with open(os.path.join(run_dir, 'model.bin'), 'wb') as f:
         save_tensor(model.weight.data, 'weights', f)
         save_tensor(model.bias.data, 'bias', f)
