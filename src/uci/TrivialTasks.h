@@ -298,14 +298,14 @@ class SetEvaluatorTask : public Task {
     command.pop_front();
     if (evaluatorName == "simple") {
       state->position.set_listener(std::make_shared<SimpleEvaluator>());
-      std::cout << "Evaluator set to simple." << std::endl;
+      std::cout << "info string evaluator set to simple." << std::endl;
     } else if (evaluatorName == "pst") {
       state->position.set_listener(std::make_shared<PieceSquareEvaluator>());
-      std::cout << "Evaluator set to pst." << std::endl;
+      std::cout << "info string evaluator set to pst." << std::endl;
     } else if (evaluatorName == "byhand") {
       auto evaluator = std::make_shared<ByHand::ByHandEvaluator>();
       state->position.set_listener(evaluator);
-      std::cout << "Evaluator set to byhand." << std::endl;
+      std::cout << "into string evaluator set to byhand." << std::endl;
       if (command.size() > 0) {
         std::string modelFile = command.at(0);
         command.pop_front();
