@@ -3,6 +3,7 @@
 
 #include "../eval/nnue/NnueEvaluator.h"
 #include "../eval/pst/PieceSquareEvaluator.h"
+#include "../eval/byhand/byhand.h"
 #include "../search/transposition_table.h"
 
 #include <atomic>
@@ -15,6 +16,9 @@
 
 extern const char model_bin[];
 extern unsigned int model_bin_len;
+
+extern const char byhand_bin[];
+extern unsigned int byhand_bin_len;
 
 namespace ChessEngine {
 
@@ -59,7 +63,11 @@ struct UciEngineState {
     // std::istringstream f(std::string(model_bin, model_bin_len));
     // nnue_model->load(f);
     // this->position.set_listener(std::make_shared<NNUE::NnueEvaluator>(nnue_model));
-    this->position.set_listener(std::make_shared<PieceSquareEvaluator>());
+    // this->position.set_listener(std::make_shared<PieceSquareEvaluator>());
+    auto evaluator = std::make_shared<ByHand::ByHandEvaluator>();
+    std::istringstream f(std::string(byhand_bin, byhand_bin_len));
+    evaluator->load_from_stream(f);
+    this->position.set_listener(evaluator);
   }
 
   std::mutex mutex;
