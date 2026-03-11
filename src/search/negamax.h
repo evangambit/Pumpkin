@@ -247,6 +247,16 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
   thread->nodeCount_++;
   thread->qNodeCount_++;
 
+  if ((thread->nodeCount_ & 1023) == 0) {
+    if (std::chrono::high_resolution_clock::now() >= thread->stopTime_ || thread->nodeCount_ >= thread->nodeLimit_) {
+      stopThinking->store(true);
+    }
+  }
+
+  if (stopThinking->load()) {
+    return NegamaxResult<TURN>(kNullMove, originalAlpha);
+  }
+
   ExtMove moves[kMaxNumMoves];
   ExtMove *end;
   if (quiescenceDepth <= 4) {
@@ -515,7 +525,11 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   }
 
   thread->nodeCount_++;
-  if (thread->nodeCount_ >= thread->nodeLimit_) {
+  if ((thread->nodeCount_ & 1023) == 0) {
+    if (std::chrono::high_resolution_clock::now() >= thread->stopTime_ || thread->nodeCount_ >= thread->nodeLimit_) {
+      stopThinking->store(true);
+    }
+  } else if (thread->nodeCount_ >= thread->nodeLimit_) {
     stopThinking->store(true);
   }
 
