@@ -8,6 +8,7 @@
 #include "../../game/Position.h"
 #include "../../game/Utils.h"
 #include "../../game/BoardListener.h"
+#include "../../game/Geometry.h"
 #include "../../game/movegen/bishops.h"
 #include "../Evaluator.h"
 #include "../ColoredEvaluation.h"
@@ -100,6 +101,12 @@ enum EF {
   CONNECTED_ROOKS,
 
   PINNED_MINORS,
+  BACK_RANK_MATE_THREAT,
+  KING_TROPISM,
+  OPPOSITION,
+  LONELY_KING_DIST_TO_EDGE,
+  LONELY_KING_DIST_TO_CORNER,
+  LONELY_KING_DIST_TO_KING,
 
   EF_COUNT
 };
@@ -126,11 +133,22 @@ static constexpr Bitboard kBlackRanks[8] = {
   kRanks[7],
 };
 
+constexpr int kMaxEarliness = 18;
+inline int32_t compute_earliness(int8_t *x) {
+  int32_t earliness = 0;
+  earliness += x[EF::OUR_KNIGHTS] + x[EF::OUR_BISHOPS] + x[EF::OUR_ROOKS] + x[EF::OUR_QUEENS] * 3;
+  earliness += x[EF::THEIR_KNIGHTS] + x[EF::THEIR_BISHOPS] + x[EF::THEIR_ROOKS] + x[EF::THEIR_QUEENS] * 3;
+  earliness = std::min(18, earliness);
+  return earliness;
+}
+
 template<Color US>
 void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
   static constexpr Color THEM = opposite_color<US>();
   static constexpr Direction FORWARD = US == Color::WHITE ? Direction::NORTH : Direction::SOUTH;
-  static constexpr Direction BACKWARD = US == Color::WHITE ? Direction::SOUTH : Direction::NORTH;
+  static constexpr Direction FORWARDx2 = US == Color::WHITE ? Direction::NORTHx2 : Direction::SOUTHx2;
+  static constexpr Direction BACKWARD = US == Color::WHITE ? Direction::SOUTHx2 : Direction::NORTHx2;
+  static constexpr Direction BACKWARDx2 = US == Color::WHITE ? Direction::SOUTH : Direction::NORTH;
   static constexpr Direction FORWARD_EAST = US == Color::WHITE ? Direction::NORTH_EAST : Direction::SOUTH_EAST;
   static constexpr Direction BACKWARD_EAST = US == Color::WHITE ? Direction::SOUTH_EAST : Direction::NORTH_EAST;
   static constexpr Direction FORWARD_WEST = US == Color::WHITE ? Direction::NORTH_WEST : Direction::SOUTH_WEST;
@@ -161,6 +179,8 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
   const Bitboard theirHeavies = theirRoyalty | theirRooks;
   const Bitboard ourMinors = ourKnights | ourBishops;
   const Bitboard theirMinors = theirKnights | theirBishops;
+  const Bitboard ourPieces = ourMinors | ourHeavies;
+  const Bitboard theirPieces = theirMinors | theirHeavies;
 
   static const Bitboard ourTargets = US == Color::WHITE ? threats.whiteTargets : threats.blackTargets;
   static const Bitboard theirTargets = US == Color::WHITE ? threats.blackTargets : threats.whiteTargets;
@@ -179,6 +199,11 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
   out[EF::THEIR_BISHOPS] = std::popcount(theirBishops);
   out[EF::THEIR_ROOKS] = std::popcount(theirRooks);
   out[EF::THEIR_QUEENS] = std::popcount(theirQueens);
+  const int earliness = compute_earliness(out);
+
+  // Only becomes non-zero after ~half of material is traded off. Useful
+  // for lategame-only features (e.g. king tropism).
+  const int veryLateness = std::max(0, earliness - kMaxEarliness / 2);
 
   out[EF::KING_ON_BACK_RANK] = std::popcount(ourRanks[0] & ourKings) - std::popcount(theirRanks[0] & theirKings);
   if (US == Color::WHITE) {
@@ -186,6 +211,7 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
   } else {
     out[EF::KING_ACTIVE] = (ourKingSq / 8 > 2) - (theirKingSq / 8 < 5);
   }
+  out[EF::KING_ACTIVE] *= veryLateness;
 
   out[EF::THREATS_NEAR_KING_2] = std::popcount(kNearby[2][ourKingSq] & theirTargets & ~ourTargets) - std::popcount(kNearby[2][theirKingSq] & ourTargets & ~theirTargets);
   out[EF::THREATS_NEAR_KING_3] = std::popcount(kNearby[3][ourKingSq] & theirTargets & ~ourTargets) - std::popcount(kNearby[3][theirKingSq] & ourTargets & ~theirTargets);
@@ -285,6 +311,57 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
     std::popcount((ourPinnedMask.all & ourKnights) | ((ourPinnedMask.horizontal | ourPinnedMask.vertical) & ourBishops))
     -
     std::popcount((theirPinnedMask.all & theirKnights) | ((theirPinnedMask.horizontal | theirPinnedMask.vertical) & theirBishops));
+
+  {
+    // An inexact estimate of back-rank threats.
+    // Our king on back rank && can only legally move on the back rank && their rook can come to the back rank.
+    const Bitboard ourRookTargets = US == Color::WHITE ? threats.whiteRookTargets : threats.blackRookTargets;
+    const Bitboard theirRookTargets = US == Color::BLACK ? threats.whiteRookTargets : threats.blackRookTargets;
+    const Bitboard ourKingEscapes = compute_king_targets<US>(pos, ourKingSq) & ~(threats.badFor<coloredPiece<US>(Piece::KING)>() | ourPawns);
+    const Bitboard theirKingEscapes = compute_king_targets<THEM>(pos, theirKingSq) & ~(threats.badFor<coloredPiece<THEM>(Piece::KING)>() | theirPawns);
+    const bool backRankMateThreatAgainstUs = (ourKings & ourRanks[0]) && ((ourKingEscapes & ourRanks[0]) == ourKingEscapes) && (theirRookTargets & ourRanks[0]);
+    const bool backRankMateThreatAgainstThem = (theirKings & theirRanks[0]) && ((theirKingEscapes & theirRanks[0]) == theirKingEscapes) && (ourRookTargets & theirRanks[0]);
+    out[EF::BACK_RANK_MATE_THREAT] = backRankMateThreatAgainstUs - backRankMateThreatAgainstThem;
+  }
+
+  {
+    // https://www.chessprogramming.org/King_Pawn_Tropism
+    // Penalize king for being far away from pawns. Positive score is *good* for the mover.
+    // Note: passed pawns are implicility prioritized, since we consider distance to the passed
+    //       pawn, and the two squares ahead of it (so they're weighted 3x).
+    const Bitboard passedPawns = pawnAnalysis.ourPassedPawns | pawnAnalysis.theirPassedPawns;
+    const Bitboard otherPawns = (ourPawns | theirPawns) & ~passedPawns;
+    const Bitboard aheadOfPassedPawns = passedPawns | shift<FORWARD>(pawnAnalysis.ourPassedPawns) | shift<BACKWARD>(pawnAnalysis.theirPassedPawns)
+    | shift<FORWARDx2>(pawnAnalysis.ourPassedPawns) | shift<BACKWARDx2>(pawnAnalysis.theirPassedPawns);
+    int tropism = 0;
+    for (int i = 0; i < 15; ++i) {
+      tropism += std::popcount(aheadOfPassedPawns & kManhattanDist[i][ourKingSq]);
+      tropism += std::popcount(otherPawns & kManhattanDist[i][ourKingSq]);
+
+      tropism -= std::popcount(kManhattanDist[i][theirKingSq] & aheadOfPassedPawns);
+      tropism -= std::popcount(kManhattanDist[i][theirKingSq] & otherPawns);
+    }
+    tropism *= veryLateness;
+    out[EF::KING_TROPISM] = std::min(tropism, 127);
+  }
+
+  const bool weOnlyHavePawns = (ourPieces == ourKings);
+  const bool theyOnlyHavePawns = (theirPieces == theirKings);
+
+  {
+    // Note: it's our turn, so if anyone has the opposition, it is our opponent.
+    int dx = std::abs(ourKingSq % 8 - theirKingSq % 8);
+    int dy = std::abs(ourKingSq / 8 - theirKingSq / 8);
+    out[EF::OPPOSITION] = weOnlyHavePawns && (dx == 0 && dy == 2) || (dy == 2 & dx == 0);
+  }
+
+  // Stay away from edge if you only have a king. This (e.g.) helps us checkmate with 2 bishops.
+  out[EF::LONELY_KING_DIST_TO_EDGE] = kDistToEdge[ourKingSq] * weOnlyHavePawns * !theyOnlyHavePawns - kDistToEdge[theirKingSq] * theyOnlyHavePawns * ~weOnlyHavePawns;
+  out[EF::LONELY_KING_DIST_TO_CORNER] = kDistToCorner[ourKingSq] * weOnlyHavePawns * !theyOnlyHavePawns - kDistToCorner[theirKingSq] * theyOnlyHavePawns * ~weOnlyHavePawns;
+
+  // Stay away from enemy king if you only have a king. This (e.g.) helps us checkmate with 2 bishops.
+  const int kingDistance = king_dist(ourKingSq, theirKingSq);
+  out[EF::LONELY_KING_DIST_TO_KING] = kingDistance * weOnlyHavePawns * !theyOnlyHavePawns - kingDistance * theyOnlyHavePawns * ~weOnlyHavePawns;
 }
 
 struct ByHandEvaluator : public EvaluatorInterface {
@@ -307,11 +384,8 @@ struct ByHandEvaluator : public EvaluatorInterface {
       late += x[i] * weights(0, i);
       early += x[i] * weights(1, i);
     }
-    int32_t earliness = 0;
-    earliness += x[EF::OUR_KNIGHTS] + x[EF::OUR_BISHOPS] + x[EF::OUR_ROOKS] + x[EF::OUR_QUEENS] * 3;
-    earliness += x[EF::THEIR_KNIGHTS] + x[EF::THEIR_BISHOPS] + x[EF::THEIR_ROOKS] + x[EF::THEIR_QUEENS] * 3;
-    earliness = std::min(18, earliness);
-    int32_t r = (early * earliness + late * (18 - earliness)) / 18;
+    int32_t earliness = compute_earliness(x.data_ptr());
+    int32_t r = (early * earliness + late * (kMaxEarliness - earliness)) / kMaxEarliness;
     return ColoredEvaluation<US>(r);
   }
 
