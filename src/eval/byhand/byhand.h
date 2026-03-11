@@ -111,26 +111,26 @@ enum EF {
   EF_COUNT
 };
 
-static constexpr Bitboard kWhiteRanks[8] = {
-  kRanks[7],
-  kRanks[6],
-  kRanks[5],
-  kRanks[4],
-  kRanks[3],
-  kRanks[2],
-  kRanks[1],
-  kRanks[0],
+static const Bitboard kWhiteRanks[8] = {
+  kRanks[RANK_1],
+  kRanks[RANK_2],
+  kRanks[RANK_3],
+  kRanks[RANK_4],
+  kRanks[RANK_5],
+  kRanks[RANK_6],
+  kRanks[RANK_7],
+  kRanks[RANK_8],
 };
 
-static constexpr Bitboard kBlackRanks[8] = {
-  kRanks[0],
-  kRanks[1],
-  kRanks[2],
-  kRanks[3],
-  kRanks[4],
-  kRanks[5],
-  kRanks[6],
-  kRanks[7],
+static const Bitboard kBlackRanks[8] = {
+  kRanks[RANK_8],
+  kRanks[RANK_7],
+  kRanks[RANK_6],
+  kRanks[RANK_5],
+  kRanks[RANK_4],
+  kRanks[RANK_3],
+  kRanks[RANK_2],
+  kRanks[RANK_1],
 };
 
 constexpr int kMaxEarliness = 18;
@@ -259,8 +259,8 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
   const Bitboard ourQueenTargets = US == Color::WHITE ? threats.whiteQueenTargets : threats.blackQueenTargets;
   const Bitboard theirQueenTargets = US == Color::WHITE ? threats.blackQueenTargets : threats.whiteQueenTargets;
 
-  constexpr Bitboard theirSide = US == Color::WHITE ? (kRanks[0] | kRanks[1] | kRanks[2] | kRanks[3]) : (kRanks[7] | kRanks[6] | kRanks[5] | kRanks[4]);
-  constexpr Bitboard ourSide = ~theirSide;
+  const Bitboard theirSide = ourRanks[4] | ourRanks[5] | ourRanks[6] | ourRanks[7];
+  const Bitboard ourSide = ~theirSide;
 
   out[EF::NUM_PAWN_TARGETS] = std::popcount(ourPawnTargets) - std::popcount(theirPawnTargets);
   out[EF::NUM_KNIGHT_TARGETS] = std::popcount(ourKnightTargets) - std::popcount(theirKnightTargets);
@@ -286,12 +286,10 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
   const Bitboard ourBishopTargetsIgnoringNonBlockades = compute_bishoplike_targets(ourBishops, ourBlockadedPawns);
   const Bitboard theirBishopTargetsIgnoringNonBlockades = compute_bishoplike_targets(theirBishops, theirBlockadedPawns);
 
-  static const Bitboard edges = kRanks[0] | kRanks[7] | kFiles[FILE_A] | kFiles[FILE_H];
-
   out[EF::NUM_PAWNS_4th_RANK] = std::popcount(ourPawns & ourRanks[3]) - std::popcount(theirPawns & theirRanks[3]);
   out[EF::NUM_PAWNS_5th_RANK] = std::popcount(ourPawns & ourRanks[4]) - std::popcount(theirPawns & theirRanks[4]);
   out[EF::NUM_PAWNS_6th_RANK] = std::popcount(ourPawns & ourRanks[5]) - std::popcount(theirPawns & theirRanks[5]);
-  out[EF::NUM_KNIGHTS_ON_EDGE] = std::popcount(ourKnights & edges) - std::popcount(theirKnights & edges);
+  out[EF::NUM_KNIGHTS_ON_EDGE] = std::popcount(ourKnights & kOuterRing) - std::popcount(theirKnights & kOuterRing);
 
   out[EF::NUM_SCARY_BISHOPS] = std::popcount(ourBishopTargetsIgnoringNonBlockades & theirHeavies) - std::popcount(theirBishopTargetsIgnoringNonBlockades & ourHeavies);
   out[EF::NUM_SCARY_ROOKS] = std::popcount(ourRookTargets & theirRoyalty) - std::popcount(theirRookTargets & ourRoyalty);

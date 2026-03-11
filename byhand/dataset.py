@@ -8,7 +8,7 @@ from typing import List
 try:
     from _byhand_dataset import ChunkedDataset
 except ImportError:
-    raise ImportError("C++ extension _byhand_dataset not found. Please run 'python setup.py build_ext --inplace' in the byhand directory first.")
+    raise ImportError("C++ extension _byhand_dataset not found. Please run 'python setup.py build_ext --inplace --force' in the byhand directory first.")
 
 class ByHandDataset(IterableDataset):
     def __init__(self, file_paths: List[str], chunk_size: int = 128, total_lines: int = None):
