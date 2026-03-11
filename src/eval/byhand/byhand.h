@@ -52,25 +52,6 @@ enum EF {
 
   BISHOP_PAIR,
 
-  // Interaction terms with our pawn and queen.
-  PAWNxPAWN,
-  PAWNxKNIGHT,
-  PAWNxBISHOP,
-  PAWNxROOK,
-  PAWNxQUEEN,
-  QUEENxKNIGHT,
-  QUEENxBISHOP,
-  QUEENxROOK,
-
-  // Interaction terms with opponent's pawn and queen.
-  THEIR_PAWNxKNIGHT,
-  THEIR_PAWNxBISHOP,
-  THEIR_PAWNxROOK,
-  THEIR_PAWNxQUEEN,
-  THEIR_QUEENxKNIGHT,
-  THEIR_QUEENxBISHOP,
-  THEIR_QUEENxROOK,
-
   NUM_PAWN_TARGETS,
   NUM_KNIGHT_TARGETS,
   NUM_BISHOP_TARGETS,
@@ -111,6 +92,71 @@ enum EF {
 
   EF_COUNT
 };
+
+inline std::string to_string(EF e) {
+  switch (e) {
+    case OUR_PAWNS: return "OUR_PAWNS";
+    case OUR_KNIGHTS: return "OUR_KNIGHTS";
+    case OUR_BISHOPS: return "OUR_BISHOPS";
+    case OUR_ROOKS: return "OUR_ROOKS";
+    case OUR_QUEENS: return "OUR_QUEENS";
+    case THEIR_PAWNS: return "THEIR_PAWNS";
+    case THEIR_KNIGHTS: return "THEIR_KNIGHTS";
+    case THEIR_BISHOPS: return "THEIR_BISHOPS";
+    case THEIR_ROOKS: return "THEIR_ROOKS";
+    case THEIR_QUEENS: return "THEIR_QUEENS";
+    case KING_ON_BACK_RANK: return "KING_ON_BACK_RANK";
+    case KING_ACTIVE: return "KING_ACTIVE";
+    case THREATS_NEAR_KING_2: return "THREATS_NEAR_KING_2";
+    case THREATS_NEAR_KING_3: return "THREATS_NEAR_KING_3";
+    case PASSED_PAWNS: return "PASSED_PAWNS";
+    case PASSED_PAWNS_7TH_RANK: return "PASSED_PAWNS_7TH_RANK";
+    case PASSED_PAWNS_6TH_RANK: return "PASSED_PAWNS_6TH_RANK";
+    case ISOLATED_PAWNS: return "ISOLATED_PAWNS";
+    case DOUBLED_PAWNS: return "DOUBLED_PAWNS";
+    case DOUBLE_ISOLATED_PAWNS: return "DOUBLE_ISOLATED_PAWNS";
+    case HANGING_PAWN: return "HANGING_PAWN";
+    case HANGING_KNIGHT: return "HANGING_KNIGHT";
+    case HANGING_BISHOP: return "HANGING_BISHOP";
+    case HANGING_ROOK: return "HANGING_ROOK";
+    case HANGING_QUEEN: return "HANGING_QUEEN";
+    case BISHOP_PAIR: return "BISHOP_PAIR";
+    case NUM_PAWN_TARGETS: return "NUM_PAWN_TARGETS";
+    case NUM_KNIGHT_TARGETS: return "NUM_KNIGHT_TARGETS";
+    case NUM_BISHOP_TARGETS: return "NUM_BISHOP_TARGETS";
+    case NUM_ROOK_TARGETS: return "NUM_ROOK_TARGETS";
+    case NUM_QUEEN_TARGETS: return "NUM_QUEEN_TARGETS";
+    case NUM_PAWN_TARGETS_ON_THEIR_SIDE: return "NUM_PAWN_TARGETS_ON_THEIR_SIDE";
+    case NUM_KNIGHT_TARGETS_ON_THEIR_SIDE: return "NUM_KNIGHT_TARGETS_ON_THEIR_SIDE";
+    case NUM_BISHOP_TARGETS_ON_THEIR_SIDE: return "NUM_BISHOP_TARGETS_ON_THEIR_SIDE";
+    case NUM_ROOK_TARGETS_ON_THEIR_SIDE: return "NUM_ROOK_TARGETS_ON_THEIR_SIDE";
+    case NUM_QUEEN_TARGETS_ON_THEIR_SIDE: return "NUM_QUEEN_TARGETS_ON_THEIR_SIDE";
+    case NUM_PAWN_TARGETS_IN_CENTER: return "NUM_PAWN_TARGETS_IN_CENTER";
+    case NUM_KNIGHT_TARGETS_IN_CENTER: return "NUM_KNIGHT_TARGETS_IN_CENTER";
+    case NUM_BISHOP_TARGETS_IN_CENTER: return "NUM_BISHOP_TARGETS_IN_CENTER";
+    case NUM_ROOK_TARGETS_IN_CENTER: return "NUM_ROOK_TARGETS_IN_CENTER";
+    case NUM_QUEEN_TARGETS_IN_CENTER: return "NUM_QUEEN_TARGETS_IN_CENTER";
+    case NUM_PAWNS_4th_RANK: return "NUM_PAWNS_4th_RANK";
+    case NUM_PAWNS_5th_RANK: return "NUM_PAWNS_5th_RANK";
+    case NUM_PAWNS_6th_RANK: return "NUM_PAWNS_6th_RANK";
+    case NUM_KNIGHTS_ON_EDGE: return "NUM_KNIGHTS_ON_EDGE";
+    case NUM_SCARY_BISHOPS: return "NUM_SCARY_BISHOPS";
+    case NUM_SCARY_ROOKS: return "NUM_SCARY_ROOKS";
+    case ROOKS_ON_OPEN_FILE: return "ROOKS_ON_OPEN_FILE";
+    case ROOKS_ON_SEMI_OPEN_FILE: return "ROOKS_ON_SEMI_OPEN_FILE";
+    case CONNECTED_ROOKS: return "CONNECTED_ROOKS";
+    case PINNED_MINORS: return "PINNED_MINORS";
+    case BACK_RANK_MATE_THREAT: return "BACK_RANK_MATE_THREAT";
+    case KING_TROPISM: return "KING_TROPISM";
+    case OPPOSITION: return "OPPOSITION";
+    case ONLY_HAVE_PAWNS: return "ONLY_HAVE_PAWNS";
+    case LONELY_KING_DIST_TO_EDGE: return "LONELY_KING_DIST_TO_EDGE";
+    case LONELY_KING_DIST_TO_CORNER: return "LONELY_KING_DIST_TO_CORNER";
+    case LONELY_KING_DIST_TO_KING: return "LONELY_KING_DIST_TO_KING";
+    case EF_COUNT: return "EF_COUNT";
+    default: return "UNKNOWN";
+  }
+}
 
 static const Bitboard kWhiteRanks[8] = {
   kRanks[RANK_1],
@@ -232,23 +278,7 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
   out[EF::HANGING_QUEEN] = std::popcount(threats.badForOur<US>(Piece::QUEEN) & ourQueens) - std::popcount(threats.badForOur<THEM>(Piece::QUEEN) & theirQueens);
 
   out[EF::BISHOP_PAIR] = ((ourBishops & kWhiteSquares) && (ourBishops & kBlackSquares)) - ((theirBishops & kWhiteSquares) && (theirBishops & kBlackSquares));
-  out[EF::PAWNxPAWN] = out[EF::OUR_PAWNS] * out[EF::OUR_PAWNS] - out[EF::THEIR_PAWNS] * out[EF::THEIR_PAWNS];
-  out[EF::PAWNxKNIGHT] = out[EF::OUR_PAWNS] * out[EF::OUR_KNIGHTS] - out[EF::THEIR_PAWNS] * out[EF::THEIR_KNIGHTS];
-  out[EF::PAWNxBISHOP] = out[EF::OUR_PAWNS] * out[EF::OUR_BISHOPS] - out[EF::THEIR_PAWNS] * out[EF::THEIR_BISHOPS];
-  out[EF::PAWNxROOK] = out[EF::OUR_PAWNS] * out[EF::OUR_ROOKS] - out[EF::THEIR_PAWNS] * out[EF::THEIR_ROOKS];
-  out[EF::PAWNxQUEEN] = out[EF::OUR_PAWNS] * out[EF::OUR_QUEENS] - out[EF::THEIR_PAWNS] * out[EF::THEIR_QUEENS];
-  out[EF::QUEENxKNIGHT] = out[EF::OUR_QUEENS] * out[EF::OUR_KNIGHTS] - out[EF::THEIR_QUEENS] * out[EF::THEIR_KNIGHTS];
-  out[EF::QUEENxBISHOP] = out[EF::OUR_QUEENS] * out[EF::OUR_BISHOPS] - out[EF::THEIR_QUEENS] * out[EF::THEIR_BISHOPS];
-  out[EF::QUEENxROOK] = out[EF::OUR_QUEENS] * out[EF::OUR_ROOKS] - out[EF::THEIR_QUEENS] * out[EF::THEIR_ROOKS];
 
-  out[EF::THEIR_PAWNxKNIGHT] = out[EF::THEIR_PAWNS] * out[EF::OUR_KNIGHTS] - out[EF::OUR_PAWNS] * out[EF::THEIR_KNIGHTS];
-  out[EF::THEIR_PAWNxBISHOP] = out[EF::THEIR_PAWNS] * out[EF::OUR_BISHOPS] - out[EF::OUR_PAWNS] * out[EF::THEIR_BISHOPS];
-  out[EF::THEIR_PAWNxROOK] = out[EF::THEIR_PAWNS] * out[EF::OUR_ROOKS] - out[EF::OUR_PAWNS] * out[EF::THEIR_ROOKS];
-  out[EF::THEIR_PAWNxQUEEN] = out[EF::THEIR_PAWNS] * out[EF::OUR_QUEENS] - out[EF::OUR_PAWNS] * out[EF::THEIR_QUEENS];
-  out[EF::THEIR_QUEENxKNIGHT] = out[EF::THEIR_QUEENS] * out[EF::OUR_KNIGHTS] - out[EF::OUR_QUEENS] * out[EF::THEIR_KNIGHTS];
-  out[EF::THEIR_QUEENxBISHOP] = out[EF::THEIR_QUEENS] * out[EF::OUR_BISHOPS] - out[EF::OUR_QUEENS] * out[EF::THEIR_BISHOPS];
-  out[EF::THEIR_QUEENxROOK] = out[EF::THEIR_QUEENS] * out[EF::OUR_ROOKS] - out[EF::OUR_QUEENS] * out[EF::THEIR_ROOKS];
-  
   const Bitboard ourPawnTargets = US == Color::WHITE ? threats.whitePawnTargets : threats.blackPawnTargets;
   const Bitboard theirPawnTargets = US == Color::WHITE ? threats.blackPawnTargets : threats.whitePawnTargets;
   const Bitboard ourKnightTargets = US == Color::WHITE ? threats.whiteKnightTargets : threats.blackKnightTargets;
