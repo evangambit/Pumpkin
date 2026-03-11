@@ -37,8 +37,8 @@ ExtMove *compute_pawn_moves(const Position& pos, ExtMove *moves, Bitboard target
   constexpr Direction CAPTURE_NW = FORWARD == Direction::NORTH ? Direction::NORTH_WEST : Direction::SOUTH_EAST;
 
   constexpr ColoredPiece cp = coloredPiece<US, Piece::PAWN>();
-  constexpr Bitboard rowInFrontOfHome = (US == Color::WHITE ? kRanks[5] : kRanks[2]);
-  constexpr Bitboard promotionRow = (US == Color::WHITE ? kRanks[0] : kRanks[7]);
+  const Bitboard rowInFrontOfHome = (US == Color::WHITE ? kRanks[RANK_3] : kRanks[RANK_6]);
+  const Bitboard promotionRow = (US == Color::WHITE ? kRanks[RANK_8] : kRanks[RANK_1]);
 
   Bitboard enemies = pos.colorBitboards_[opposite_color<US>()];
   const Bitboard emptySquares = ~(pos.colorBitboards_[Color::BLACK] | pos.colorBitboards_[Color::WHITE]);
@@ -54,7 +54,7 @@ ExtMove *compute_pawn_moves(const Position& pos, ExtMove *moves, Bitboard target
     const Bitboard enemyKing = pos.pieceBitboards_[coloredPiece<opposite_color<US>(), Piece::KING>()];
     // Include pushing pawns close to promotion. Note: pawns moving to the last two ranks automatically
     // implies that they are passed.
-    checkMask = (US == Color::WHITE ? (kRanks[0] | kRanks[1]) : (kRanks[7] | kRanks[6]));
+    checkMask = (US == Color::WHITE ? (kRanks[RANK_8] | kRanks[RANK_7]) : (kRanks[RANK_1] | kRanks[RANK_2]));
     checkMask |= shift<opposite_dir(CAPTURE_NE)>(enemyKing) | shift<opposite_dir(CAPTURE_NW)>(enemyKing);
   } else {
     checkMask = kUniverse;

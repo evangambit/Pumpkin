@@ -80,6 +80,18 @@ enum File {
   FILE_H,
 };
 
+enum Rank {
+  RANK_8,
+  RANK_7,
+  RANK_6,
+  RANK_5,
+  RANK_4,
+  RANK_3,
+  RANK_2,
+  RANK_1,
+  RANK_NONE,
+};
+
 constexpr Bitboard kEmptyBitboard = 0;
 constexpr Bitboard kUniverse = ~Bitboard(0);
 const TypeSafeArray<Bitboard, 8, File> kFiles = {
@@ -93,7 +105,7 @@ const TypeSafeArray<Bitboard, 8, File> kFiles = {
   0x8080808080808080ULL,
 };
 
-constexpr Bitboard kRanks[9] = {
+const TypeSafeArray<Bitboard, 8, Rank> kRanks = {
   0x00000000000000ffULL,
   0x000000000000ff00ULL,
   0x0000000000ff0000ULL,
@@ -106,18 +118,18 @@ constexpr Bitboard kRanks[9] = {
 };
 
 inline Bitboard square2rank(UnsafeSquare sq) {
-  return kRanks[sq / 8];
+  return kRanks[Rank(sq / 8)];
 }
 
-const Bitboard kCenter16 = (kFiles[FILE_C] | kFiles[FILE_D] | kFiles[FILE_E] | kFiles[FILE_F]) & (kRanks[2] | kRanks[3] | kRanks[4] | kRanks[5]);
-const Bitboard kCenter4 = (kFiles[FILE_D] | kFiles[FILE_E]) & (kRanks[3] | kRanks[4]);
+const Bitboard kCenter16 = (kFiles[FILE_C] | kFiles[FILE_D] | kFiles[FILE_E] | kFiles[FILE_F]) & (kRanks[RANK_3] | kRanks[RANK_4] | kRanks[RANK_5] | kRanks[RANK_6]);
+const Bitboard kCenter4 = (kFiles[FILE_D] | kFiles[FILE_E]) & (kRanks[RANK_4] | kRanks[RANK_5]);
 
 const Bitboard kWhiteSquares = 0xaa55aa55aa55aa55;
 const Bitboard kBlackSquares = 0x55aa55aa55aa55aa;
 const Bitboard kWhiteSide = 0xffffffff00000000;
 const Bitboard kBlackSide = 0x00000000ffffffff;
 
-const Bitboard kOuterRing = kFiles[FILE_A] | kFiles[FILE_H] | kRanks[0] | kRanks[7];
+const Bitboard kOuterRing = kFiles[FILE_A] | kFiles[FILE_H] | kRanks[RANK_1] | kRanks[RANK_8];
 
 constexpr int kNumSquares = 64;
 
