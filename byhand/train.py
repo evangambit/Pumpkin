@@ -84,7 +84,7 @@ if __name__ == "__main__":
     # We may not know the exact length if total_lines is not provided, 
     # but the dataloader len is estimated via wc -l by ByHandDataset.
     steps_per_epoch = len(dataloader)
-    total_steps = NUM_EPOCHS * steps_per_epoch
+    total_steps = min(10_000, NUM_EPOCHS * steps_per_epoch)
     warmup_steps = total_steps // 20
 
     scheduler = CosineAnnealingWithWarmup(
@@ -95,11 +95,13 @@ if __name__ == "__main__":
         total_steps=total_steps
     )
 
+    step_count = 0
     for epoch in range(NUM_EPOCHS):
         print(f"Starting Epoch {epoch+1}/{NUM_EPOCHS}")
         epoch_losses = []
         
         for batch_idx, batch in tqdm(enumerate(dataloader), total=len(dataloader)):
+            step_count += 1
             opt.zero_grad()
             scheduler.step()
             
@@ -128,6 +130,11 @@ if __name__ == "__main__":
             
             if (batch_idx + 1) % 500 == 0:
                 print(f"Step {batch_idx + 1}/{total_steps} | Loss: {np.mean(epoch_losses[-1000:]):.4f}")
+            
+            if step_count >= total_steps:
+                break
+        if step_count >= total_steps:
+            break
 
     # Save the model
     print("Saving model to " + os.path.join(run_dir, 'model.pt'))

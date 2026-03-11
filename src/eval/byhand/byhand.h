@@ -104,6 +104,7 @@ enum EF {
   BACK_RANK_MATE_THREAT,
   KING_TROPISM,
   OPPOSITION,
+  ONLY_HAVE_PAWNS,
   LONELY_KING_DIST_TO_EDGE,
   LONELY_KING_DIST_TO_CORNER,
   LONELY_KING_DIST_TO_KING,
@@ -147,8 +148,8 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
   static constexpr Color THEM = opposite_color<US>();
   static constexpr Direction FORWARD = US == Color::WHITE ? Direction::NORTH : Direction::SOUTH;
   static constexpr Direction FORWARDx2 = US == Color::WHITE ? Direction::NORTHx2 : Direction::SOUTHx2;
-  static constexpr Direction BACKWARD = US == Color::WHITE ? Direction::SOUTHx2 : Direction::NORTHx2;
-  static constexpr Direction BACKWARDx2 = US == Color::WHITE ? Direction::SOUTH : Direction::NORTH;
+  static constexpr Direction BACKWARD = US == Color::WHITE ? Direction::SOUTH : Direction::NORTH;
+  static constexpr Direction BACKWARDx2 = US == Color::WHITE ? Direction::SOUTHx2 : Direction::NORTHx2;
   static constexpr Direction FORWARD_EAST = US == Color::WHITE ? Direction::NORTH_EAST : Direction::SOUTH_EAST;
   static constexpr Direction BACKWARD_EAST = US == Color::WHITE ? Direction::SOUTH_EAST : Direction::NORTH_EAST;
   static constexpr Direction FORWARD_WEST = US == Color::WHITE ? Direction::NORTH_WEST : Direction::SOUTH_WEST;
@@ -341,17 +342,21 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
       tropism -= std::popcount(kManhattanDist[i][theirKingSq] & otherPawns);
     }
     tropism *= veryLateness;
-    out[EF::KING_TROPISM] = std::min(tropism, 127);
+    out[EF::KING_TROPISM] = std::min(std::max(-127, tropism), 127);
   }
 
   const bool weOnlyHavePawns = (ourPieces == ourKings);
   const bool theyOnlyHavePawns = (theirPieces == theirKings);
 
+  // A lot of our "mop up" features rely on "ONLY_HAVE_PAWNS" so it's good to learn
+  // a bias term so our mop up weights are meaningful.
+  out[EF::ONLY_HAVE_PAWNS] = weOnlyHavePawns - theyOnlyHavePawns;
+
   {
     // Note: it's our turn, so if anyone has the opposition, it is our opponent.
     int dx = std::abs(ourKingSq % 8 - theirKingSq % 8);
     int dy = std::abs(ourKingSq / 8 - theirKingSq / 8);
-    out[EF::OPPOSITION] = weOnlyHavePawns && (dx == 0 && dy == 2) || (dx == 2 && dy == 0);
+    out[EF::OPPOSITION] = weOnlyHavePawns && ((dx == 0 && dy == 2) || (dx == 2 && dy == 0));
   }
 
   // Stay away from edge if you only have a king. This (e.g.) helps us checkmate with 2 bishops.
@@ -360,7 +365,7 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
 
   // Stay away from enemy king if you only have a king. This (e.g.) helps us checkmate with 2 bishops.
   const int kingDistance = king_dist(ourKingSq, theirKingSq);
-  out[EF::LONELY_KING_DIST_TO_KING] = kingDistance * weOnlyHavePawns * !theyOnlyHavePawns - kingDistance * theyOnlyHavePawns * ~weOnlyHavePawns;
+  out[EF::LONELY_KING_DIST_TO_KING] = kingDistance * weOnlyHavePawns * !theyOnlyHavePawns - kingDistance * theyOnlyHavePawns * !weOnlyHavePawns;
 }
 
 struct ByHandEvaluator : public EvaluatorInterface {
@@ -377,8 +382,8 @@ struct ByHandEvaluator : public EvaluatorInterface {
   template<Color US>
   ColoredEvaluation<US> _evaluate(const Position& pos, const Threats& threats, ColoredEvaluation<US> alpha, ColoredEvaluation<US> beta) {
     pos2features<US>(pos, threats, x.data_ptr());
-    int32_t late = bias[1];
-    int32_t early = bias[0];
+    int32_t late = bias[0];
+    int32_t early = bias[1];
     for (size_t i = 0; i < EF::EF_COUNT; ++i) {
       late += x[i] * weights(0, i);
       early += x[i] * weights(1, i);
