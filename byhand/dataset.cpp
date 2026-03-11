@@ -7,6 +7,7 @@
 #include "../src/game/Position.h"
 #include "../src/game/Threats.h"
 #include "../src/game/CreateThreats.h"
+#include "../src/game/movegen/movegen.h"
 #include "../src/eval/byhand/byhand.h"
 
 using namespace ChessEngine;
