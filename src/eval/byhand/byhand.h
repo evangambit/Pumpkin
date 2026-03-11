@@ -182,8 +182,8 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
   const Bitboard ourPieces = ourMinors | ourHeavies;
   const Bitboard theirPieces = theirMinors | theirHeavies;
 
-  static const Bitboard ourTargets = US == Color::WHITE ? threats.whiteTargets : threats.blackTargets;
-  static const Bitboard theirTargets = US == Color::WHITE ? threats.blackTargets : threats.whiteTargets;
+  const Bitboard ourTargets = US == Color::WHITE ? threats.whiteTargets : threats.blackTargets;
+  const Bitboard theirTargets = US == Color::WHITE ? threats.blackTargets : threats.whiteTargets;
 
   const auto *ourRanks = US == Color::WHITE ? kWhiteRanks : kBlackRanks;
   const auto *theirRanks = US == Color::WHITE ? kBlackRanks : kWhiteRanks;
@@ -203,7 +203,8 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
 
   // Only becomes non-zero after ~half of material is traded off. Useful
   // for lategame-only features (e.g. king tropism).
-  const int veryLateness = std::max(0, earliness - kMaxEarliness / 2);
+  const int lateness = kMaxEarliness - earliness;
+  const int veryLateness = std::max(0, lateness - kMaxEarliness / 2);
 
   out[EF::KING_ON_BACK_RANK] = std::popcount(ourRanks[0] & ourKings) - std::popcount(theirRanks[0] & theirKings);
   if (US == Color::WHITE) {
@@ -352,12 +353,12 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
     // Note: it's our turn, so if anyone has the opposition, it is our opponent.
     int dx = std::abs(ourKingSq % 8 - theirKingSq % 8);
     int dy = std::abs(ourKingSq / 8 - theirKingSq / 8);
-    out[EF::OPPOSITION] = weOnlyHavePawns && (dx == 0 && dy == 2) || (dy == 2 & dx == 0);
+    out[EF::OPPOSITION] = weOnlyHavePawns && (dx == 0 && dy == 2) || (dx == 2 && dy == 0);
   }
 
   // Stay away from edge if you only have a king. This (e.g.) helps us checkmate with 2 bishops.
-  out[EF::LONELY_KING_DIST_TO_EDGE] = kDistToEdge[ourKingSq] * weOnlyHavePawns * !theyOnlyHavePawns - kDistToEdge[theirKingSq] * theyOnlyHavePawns * ~weOnlyHavePawns;
-  out[EF::LONELY_KING_DIST_TO_CORNER] = kDistToCorner[ourKingSq] * weOnlyHavePawns * !theyOnlyHavePawns - kDistToCorner[theirKingSq] * theyOnlyHavePawns * ~weOnlyHavePawns;
+  out[EF::LONELY_KING_DIST_TO_EDGE] = kDistToEdge[ourKingSq] * weOnlyHavePawns * !theyOnlyHavePawns - kDistToEdge[theirKingSq] * theyOnlyHavePawns * !weOnlyHavePawns;
+  out[EF::LONELY_KING_DIST_TO_CORNER] = kDistToCorner[ourKingSq] * weOnlyHavePawns * !theyOnlyHavePawns - kDistToCorner[theirKingSq] * theyOnlyHavePawns * !weOnlyHavePawns;
 
   // Stay away from enemy king if you only have a king. This (e.g.) helps us checkmate with 2 bishops.
   const int kingDistance = king_dist(ourKingSq, theirKingSq);
