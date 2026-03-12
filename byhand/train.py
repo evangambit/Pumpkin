@@ -15,6 +15,9 @@ BATCH_SIZE = 2048
 CHUNK_SIZE = 128
 assert BATCH_SIZE % CHUNK_SIZE == 0
 
+WEIGHT_STAGES_EQUALLY = False
+LABEL_SCALE = 1.0
+
 def save_tensor(tensor: torch.Tensor, name: str, out: io.BufferedWriter):
   tensor = tensor.cpu().detach().numpy()
   name = name.ljust(16)
@@ -95,6 +98,10 @@ if __name__ == "__main__":
         total_steps=total_steps
     )
 
+    if WEIGHT_STAGES_EQUALLY:
+        earliness_values = torch.arange(19, dtype=torch.float32).to(device)
+        earliness_weights = torch.ones(earliness_values.shape, dtype=torch.float32).to(device)
+
     step_count = 0
     for epoch in range(NUM_EPOCHS):
         print(f"Starting Epoch {epoch+1}/{NUM_EPOCHS}")
@@ -110,6 +117,14 @@ if __name__ == "__main__":
 
             earliness = values[:,1] + values[:,2] + values[:,3] + values[:,4] * 3
             earliness += values[:,6] + values[:,7] + values[:,8] + values[:,9] * 3
+
+            if WEIGHT_STAGES_EQUALLY:
+                # 1-hot encoding of which bucket a datapoint falls into.
+                which_bucket = (earliness_values.reshape(-1, 1) == earliness.reshape(1, -1)).to(torch.int32)
+                with torch.no_grad():
+                    earliness_weights *= 0.9
+                    earliness_weights += which_bucket.sum(1) + 1.0
+            
             earliness = earliness.clip(0, 18) / 18
             
             # Predict
@@ -119,9 +134,14 @@ if __name__ == "__main__":
             
             # Use Sigmoid to match eval output
             output_sig = torch.sigmoid(output)
-            label_sig = torch.sigmoid(labels)
+            label_sig = torch.sigmoid(labels * LABEL_SCALE)
             
-            loss = nn.functional.mse_loss(output_sig, label_sig, reduction='mean')
+            if WEIGHT_STAGES_EQUALLY:
+                loss = nn.functional.mse_loss(output_sig, label_sig, reduction='none')
+                loss = loss * nn.functional.softmax(1.0 / earliness_weights[which_bucket.argmax(0)])
+                loss = loss.sum()
+            else:
+                loss = nn.functional.mse_loss(output_sig, label_sig, reduction='mean')
             
             loss.backward()
             opt.step()

@@ -116,6 +116,7 @@ struct Thread {
   : id_(other.id_),
     multiPV_(other.multiPV_),
     depth_(other.depth_),
+    stopTime_(other.stopTime_),
     position_(other.position_),
     permittedMoves_(other.permittedMoves_),
     primaryVariations_(other.primaryVariations_),
