@@ -11,6 +11,7 @@
 #include <bit>
 #include <chrono>
 #include <cstdint>
+#include <cstring>
 #include <functional>
 #include <memory>
 #include <unordered_set>
@@ -109,7 +110,9 @@ struct Thread {
     const std::unordered_set<Move>& permittedMoves,
     TranspositionTable* tt
   ) : id_(id), position_(pos), permittedMoves_(permittedMoves), multiPV_(multiPV), tt_(tt) {
-    std::fill(&quietHistory_[0][0], &quietHistory_[0][0] + sizeof(quietHistory_) / sizeof(int32_t), 0);
+    std::memset(buffer, 0, sizeof(buffer));
+    std::memset(frames_, 0, sizeof(frames_));
+    std::memset(quietHistory_, 0, sizeof(quietHistory_));
   }
   
   Thread(const Thread& other)
@@ -124,6 +127,8 @@ struct Thread {
     qNodeCount_(other.qNodeCount_),
     nodeLimit_(other.nodeLimit_),
     tt_(other.tt_) {
+      std::memcpy(buffer, other.buffer, sizeof(buffer));
+      std::memcpy(frames_, other.frames_, sizeof(frames_));
       std::memcpy(quietHistory_, other.quietHistory_, sizeof(quietHistory_));
     }
 
@@ -209,9 +214,9 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
   }
 
   // Prevent stack overflow - return static eval if we've gone too deep
-  if (quiescenceDepth >= kMaxQuiescenceDepth) {
+  if (quiescenceDepth >= kMaxQuiescenceDepth || plyFromRoot >= kMaxPlyFromRoot - 1) {
     if (IS_PRINT_QNODE) {
-      std::cout << repeat("  ", plyFromRoot) << "Max quiescence depth reached, returning static evaluation." << std::endl;
+      std::cout << repeat("  ", plyFromRoot) << "Max quiescence depth or ply limit reached, returning static evaluation." << std::endl;
     }
     Threats threats;
     create_threats(thread->position_.pieceBitboards_, thread->position_.colorBitboards_, &threats);
@@ -452,6 +457,10 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
       std::cout << repeat("  ", plyFromRoot) << "Alpha-beta window is invalid (alpha >= beta). Returning beta." << std::endl;
     }
     return NegamaxResult<TURN>(kNullMove, beta);
+  }
+
+  if (plyFromRoot >= kMaxPlyFromRoot - 1) {
+    return qsearch<TURN>(thread, alpha, beta, plyFromRoot, kMaxQuiescenceDepth, frame, stopThinking);
   }
 
   if (depth == 0) {
