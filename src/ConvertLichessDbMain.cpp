@@ -14,7 +14,7 @@ DEFINE_int32(limit, 0, "Maximum number of positions to convert; 0 for no limit")
 # https://database.lichess.org/#evals
 wget https://database.lichess.org/lichess_db_eval.jsonl.zst
 
-g++ -std=c++20 -O3 -march=native src/ConvertLichessDbMain.cpp -o convert_lichess -L/usr/bin -I/usr/include -I/usr/local/include -lzstd -lgflags
+g++ -std=c++20 -O3 -march=native src/ConvertLichessDbMain.cpp -o convert_lichess -L/opt/homebrew/bin -I/opt/homebrew/include -I/usr/local/include -lzstd -lgflags
 
 ./convert_lichess path/to/lichess_db_eval.jsonl.zst output.txt
 */
