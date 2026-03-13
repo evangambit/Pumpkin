@@ -95,14 +95,14 @@ void make_move(Position *pos, Move move) {
   pos->colorBitboards_[TURN] |= t;
   pos->tiles_[move.to] = promoPiece;
   pos->tiles_[move.from] = ColoredPiece::NO_COLORED_PIECE;
-  pos->currentState_.hash ^= kZorbristNumbers[movingPiece][move.from];
-  pos->currentState_.hash ^= kZorbristNumbers[promoPiece][move.to];
+  pos->currentState_.update_hash(movingPiece, move.from);
+  pos->currentState_.update_hash(promoPiece, move.to);
 
   // Remove captured piece.
   pos->pieceBitboards_[capturedPiece] &= ~t;
   pos->colorBitboards_[opposingColor] &= ~t;
   const bool hasCapturedPiece = (capturedPiece != ColoredPiece::NO_COLORED_PIECE);
-  pos->currentState_.hash ^= kZorbristNumbers[capturedPiece][move.to] * hasCapturedPiece;
+  pos->currentState_.update_hash(capturedPiece, move.to, hasCapturedPiece);
 
   pos->increment_piece_map(promoPiece, move.to);
   pos->decrement_piece_map(capturedPiece, move.to);
@@ -130,8 +130,8 @@ void make_move(Position *pos, Move move) {
     pos->colorBitboards_[TURN] |= rookDestinationBB;
     pos->tiles_[rookOrigin] = ColoredPiece::NO_COLORED_PIECE;
     pos->tiles_[rookDestination] = myRookPiece;
-    pos->currentState_.hash ^= kZorbristNumbers[myRookPiece][rookOrigin] * hasCapturedPiece;
-    pos->currentState_.hash ^= kZorbristNumbers[myRookPiece][rookDestination] * hasCapturedPiece;
+    pos->currentState_.update_hash(myRookPiece, rookOrigin, hasCapturedPiece);
+    pos->currentState_.update_hash(myRookPiece, rookDestination, hasCapturedPiece);
 
     pos->increment_piece_map(myRookPiece, rookDestination);
     pos->decrement_piece_map(myRookPiece, rookOrigin);
@@ -156,7 +156,7 @@ void make_move(Position *pos, Move move) {
     pos->pieceBitboards_[opposingPawn] &= ~enpassantLocBB;
     pos->colorBitboards_[opposingColor] &= ~enpassantLocBB;
     pos->tiles_[enpassantSq] = ColoredPiece::NO_COLORED_PIECE;
-    pos->currentState_.hash ^= kZorbristNumbers[opposingPawn][enpassantSq];
+    pos->currentState_.update_hash(opposingPawn, enpassantSq);
     pos->decrement_piece_map(opposingPawn, enpassantSq);
   }
 
