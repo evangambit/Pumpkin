@@ -63,11 +63,11 @@ struct UciEngineState {
     // std::istringstream f(std::string(model_bin, model_bin_len));
     // nnue_model->load(f);
     // this->position.set_listener(std::make_shared<NNUE::NnueEvaluator>(nnue_model));
-    // this->position.set_listener(std::make_shared<PieceSquareEvaluator>());
-    auto evaluator = std::make_shared<ByHand::ByHandEvaluator>();
-    std::istringstream f(std::string(byhand_bin, byhand_bin_len));
-    evaluator->load_from_stream(f);
-    this->position.set_listener(evaluator);
+    this->position.set_listener(std::make_shared<PieceSquareEvaluator>());
+    // auto evaluator = std::make_shared<ByHand::ByHandEvaluator>();
+    // std::istringstream f(std::string(byhand_bin, byhand_bin_len));
+    // evaluator->load_from_stream(f);
+    // this->position.set_listener(evaluator);
   }
 
   std::mutex mutex;

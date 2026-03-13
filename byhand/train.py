@@ -115,8 +115,7 @@ if __name__ == "__main__":
             values, labels, turns = [x.to(device) for x in batch]
             values = values.to(torch.float32)
 
-            earliness = values[:,1] + values[:,2] + values[:,3] + values[:,4] * 3
-            earliness += values[:,6] + values[:,7] + values[:,8] + values[:,9] * 3
+            earliness = values[:,0]
 
             if WEIGHT_STAGES_EQUALLY:
                 # 1-hot encoding of which bucket a datapoint falls into.
@@ -170,7 +169,7 @@ if __name__ == "__main__":
     print("\nLearned Weights:")
     weights = model.weight.data.detach().cpu().numpy()
     bias = model.bias.detach().cpu().numpy()
-    scale = 100 / weights[0,0].mean()  # Make endgame pawns == 100
+    scale = 100 / weights[0,1].mean()  # Make endgame pawns == 100
     for i, w in enumerate(weights.T):
         print(f"Feature {i}: {np.round(w * scale)}")
     print(f"Bias: {np.round(bias * scale)}")
