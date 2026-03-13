@@ -165,10 +165,6 @@ class GoTask : public Task {
     auto currentStopThinking = state->stopThinking;
     if (goCommand.timeLimitMs != (uint64_t)-1) {
       this->baseThreadState->stopTime_ = std::chrono::high_resolution_clock::now() + std::chrono::milliseconds(goCommand.timeLimitMs);
-      std::thread([currentStopThinking, timeLimitMs = goCommand.timeLimitMs]() {
-        std::this_thread::sleep_for(std::chrono::milliseconds(timeLimitMs));
-        currentStopThinking->store(true);
-      }).detach();
     } else {
       this->baseThreadState->stopTime_ = std::chrono::high_resolution_clock::time_point::max();
     }
