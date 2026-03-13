@@ -21,16 +21,13 @@ namespace ChessEngine {
 namespace ByHand {
 
 enum EF {
-  OUR_PAWNS,
-  OUR_KNIGHTS,
-  OUR_BISHOPS,
-  OUR_ROOKS,
-  OUR_QUEENS,
-  THEIR_PAWNS,
-  THEIR_KNIGHTS,
-  THEIR_BISHOPS,
-  THEIR_ROOKS,
-  THEIR_QUEENS,
+  EARLINESS = 0,
+
+  PAWNS,
+  KNIGHTS,
+  BISHOPS,
+  ROOKS,
+  QUEENS,
 
   KING_ON_BACK_RANK,
   KING_ACTIVE,
@@ -95,16 +92,12 @@ enum EF {
 
 inline std::string to_string(EF e) {
   switch (e) {
-    case OUR_PAWNS: return "OUR_PAWNS";
-    case OUR_KNIGHTS: return "OUR_KNIGHTS";
-    case OUR_BISHOPS: return "OUR_BISHOPS";
-    case OUR_ROOKS: return "OUR_ROOKS";
-    case OUR_QUEENS: return "OUR_QUEENS";
-    case THEIR_PAWNS: return "THEIR_PAWNS";
-    case THEIR_KNIGHTS: return "THEIR_KNIGHTS";
-    case THEIR_BISHOPS: return "THEIR_BISHOPS";
-    case THEIR_ROOKS: return "THEIR_ROOKS";
-    case THEIR_QUEENS: return "THEIR_QUEENS";
+    case EARLINESS: return "EARLINESS";
+    case PAWNS: return "PAWNS";
+    case KNIGHTS: return "KNIGHTS";
+    case BISHOPS: return "BISHOPS";
+    case ROOKS: return "ROOKS";
+    case QUEENS: return "QUEENS";
     case KING_ON_BACK_RANK: return "KING_ON_BACK_RANK";
     case KING_ACTIVE: return "KING_ACTIVE";
     case THREATS_NEAR_KING_2: return "THREATS_NEAR_KING_2";
@@ -180,14 +173,7 @@ static const Bitboard kBlackRanks[8] = {
   kRanks[RANK_1],
 };
 
-constexpr int kMaxEarliness = 18;
-inline int32_t compute_earliness(int8_t *x) {
-  int32_t earliness = 0;
-  earliness += x[EF::OUR_KNIGHTS] + x[EF::OUR_BISHOPS] + x[EF::OUR_ROOKS] + x[EF::OUR_QUEENS] * 3;
-  earliness += x[EF::THEIR_KNIGHTS] + x[EF::THEIR_BISHOPS] + x[EF::THEIR_ROOKS] + x[EF::THEIR_QUEENS] * 3;
-  earliness = std::min(18, earliness);
-  return earliness;
-}
+const int kMaxEarliness = 18;
 
 template<Color US>
 void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
@@ -236,21 +222,19 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
   const auto *theirRanks = US == Color::WHITE ? kBlackRanks : kWhiteRanks;
   const PawnAnalysis<US> pawnAnalysis(pos);
 
-  out[EF::OUR_PAWNS] = std::popcount(ourPawns);
-  out[EF::OUR_KNIGHTS] = std::popcount(ourKnights);
-  out[EF::OUR_BISHOPS] = std::popcount(ourBishops);
-  out[EF::OUR_ROOKS] = std::popcount(ourRooks);
-  out[EF::OUR_QUEENS] = std::popcount(ourQueens);
-  out[EF::THEIR_PAWNS] = std::popcount(theirPawns);
-  out[EF::THEIR_KNIGHTS] = std::popcount(theirKnights);
-  out[EF::THEIR_BISHOPS] = std::popcount(theirBishops);
-  out[EF::THEIR_ROOKS] = std::popcount(theirRooks);
-  out[EF::THEIR_QUEENS] = std::popcount(theirQueens);
-  const int earliness = compute_earliness(out);
+  out[EF::EARLINESS] = 0;
+  out[EF::EARLINESS] += std::popcount(ourMinors | ourRooks) + std::popcount(theirMinors | theirRooks);
+  out[EF::EARLINESS] += (std::popcount(ourQueens) + std::popcount(theirQueens)) * 3;
+
+  out[EF::PAWNS] = std::popcount(ourPawns) - std::popcount(theirPawns);
+  out[EF::KNIGHTS] = std::popcount(ourKnights) - std::popcount(theirKnights);
+  out[EF::BISHOPS] = std::popcount(ourBishops) - std::popcount(theirBishops);
+  out[EF::ROOKS] = std::popcount(ourRooks) - std::popcount(theirRooks);
+  out[EF::QUEENS] = std::popcount(ourQueens) - std::popcount(theirQueens);
 
   // Only becomes non-zero after ~half of material is traded off. Useful
   // for lategame-only features (e.g. king tropism).
-  const int lateness = kMaxEarliness - earliness;
+  const int lateness = kMaxEarliness - out[EF::EARLINESS];
   const int veryLateness = std::max(0, lateness - kMaxEarliness / 2);
 
   out[EF::KING_ON_BACK_RANK] = std::popcount(ourRanks[0] & ourKings) - std::popcount(theirRanks[0] & theirKings);
@@ -418,7 +402,7 @@ struct ByHandEvaluator : public EvaluatorInterface {
       late += x[i] * weights(0, i);
       early += x[i] * weights(1, i);
     }
-    int32_t earliness = compute_earliness(x.data_ptr());
+    int32_t earliness = x[EF::EARLINESS];
     int32_t r = (early * earliness + late * (kMaxEarliness - earliness)) / kMaxEarliness;
     return ColoredEvaluation<US>(r);
   }
