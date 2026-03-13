@@ -651,9 +651,11 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   }
 
   const Move lastMove = SEARCH_TYPE == SearchType::ROOT ? kNullMove : thread->position_.history_.back().move;
-  // ±16000: best move from transposition table
+  // Move ordering operates in bands
   // +8000: is capture
+  // +8000: is killer move
   // deltas for ranking captures can range from -4000 to 4000
+  // This way, the killer move is tried after all the non-sacking captures, but before any of the bad captures. See https://www.chessprogramming.org/Move_Ordering#Captures for more discussion.
   static constexpr Evaluation kMoveOrderingPieceValue[Piece::NUM_PIECES] = {
     0,    // NO_PIECE
     100,  // PAWN
@@ -795,7 +797,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
         int lateMoveReduction = SEARCH_TYPE != SearchType::ROOT
           && childDepth >= 3
           && move->capture == ColoredPiece::NO_COLORED_PIECE
-          && move->piece != Piece::PAWN
+          && move->move.moveType != MoveType::PROMOTION
           && numQuietMovesSearched >= 4
           && !inCheck;
         lateMoveReduction += numQuietMovesSearched > 10 ? 1 : 0;
