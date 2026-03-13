@@ -34,71 +34,6 @@ uint64_t kZorbristCastling[16];
 uint64_t kZorbristEnpassant[8];
 uint64_t kZorbristTurn;
 
-
-static std::vector<std::string> _zorbrist_debug(uint64_t actual, uint64_t expected, unsigned searchDepth) {
-  // Find a path from actual to expected by XORing bits and comparing
-  // to the known Zorbrist numbers.
-  if (actual == expected) {
-    return {};
-  }
-  if (searchDepth == 0) {
-    return {"No solution found"};
-  }
-  if ((actual ^ expected) == kZorbristTurn) {
-    return {"XOR turn"};
-  }
-  for (ColoredPiece cp = ColoredPiece::NO_COLORED_PIECE; cp < kNumColoredPieces; cp = ColoredPiece(cp + 1)) {
-    for (size_t sq = 0; sq < kNumSquares; ++sq) {
-      uint64_t next = actual ^ kZorbristNumbers[cp][sq];
-      if (next == expected) {
-        return {std::string("XOR ") + colored_piece_to_char(cp) + " on " + square_to_string(SafeSquare(sq))};
-      }
-      auto subpath = _zorbrist_debug(next, expected, searchDepth - 1);
-      if (!subpath.empty() && subpath[0] != "No solution found") {
-        std::vector<std::string> r;
-        r.push_back(std::string("XOR ") + colored_piece_to_char(cp) + " on " + square_to_string(SafeSquare(sq)));
-        r.insert(r.end(), subpath.begin(), subpath.end());
-        return r;
-      }
-    }
-  }
-  for (int i = 0; i < 16; ++i) {
-    uint64_t next = actual ^ kZorbristCastling[i];
-    if (next == expected) {
-      return {std::string("XOR castling rights ") + std::to_string(i)};
-    }
-    auto subpath = _zorbrist_debug(next, expected, searchDepth - 1);
-    if (!subpath.empty() && subpath[0] != "No solution found") {
-      std::vector<std::string> r;
-      r.push_back(std::string("XOR castling rights ") + std::to_string(i));
-      r.insert(r.end(), subpath.begin(), subpath.end());
-      return r;
-    }
-  }
-  for (int i = 0; i < 8; ++i) {
-    uint64_t next = actual ^ kZorbristEnpassant[i];
-    if (next == expected) {
-      return {std::string("XOR enpassant file ") + std::to_string(i)};
-    }
-    auto subpath = _zorbrist_debug(next, expected, searchDepth - 1);
-    if (!subpath.empty() && subpath[0] != "No solution found") {
-      std::vector<std::string> r;
-      r.push_back(std::string("XOR enpassant file ") + std::to_string(i));
-      r.insert(r.end(), subpath.begin(), subpath.end());
-      return r;
-    }
-  }
-  return {"No solution found"};
-}
-
-void print_zorbrist_debug(uint64_t actual, uint64_t expected) {
-  auto path = _zorbrist_debug(actual, expected, /*depth=*/ 2);
-  std::cout << "Zorbrist debug from " << actual << " to " << expected << ":\n";
-  for (const auto& step : path) {
-    std::cout << "  " << step << "\n";
-  }
-}
-
 #define DETERMINISTIC 1
 
 void initialize_zorbrist() {
@@ -224,7 +159,7 @@ void Position::place_piece_(ColoredPiece cp, SafeSquare square) {
   tiles_[square] = cp;
   pieceBitboards_[cp] |= loc;
   colorBitboards_[cp2color(cp)] |= loc;
-  currentState_.hash ^= kZorbristNumbers[cp][square];
+  currentState_.update_hash(cp, square);
   this->increment_piece_map(cp, square);
 }
 
@@ -239,7 +174,7 @@ void Position::remove_piece_(SafeSquare square) {
 
   pieceBitboards_[cp] &= antiloc;
   colorBitboards_[cp2color(cp)] &= antiloc;
-  currentState_.hash ^= kZorbristNumbers[cp][square];
+  currentState_.update_hash(cp, square);
   this->decrement_piece_map(cp, square);
 }
 
