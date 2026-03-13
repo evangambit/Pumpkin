@@ -6,7 +6,13 @@
 #include <nlohmann/json.hpp>
 #include <gflags/gflags.h>
 
+#include "game/movegen/movegen.h"
+#include "StringUtils.h"
+
 using json = nlohmann::json;
+
+typedef ChessEngine::Position Position;
+typedef ChessEngine::Move Move;
 
 DEFINE_int32(limit, 0, "Maximum number of positions to convert; 0 for no limit");
 
@@ -14,10 +20,12 @@ DEFINE_int32(limit, 0, "Maximum number of positions to convert; 0 for no limit")
 # https://database.lichess.org/#evals
 wget https://database.lichess.org/lichess_db_eval.jsonl.zst
 
-g++ -std=c++20 -O3 -march=native src/ConvertLichessDbMain.cpp -o convert_lichess -L/opt/homebrew/bin -I/opt/homebrew/include -I/usr/local/include -lzstd -lgflags
+sh build.sh convert_lichess src/ConvertLichessDbMain.cpp -lzstd
 
 ./convert_lichess path/to/lichess_db_eval.jsonl.zst output.txt
 */
+
+
 
 bool process_line(const std::string& line, std::ofstream& out) {
     if (line.empty()) return false;
@@ -27,42 +35,83 @@ bool process_line(const std::string& line, std::ofstream& out) {
         
         std::string fen = j["fen"];
         auto evals = j["evals"];
-        if (evals.empty()) return false;
-        
-        if (evals[0].contains("depth")) {
-            int depth = evals[0]["depth"];
-            if (depth < 12) return false;
+        if (evals.empty()) {
+            return false;
+        }
+
+        const size_t num_evals = evals.size();
+        size_t index = rand() % num_evals;
+        auto eval = evals[index];
+
+        int retry;
+        for (retry = 0; retry < 5; ++retry) {
+            int depth = eval["depth"];
+            int num_pvs = eval["pvs"].size();
+            // We prefer num_pvs > 1 for increased diversity.
+            if (depth >= 12 && num_pvs > 1) {
+                break;
+            }
+            index = rand() % num_evals;
+            eval = evals[index];
         }
         
-        auto pvs = evals[0]["pvs"];
-        if (pvs.empty()) return false;
+        if (retry == 5) {
+            // Failed to find a good eval after 5 tries, skip this position.
+            return false;
+        }
         
-        auto pv = pvs[0];
+        auto pvs = eval["pvs"];        
+        auto pv = pvs[rand() % pvs.size()];
         float score = 0.0f;
         
         if (pv.contains("mate")) {
-            int mate = pv["mate"];
-            // If mate > 0, white is mating. If mate < 0, black is mating.
-            score = (mate > 0) ? 100.0f : -100.0f;
+            return false;
         } else if (pv.contains("cp")) {
             int cp = pv["cp"];
             score = cp / 100.0f;
         } else {
             return false;
         }
+
+        Position pos(fen);
+        std::vector<std::string> line = split(pv["line"], ' ');
+        if (line.size() < 2) {
+            // We want at least 2 moves in the PV for our training data.
+            return false;
+        }
+        Move firstMove = ChessEngine::uci_to_move(pos, line[0]);
+        if (firstMove == ChessEngine::kNullMove) {
+            return false;
+        }
+        ez_make_move(&pos, firstMove);
+        Move secondMove = ChessEngine::uci_to_move(pos, line[1]);
+        if (secondMove == ChessEngine::kNullMove) {
+            return false;
+        }
+        if (pos.tiles_[secondMove.to] != ChessEngine::ColoredPiece::NO_COLORED_PIECE) {
+            // We want to avoid positions where the second move is a capture, since those are more likely to be tactical and less likely to be in our training distribution.
+            return false;
+        }
         
-        char buf[64];
+        char buf[32];
         
-        bool is_black_turn = fen.find(" b ") != std::string::npos;
-        if (is_black_turn) {
+        if (pos.turn_ == ChessEngine::Color::BLACK) {
             score = -score;
         }
 
+        if (pos.fen() == "5rk1/pp1b1ppp/1q2p3/3pP3/1B3Pn1/3B1N2/P3Q1PP/RNr1KR2 b Q - 1 1") {
+            std::cout << fen << "\n";
+            std::cout << line.size() << line[0] << " " << line[1] << std::endl;
+            std::cout << firstMove.uci() << " " << secondMove.uci() << "\n";
+            std::cout << "Debug position found! Score: " << score << std::endl;
+        }
+
         snprintf(buf, sizeof(buf), "%+.2f", score);
-        out << fen << "|" << buf << "\n";
+        out << pos.fen() << "|" << buf << "\n";
         return true;
     } catch (const std::exception& e) {
         // ignore parsing errors and continue
+        out << "Error parsing line: " << e.what() << "\n";
         return false;
     }
 }

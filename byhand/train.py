@@ -16,7 +16,7 @@ CHUNK_SIZE = 128
 assert BATCH_SIZE % CHUNK_SIZE == 0
 
 WEIGHT_STAGES_EQUALLY = False
-LABEL_SCALE = 1.0
+LABEL_SCALE = 1 / 2.0
 
 def save_tensor(tensor: torch.Tensor, name: str, out: io.BufferedWriter):
   tensor = tensor.cpu().detach().numpy()
@@ -87,7 +87,7 @@ if __name__ == "__main__":
     # We may not know the exact length if total_lines is not provided, 
     # but the dataloader len is estimated via wc -l by ByHandDataset.
     steps_per_epoch = len(dataloader)
-    total_steps = min(10_000, NUM_EPOCHS * steps_per_epoch)
+    total_steps = min(20_000, NUM_EPOCHS * steps_per_epoch)
     warmup_steps = total_steps // 20
 
     scheduler = CosineAnnealingWithWarmup(
@@ -170,6 +170,7 @@ if __name__ == "__main__":
     print("\nLearned Weights:")
     weights = model.weight.data.detach().cpu().numpy()
     bias = model.bias.detach().cpu().numpy()
+    scale = 100 / weights[0,0].mean()  # Make endgame pawns == 100
     for i, w in enumerate(weights.T):
-        print(f"Feature {i}: {np.round(w * 100)}")
-    print(f"Bias: {np.round(bias * 100)}")
+        print(f"Feature {i}: {np.round(w * scale)}")
+    print(f"Bias: {np.round(bias * scale)}")
