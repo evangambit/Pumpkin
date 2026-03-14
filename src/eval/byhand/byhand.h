@@ -102,8 +102,13 @@ enum EF {
   // White's promotion square is being fought over, but
   // black's is dominated.
 
-
-
+  NvN,
+  BvN,
+  RvN,
+  BvB_opposite,
+  BvB_same,
+  BvR,
+  RvR,
 
   EF_COUNT
 };
@@ -168,6 +173,13 @@ inline std::string to_string(EF e) {
     case STRAGGLER_PAWN: return "STRAGGLER_PAWN";
     case CANDIDATE_PASSED_PAWN: return "CANDIDATE_PASSED_PAWN";
     case EF_COUNT: return "EF_COUNT";
+    case NvN: return "NvN";
+    case BvN: return "BvN";
+    case RvN: return "RvN";
+    case BvB_opposite: return "BvB_opposite";
+    case BvB_same: return "BvB_same";
+    case BvR: return "BvR";
+    case RvR: return "RvR";
     default: return "UNKNOWN";
   }
 }
@@ -440,6 +452,22 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
   const Bitboard ourCandidatePawnFiles = (filesWithOurPawns & ~filesWithTheirPawns & ourCandidateFiles) & ourRanks[7];
   const Bitboard theirCandidatePawnFiles = (filesWithTheirPawns & ~filesWithOurPawns & theirCandidateFiles) & theirRanks[7];
   out[EF::CANDIDATE_PASSED_PAWN] = std::popcount(ourCandidatePawnFiles) - std::popcount(theirCandidatePawnFiles);
+
+  const bool weHaveOnePiece = std::popcount(ourPieces & ~ourKings) == 1;
+  const bool theyHaveOnePiece = std::popcount(theirPieces & ~theirKings) == 1;
+  const bool weOnlyHaveOneKnight = weHaveOnePiece && (ourKnights | ourKings) == ourPieces;
+  const bool theyOnlyHaveOneKnight = theyHaveOnePiece && (theirKnights | theirKings) == theirPieces;
+  const bool weOnlyHaveOneBishop = weHaveOnePiece && (ourBishops | ourKings) == ourPieces;
+  const bool theyOnlyHaveOneBishop = theyHaveOnePiece && (theirBishops | theirKings) == theirPieces;
+  const bool weOnlyHaveOneRook = weHaveOnePiece && (ourRooks | ourKings) == ourPieces;
+  const bool theyOnlyHaveOneRook = theyHaveOnePiece && (theirRooks | theirKings) == theirPieces;
+  out[EF::NvN] = weOnlyHaveOneKnight && theyOnlyHaveOneKnight;
+  out[EF::BvN] = (weOnlyHaveOneBishop && theyOnlyHaveOneKnight) - (weOnlyHaveOneKnight && theyOnlyHaveOneBishop);
+  out[EF::RvN] = (weOnlyHaveOneRook && theyOnlyHaveOneKnight) - (weOnlyHaveOneKnight && theyOnlyHaveOneRook);
+  out[EF::BvB_opposite] = (weOnlyHaveOneBishop && theyOnlyHaveOneBishop) && ((ourBishops & kWhiteSquares) != (theirBishops & kWhiteSquares));
+  out[EF::BvB_same] = (weOnlyHaveOneBishop && theyOnlyHaveOneBishop) && ((ourBishops & kWhiteSquares) == (theirBishops & kWhiteSquares));
+  out[EF::BvR] = (weOnlyHaveOneBishop && theyOnlyHaveOneRook) - (weOnlyHaveOneRook && theyOnlyHaveOneBishop);
+  out[EF::RvR] = (weOnlyHaveOneRook && theyOnlyHaveOneRook);
 }
 
 struct ByHandEvaluator : public EvaluatorInterface {
