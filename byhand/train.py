@@ -63,7 +63,7 @@ if __name__ == "__main__":
     device = torch.device('mps' if torch.backends.mps.is_available() else 'cuda' if torch.cuda.is_available() else 'cpu')
 
     print("Loading dataset...")
-    dataset = ndata.ByHandDataset(['../data/pos.10m.txt'])
+    dataset = ndata.ByHandDataset(['../data/pos.20m.txt'])
     
     print(f'Dataset chunk size: {CHUNK_SIZE}. Total length calculated dynamically.')
 
