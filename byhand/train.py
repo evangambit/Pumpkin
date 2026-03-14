@@ -63,7 +63,7 @@ if __name__ == "__main__":
     device = torch.device('mps' if torch.backends.mps.is_available() else 'cuda' if torch.cuda.is_available() else 'cpu')
 
     print("Loading dataset...")
-    dataset = ndata.ByHandDataset(['../data/pos.shuf.txt'])
+    dataset = ndata.ByHandDataset(['../data/pos.10m.txt'])
     
     print(f'Dataset chunk size: {CHUNK_SIZE}. Total length calculated dynamically.')
 
@@ -87,7 +87,7 @@ if __name__ == "__main__":
     # We may not know the exact length if total_lines is not provided, 
     # but the dataloader len is estimated via wc -l by ByHandDataset.
     steps_per_epoch = len(dataloader)
-    total_steps = min(20_000, NUM_EPOCHS * steps_per_epoch)
+    total_steps = NUM_EPOCHS * steps_per_epoch
     warmup_steps = total_steps // 20
 
     scheduler = CosineAnnealingWithWarmup(
@@ -173,3 +173,20 @@ if __name__ == "__main__":
     for i, w in enumerate(weights.T):
         print(f"Feature {i}: {np.round(w * scale)}")
     print(f"Bias: {np.round(bias * scale)}")
+
+    dataset = ndata.ByHandDataset(['../data/pos.10m-test.txt'])
+    dataloader = tdata.DataLoader(dataset, batch_size=BATCH_SIZE//CHUNK_SIZE, shuffle=False, num_workers=0, pin_memory=True, drop_last=True, collate_fn=collate_fn)
+    for batch in dataloader:
+        values, labels, turns = [x.to(device) for x in batch]
+        values = values.to(torch.float32)
+        output = model(values.float())
+        output = output[:,0] * (1.0 - earliness) + output[:,1] * earliness
+        output_sig = torch.sigmoid(output)
+        label_sig = torch.sigmoid(labels * LABEL_SCALE)
+        print("Output:", output_sig[:10].cpu().detach().numpy())
+        print("Labels:", label_sig[:10].cpu().detach().numpy())
+        error = torch.abs(output_sig - label_sig).detach().cpu().numpy()
+        I = np.argsort(-error)
+        for i in I[:10]:
+            print(f"Output: {output_sig[i].item():.4f} | Label: {label_sig[i].item():.4f} | Line: {i + 1}")
+        break

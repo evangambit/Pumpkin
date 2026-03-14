@@ -87,6 +87,24 @@ enum EF {
   LONELY_KING_DIST_TO_CORNER,
   LONELY_KING_DIST_TO_KING,
 
+  // Pawn that cannot be defended by another pawn, and
+  // whose advancement is prevented by an enemy pawn.
+  BACKWARD_PAWN,
+
+  // Backward pawn on a file where the opponent has no pawn.
+  STRAGGLER_PAWN,
+
+  // A pawn that can become a passed pawn with the help
+  // of its neighbors.
+  CANDIDATE_PASSED_PAWN,
+
+  // 8/5pk1/7p/2q5/5p2/5Q2/5KP1/8 w - - 16 89
+  // White's promotion square is being fought over, but
+  // black's is dominated.
+
+
+
+
   EF_COUNT
 };
 
@@ -146,6 +164,9 @@ inline std::string to_string(EF e) {
     case LONELY_KING_DIST_TO_EDGE: return "LONELY_KING_DIST_TO_EDGE";
     case LONELY_KING_DIST_TO_CORNER: return "LONELY_KING_DIST_TO_CORNER";
     case LONELY_KING_DIST_TO_KING: return "LONELY_KING_DIST_TO_KING";
+    case BACKWARD_PAWN: return "BACKWARD_PAWN";
+    case STRAGGLER_PAWN: return "STRAGGLER_PAWN";
+    case CANDIDATE_PASSED_PAWN: return "CANDIDATE_PASSED_PAWN";
     case EF_COUNT: return "EF_COUNT";
     default: return "UNKNOWN";
   }
@@ -380,6 +401,45 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
   // Stay away from enemy king if you only have a king. This (e.g.) helps us checkmate with 2 bishops.
   const int kingDistance = king_dist(ourKingSq, theirKingSq);
   out[EF::LONELY_KING_DIST_TO_KING] = kingDistance * weOnlyHavePawns * !theyOnlyHavePawns - kingDistance * theyOnlyHavePawns * !weOnlyHavePawns;
+
+  const Bitboard ourPawnTargetsFixed = US == Color::WHITE ? threats.whitePawnTargets : threats.blackPawnTargets;
+  const Bitboard theirPawnTargetsFixed = US == Color::WHITE ? threats.blackPawnTargets : threats.whitePawnTargets;
+  const Bitboard aheadOfOurPawns = US == Color::WHITE ? northFill(ourPawns) : southFill(ourPawns);
+  const Bitboard aheadOfTheirPawns = US == Color::WHITE ? southFill(theirPawns) : northFill(theirPawns);
+
+  const Bitboard eventuallyAttackedByOurPawns1 = shift<EAST>(aheadOfOurPawns);
+  const Bitboard eventuallyAttackedByOurPawns2 = shift<WEST>(aheadOfOurPawns);
+  const Bitboard eventuallyAttackedByOurPawns = eventuallyAttackedByOurPawns1 | eventuallyAttackedByOurPawns2;
+
+  const Bitboard eventuallyAttackedByTheirPawns1 = shift<EAST>(aheadOfTheirPawns);
+  const Bitboard eventuallyAttackedByTheirPawns2 = shift<WEST>(aheadOfTheirPawns);
+  const Bitboard eventuallyAttackedByTheirPawns = eventuallyAttackedByTheirPawns1 | eventuallyAttackedByTheirPawns2;
+
+  const Bitboard filesWithOurPawns = US == Color::WHITE ? southFill(aheadOfOurPawns) : northFill(aheadOfOurPawns);
+  const Bitboard filesWithTheirPawns = US == Color::WHITE ? northFill(aheadOfTheirPawns) : southFill(aheadOfTheirPawns);
+
+  // Backward pawn: a pawn that cannot be defended by another pawn, and whose advancement
+  // is prevented by an enemy pawn.
+  const Bitboard ourBackwardPawns = ourPawns & shift<BACKWARD>(theirPawnTargetsFixed) & ~eventuallyAttackedByOurPawns;
+  const Bitboard theirBackwardPawns = theirPawns & shift<FORWARD>(ourPawnTargetsFixed) & ~eventuallyAttackedByTheirPawns;
+  out[EF::BACKWARD_PAWN] = std::popcount(ourBackwardPawns) - std::popcount(theirBackwardPawns);
+
+  // Straggler pawn: a backward pawn on a file where the opponent has no pawn.
+  const Bitboard ourStragglers = ourBackwardPawns & ~(filesWithTheirPawns);
+  const Bitboard theirStragglers = theirBackwardPawns & ~(filesWithOurPawns);
+  out[EF::STRAGGLER_PAWN] = std::popcount(ourStragglers) - std::popcount(theirStragglers);
+
+  // A pawn that can become a passed pawn with the help
+  // of its neighbors.
+  // First we determine which files we have with at least as many neighboring pawns as the opponent.
+  const Bitboard ourCandidateFiles = (eventuallyAttackedByOurPawns & ~eventuallyAttackedByTheirPawns) | (eventuallyAttackedByOurPawns1 & eventuallyAttackedByOurPawns2) | (~fatten(aheadOfTheirPawns));
+  const Bitboard theirCandidateFiles = (eventuallyAttackedByTheirPawns & ~eventuallyAttackedByOurPawns) | (eventuallyAttackedByTheirPawns1 & eventuallyAttackedByTheirPawns2) | (~fatten(aheadOfOurPawns));
+  // Then we check if we have any pawns on those files that can advance (i.e. are not blocked by an enemy pawn).
+  // We mask everything to the last rank since "ourCandidateFiles" is guaranteed to extend to there, but
+  // not any other rank.
+  const Bitboard ourCandidatePawnFiles = (filesWithOurPawns & ~filesWithTheirPawns & ourCandidateFiles) & ourRanks[7];
+  const Bitboard theirCandidatePawnFiles = (filesWithTheirPawns & ~filesWithOurPawns & theirCandidateFiles) & theirRanks[7];
+  out[EF::CANDIDATE_PASSED_PAWN] = std::popcount(ourCandidatePawnFiles) - std::popcount(theirCandidatePawnFiles);
 }
 
 struct ByHandEvaluator : public EvaluatorInterface {
