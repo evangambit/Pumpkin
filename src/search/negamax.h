@@ -666,6 +666,9 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     2000 // KING
   };
 
+  const SafeSquare theirKingSq = lsb_i_promise_board_is_not_empty(thread->position_.pieceBitboards_[coloredPiece<opposite_color<TURN>(), Piece::KING>()]);
+  CheckMap checkMap = compute_potential_attackers<TURN>(thread->position_, theirKingSq);
+
   for (ExtMove* move = moves; move < end; ++move) {
     if (move->move == entry.bestMove) {
       move->score = kMaxEval;
@@ -675,6 +678,9 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
 
     // Prioritize captures after the TT move.
     move->score += move->capture != ColoredPiece::NO_COLORED_PIECE ? 8000 : -8000;
+
+    // Bonus for moves that give check.
+    move->score += checkMap.data[move->piece] & bb(move->move.to) ? 100 : 0;
 
     // Ranking within captures. Bonus for capturing a high value piece, penalty for
     // taking a piece that is defended.
