@@ -667,7 +667,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   };
 
   const SafeSquare theirKingSq = lsb_i_promise_board_is_not_empty(thread->position_.pieceBitboards_[coloredPiece<opposite_color<TURN>(), Piece::KING>()]);
-  CheckMap checkMap = compute_potential_attackers<TURN>(thread->position_, theirKingSq);
+  const CheckMap checkMap = compute_potential_attackers<TURN>(thread->position_, theirKingSq);
 
   for (ExtMove* move = moves; move < end; ++move) {
     if (move->move == entry.bestMove) {
