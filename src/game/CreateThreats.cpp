@@ -92,7 +92,7 @@ void create_threats(const TypeSafeArray<Bitboard, kNumColoredPieces, ColoredPiec
   out->whiteRookTargets = ourRooks1_moves | ourRooks2_moves;
   out->blackRookTargets = theirRooks1_moves | theirRooks2_moves;
   out->whiteQueenTargets = whiteQueenTargets;
-  out->blackQueenTargets = whiteQueenTargets;
+  out->blackQueenTargets = blackQueenTargets;
   out->whiteKingTargets = whiteKingTargets;
   out->blackKingTargets = blackKingTargets;
 
