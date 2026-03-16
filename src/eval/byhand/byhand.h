@@ -110,6 +110,11 @@ enum EF {
   BvR,
   RvR,
 
+  PAWN_FORKS,
+  PAWN_FORK_THREATS,
+  KNIGHT_FORKS,
+  KNIGHT_FORK_THREATS,
+
   EF_COUNT
 };
 
@@ -180,6 +185,10 @@ inline std::string to_string(EF e) {
     case BvB_same: return "BvB_same";
     case BvR: return "BvR";
     case RvR: return "RvR";
+    case PAWN_FORKS: return "PAWN_FORKS";
+    case PAWN_FORK_THREATS: return "PAWN_FORK_THREATS";
+    case KNIGHT_FORKS: return "KNIGHT_FORKS";
+    case KNIGHT_FORK_THREATS: return "KNIGHT_FORK_THREATS";
     default: return "UNKNOWN";
   }
 }
@@ -245,8 +254,11 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
   const Bitboard theirHeavies = theirRoyalty | theirRooks;
   const Bitboard ourMinors = ourKnights | ourBishops;
   const Bitboard theirMinors = theirKnights | theirBishops;
-  const Bitboard ourPieces = ourMinors | ourHeavies;
+  const Bitboard ourPieces = ourMinors | ourHeavies;  // Exclude pawns.
   const Bitboard theirPieces = theirMinors | theirHeavies;
+  const Bitboard ourMen = pos.colorBitboards_[US];
+  const Bitboard theirMen = pos.colorBitboards_[THEM];
+  const Bitboard everyone = ourMen | theirMen;
 
   const Bitboard ourTargets = US == Color::WHITE ? threats.whiteTargets : threats.blackTargets;
   const Bitboard theirTargets = US == Color::WHITE ? threats.blackTargets : threats.whiteTargets;
@@ -468,6 +480,32 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
   out[EF::BvB_same] = (weOnlyHaveOneBishop && theyOnlyHaveOneBishop) && ((ourBishops & kWhiteSquares) == (theirBishops & kWhiteSquares));
   out[EF::BvR] = (weOnlyHaveOneBishop && theyOnlyHaveOneRook) - (weOnlyHaveOneRook && theyOnlyHaveOneBishop);
   out[EF::RvR] = (weOnlyHaveOneRook && theyOnlyHaveOneRook);
+
+  // Note: this "overcounts" true forks, since two different pawns can attack two different pieces, but this is probably a good thing.
+  out[EF::PAWN_FORKS] = (std::popcount(ourPawnTargets & theirPieces) >= 2) - (std::popcount(theirPawnTargets & ourPieces) >= 2);
+
+  // Squares our pawns can safely move to, that attack 2+ enemy pieces.
+  const Bitboard ourPawnForkThreats = shift<BACKWARD_EAST>(theirPieces) & shift<BACKWARD_WEST>(theirPieces) & ~threats.badFor<coloredPiece<US>(Piece::PAWN)>() & shift<FORWARD>(ourPawns) & ~everyone;
+  const Bitboard theirPawnForkThreats = shift<FORWARD_EAST>(ourPieces) & shift<FORWARD_WEST>(ourPieces) & ~threats.badFor<coloredPiece<THEM>(Piece::PAWN)>() & shift<BACKWARD>(theirPawns) & ~everyone;
+  out[EF::PAWN_FORK_THREATS] = std::popcount(ourPawnForkThreats) - std::popcount(theirPawnForkThreats);
+
+  // Overcounts true knight forks, similar to EF::PAWN_FORKS.
+  out[EF::KNIGHT_FORKS] = (std::popcount(ourKnightTargets & theirPieces) >= 2) - (std::popcount(theirKnightTargets & ourPieces) >= 2);
+
+  // Squares our knights can move to, that attack rooks or royalty.
+  const Bitboard ourForkTargets = at_least_two(
+    kKnightMoves[to_unsafe_square(theirKingSq)],
+    kKnightMoves[lsb_or_none(theirQueens)],
+    kKnightMoves[lsb_or_none(theirRooks)],
+    kKnightMoves[lsb_or_none(theirRooks & (theirRooks - 1))]
+  ) & ~threats.badFor<coloredPiece<US>(Piece::KNIGHT)>() & ~ourMen;
+  const Bitboard theirForkTargets = at_least_two(
+    kKnightMoves[to_unsafe_square(ourKingSq)],
+    kKnightMoves[lsb_or_none(ourQueens)],
+    kKnightMoves[lsb_or_none(ourRooks)],
+    kKnightMoves[lsb_or_none(ourRooks & (ourRooks - 1))]
+  ) & ~threats.badFor<coloredPiece<US>(Piece::KNIGHT)>() & ~ourMen;
+  out[EF::KNIGHT_FORK_THREATS] = std::popcount(ourKnightTargets & ourForkTargets) - std::popcount(theirKnightTargets & theirForkTargets);
 }
 
 struct ByHandEvaluator : public EvaluatorInterface {
