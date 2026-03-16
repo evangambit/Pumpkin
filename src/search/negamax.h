@@ -476,10 +476,14 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
 
   frame->hash = key;
   constexpr ColoredPiece moverKing = coloredPiece<TURN, Piece::KING>();
-  frame->inCheck = can_enemy_attack<TURN>(
-    thread->position_,
-    lsb_i_promise_board_is_not_empty(thread->position_.pieceBitboards_[moverKing])
-  );
+  if (SEARCH_TYPE == SearchType::ROOT) {
+    // Normally our parent computes frame->inCheck and passes it down to us,
+    // but for the root node we need to compute it ourselves.
+    frame->inCheck = can_enemy_attack<TURN>(
+      thread->position_,
+      lsb_i_promise_board_is_not_empty(thread->position_.pieceBitboards_[moverKing])
+    );
+  }
 
   if (SEARCH_TYPE != SearchType::ROOT && stopThinking->load()) {
     if (IS_PRINT_NODE) {
@@ -769,11 +773,12 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     assert((thread->position_.pieceBitboards_[enemyKing] & bb(move->move.to)) == 0);
     make_move<TURN>(&thread->position_, move->move);
 
-    const bool inCheck = can_enemy_attack<TURN>(
+    // TODO: pass this to child frame.
+    const bool areWeInCheck = can_enemy_attack<TURN>(
       thread->position_,
       lsb_i_promise_board_is_not_empty(thread->position_.pieceBitboards_[moverKing])
     );
-    if (inCheck) {
+    if (areWeInCheck) {
       // Need this check because of en passant captures into check.
       // e.g. b5c6 in position 8/1k6/6R1/KPpr4/8/8/8/8 w - c6 0 62
       if (IS_PRINT_NODE) {
@@ -782,6 +787,11 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
       undo<TURN>(&thread->position_);
       continue;
     }
+    const bool moveGivesCheck = can_enemy_attack<opposite_color<TURN>()>(
+      thread->position_,
+      lsb_i_promise_board_is_not_empty(thread->position_.pieceBitboards_[enemyKing])
+    );
+    (frame + 1)->inCheck = moveGivesCheck;
 
     ColoredEvaluation<TURN> eval;
     int childDepth = depth - 1;
@@ -805,7 +815,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
           && move->capture == ColoredPiece::NO_COLORED_PIECE
           && move->move.moveType != MoveType::PROMOTION
           && numQuietMovesSearched >= 4
-          && !inCheck;
+          && !areWeInCheck;
         lateMoveReduction += numQuietMovesSearched > 10 ? 1 : 0;
         const int reducedChildDepth = std::max(childDepth - lateMoveReduction, 0);
       #else
