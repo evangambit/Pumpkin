@@ -308,16 +308,26 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
 
   out[EF::BISHOP_PAIR] = ((ourBishops & kWhiteSquares) && (ourBishops & kBlackSquares)) - ((theirBishops & kWhiteSquares) && (theirBishops & kBlackSquares));
 
-  const Bitboard ourPawnTargets = US == Color::WHITE ? threats.whitePawnTargets : threats.blackPawnTargets;
-  const Bitboard theirPawnTargets = US == Color::WHITE ? threats.blackPawnTargets : threats.whitePawnTargets;
-  const Bitboard ourKnightTargets = US == Color::WHITE ? threats.whiteKnightTargets : threats.blackKnightTargets;
-  const Bitboard theirKnightTargets = US == Color::WHITE ? threats.blackKnightTargets : threats.whiteKnightTargets;
-  const Bitboard ourBishopTargets = US == Color::WHITE ? threats.whiteBishopTargets : threats.blackBishopTargets;
-  const Bitboard theirBishopTargets = US == Color::WHITE ? threats.blackBishopTargets : threats.whiteBishopTargets;
-  const Bitboard ourRookTargets = US == Color::WHITE ? threats.whiteRookTargets : threats.blackRookTargets;
-  const Bitboard theirRookTargets = US == Color::WHITE ? threats.blackRookTargets : threats.whiteRookTargets;
-  const Bitboard ourQueenTargets = US == Color::WHITE ? threats.whiteQueenTargets : threats.blackQueenTargets;
-  const Bitboard theirQueenTargets = US == Color::WHITE ? threats.blackQueenTargets : threats.whiteQueenTargets;
+  Bitboard ourPawnTargets = US == Color::WHITE ? threats.whitePawnTargets : threats.blackPawnTargets;
+  ourPawnTargets &= ~threats.badForOur<US>(Piece::PAWN);
+  Bitboard theirPawnTargets = US == Color::WHITE ? threats.blackPawnTargets : threats.whitePawnTargets;
+  theirPawnTargets &= ~threats.badForOur<THEM>(Piece::PAWN);
+  Bitboard ourKnightTargets = US == Color::WHITE ? threats.whiteKnightTargets : threats.blackKnightTargets;
+  ourKnightTargets &= ~threats.badForOur<US>(Piece::KNIGHT);
+  Bitboard theirKnightTargets = US == Color::WHITE ? threats.blackKnightTargets : threats.whiteKnightTargets;
+  theirKnightTargets &= ~threats.badForOur<THEM>(Piece::KNIGHT);
+  Bitboard ourBishopTargets = US == Color::WHITE ? threats.whiteBishopTargets : threats.blackBishopTargets;
+  ourBishopTargets &= ~threats.badForOur<US>(Piece::BISHOP);
+  Bitboard theirBishopTargets = US == Color::WHITE ? threats.blackBishopTargets : threats.whiteBishopTargets;
+  theirBishopTargets &= ~threats.badForOur<THEM>(Piece::BISHOP);
+  Bitboard ourRookTargets = US == Color::WHITE ? threats.whiteRookTargets : threats.blackRookTargets;
+  ourRookTargets &= ~threats.badForOur<US>(Piece::ROOK);
+  Bitboard theirRookTargets = US == Color::WHITE ? threats.blackRookTargets : threats.whiteRookTargets;
+  theirRookTargets &= ~threats.badForOur<THEM>(Piece::ROOK);
+  Bitboard ourQueenTargets = US == Color::WHITE ? threats.whiteQueenTargets : threats.blackQueenTargets;
+  ourQueenTargets &= ~threats.badForOur<US>(Piece::QUEEN);
+  Bitboard theirQueenTargets = US == Color::WHITE ? threats.blackQueenTargets : threats.whiteQueenTargets;
+  theirQueenTargets &= ~threats.badForOur<THEM>(Piece::QUEEN);
 
   const Bitboard theirSide = ourRanks[4] | ourRanks[5] | ourRanks[6] | ourRanks[7];
   const Bitboard ourSide = ~theirSide;
@@ -343,8 +353,8 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
   // Pawns that cannot move (forward or diagonally).
   const Bitboard ourBlockadedPawns = shift<BACKWARD>(theirPawns) & ourPawns & ~shift<BACKWARD_EAST>(theirPawns) & ~shift<BACKWARD_WEST>(theirPawns);
   const Bitboard theirBlockadedPawns = shift<FORWARD>(ourPawns) & theirPawns & ~shift<FORWARD_EAST>(ourPawns) & ~shift<FORWARD_WEST>(ourPawns);
-  const Bitboard ourBishopTargetsIgnoringNonBlockades = compute_bishoplike_targets(ourBishops, ourBlockadedPawns);
-  const Bitboard theirBishopTargetsIgnoringNonBlockades = compute_bishoplike_targets(theirBishops, theirBlockadedPawns);
+  const Bitboard ourBishopTargetsIgnoringNonBlockades = compute_bishoplike_targets(ourBishops, ourBlockadedPawns) & ~threats.badForOur<US>(Piece::BISHOP);
+  const Bitboard theirBishopTargetsIgnoringNonBlockades = compute_bishoplike_targets(theirBishops, theirBlockadedPawns) & ~threats.badForOur<THEM>(Piece::BISHOP);
 
   out[EF::NUM_PAWNS_4th_RANK] = std::popcount(ourPawns & ourRanks[3]) - std::popcount(theirPawns & theirRanks[3]);
   out[EF::NUM_PAWNS_5th_RANK] = std::popcount(ourPawns & ourRanks[4]) - std::popcount(theirPawns & theirRanks[4]);
