@@ -115,6 +115,11 @@ enum EF {
   KNIGHT_FORKS,
   KNIGHT_FORK_THREATS,
 
+  TRAPPED_KNIGHT,
+  TRAPPED_BISHOP,
+  TRAPPED_ROOK,
+  TRAPPED_QUEEN,
+
   EF_COUNT
 };
 
@@ -189,6 +194,10 @@ inline std::string to_string(EF e) {
     case PAWN_FORK_THREATS: return "PAWN_FORK_THREATS";
     case KNIGHT_FORKS: return "KNIGHT_FORKS";
     case KNIGHT_FORK_THREATS: return "KNIGHT_FORK_THREATS";
+    case TRAPPED_KNIGHT: return "TRAPPED_KNIGHT";
+    case TRAPPED_BISHOP: return "TRAPPED_BISHOP";
+    case TRAPPED_ROOK: return "TRAPPED_ROOK";
+    case TRAPPED_QUEEN: return "TRAPPED_QUEEN";
     default: return "UNKNOWN";
   }
 }
@@ -516,6 +525,15 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
     kKnightMoves[lsb_or_none(ourRooks & (ourRooks - 1))]
   ) & ~threats.badFor<coloredPiece<US>(Piece::KNIGHT)>() & ~ourMen;
   out[EF::KNIGHT_FORK_THREATS] = std::popcount(ourKnightTargets & ourForkTargets) - std::popcount(theirKnightTargets & theirForkTargets);
+
+  // This implementation is a little hacky:
+  // 1) It doesn't work if you have two bishops and one of them is trapped.
+  // 2) It counts a bishops on the back rank with no safe moves as "trapped",
+  //    since these pices are not typically in danger of being captured.
+  out[EF::TRAPPED_KNIGHT] = (std::popcount(ourKnightTargets) == 0 && ((ourKnights & ourRanks[0]) != 0)) - (std::popcount(theirKnightTargets) == 0 && ((theirKnights & theirRanks[0]) != 0));
+  out[EF::TRAPPED_BISHOP] = (std::popcount(ourBishopTargets) == 0 && ((ourBishops & ourRanks[0]) != 0)) - (std::popcount(theirBishopTargets) == 0 && ((theirBishops & theirRanks[0]) != 0));
+  out[EF::TRAPPED_ROOK] = (std::popcount(ourRookTargets) == 0 && ((ourRooks & ourRanks[0]) != 0)) - (std::popcount(theirRookTargets) == 0 && ((theirRooks & theirRanks[0]) != 0));
+  out[EF::TRAPPED_QUEEN] = (std::popcount(ourQueenTargets) == 0 && ((ourQueens & ourRanks[0]) != 0)) - (std::popcount(theirQueenTargets) == 0 && ((theirQueens & theirRanks[0]) != 0));
 }
 
 struct ByHandEvaluator : public EvaluatorInterface {
