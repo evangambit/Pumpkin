@@ -249,7 +249,8 @@ def play_game(e1, e2, tc, opening_fen=chess.STARTING_FEN):
     return 0.0
 
   pair_score = (_score(result1, True) + _score(result2, False)) / 2.0
-  return [(result1, pgn1), (result2, pgn2)], pair_score
+  # e1_was_white: True for game 1, False for game 2
+  return [(result1, pgn1, True), (result2, pgn2, False)], pair_score
 
 
 def play_pair_worker(engine1_path, engine2_path, options1, options2, tc, fen):
@@ -308,12 +309,14 @@ def main():
   parser.add_argument("--tc", default="nodes=10000",
             help="Time control: nodes=N, depth=N, movetime=N (ms), or S+I (seconds+increment)")
   parser.add_argument("--pgn", default="match.pgn", help="Output PGN file (default: match.pgn)")
-  parser.add_argument("--opening", default="startpos", choices=["startpos", "random"],
-            help="Opening type (default: startpos)")
+  parser.add_argument("--opening", default="startpos",
+            help="Opening type: 'startpos', 'random', or path to an EPD file (default: startpos)")
   parser.add_argument("--concurrency", type=int, default=1,
             help="Number of game pairs to play in parallel (default: 1)")
   parser.add_argument("--alpha", type=float, default=0.01,
             help="Significance level for early stopping (default: 0.01, 0 to disable)")
+  parser.add_argument("--min_num_games", type=int, default=100,
+            help="Minimum number of game pairs before early stopping can occur (default: 5)")
   parser.add_argument("--option1", action="append", default=[],
             help="UCI option for engine1, e.g. 'Hash=64' (repeatable)")
   parser.add_argument("--option2", action="append", default=[],
@@ -335,10 +338,25 @@ def main():
   probe2.quit()
   print(f"  -> {e2_name}")
 
+  # Load opening positions
+  opening_label = args.opening
+  epd_fens = []
+  if args.opening not in ("startpos", "random"):
+    with open(args.opening) as f:
+      for line in f:
+        line = line.strip()
+        if line:
+          epd_fens.append(line)
+    if not epd_fens:
+      print(f"Error: EPD file '{args.opening}' is empty")
+      sys.exit(1)
+    random.shuffle(epd_fens)
+    opening_label = f"{args.opening} ({len(epd_fens)} positions)"
+
   print(f"\nMatch: {e1_name} vs {e2_name}")
-  print(f"Game pairs: {args.games}, TC: {args.tc}, Opening: {args.opening}, Concurrency: {args.concurrency}")
+  print(f"Game pairs: {args.games}, TC: {args.tc}, Opening: {opening_label}, Concurrency: {args.concurrency}")
   if args.alpha > 0:
-    print(f"Early stopping: alpha={args.alpha}")
+    print(f"Early stopping: alpha={args.alpha}, min_num_games={args.min_num_games}")
   print(f"PGN output: {args.pgn}")
   print()
 
@@ -348,8 +366,10 @@ def main():
 
   # Pre-generate openings
   fens = []
-  for _ in range(args.games):
-    if args.opening == "random":
+  for i in range(args.games):
+    if epd_fens:
+      fens.append(epd_fens[i % len(epd_fens)])
+    elif args.opening == "random":
       fens.append(random_opening())
     else:
       fens.append(chess.STARTING_FEN)
@@ -391,14 +411,14 @@ def main():
       completed += 1
       pair_scores.append(pair_score)
 
-      for result, pgn_game in games:
+      for result, pgn_game, e1_was_white in games:
         if result == "1-0":
-          if pgn_game.headers["White"] == e1_name:
+          if e1_was_white:
             wins += 1
           else:
             losses += 1
         elif result == "0-1":
-          if pgn_game.headers["Black"] == e1_name:
+          if not e1_was_white:
             wins += 1
           else:
             losses += 1
@@ -409,11 +429,11 @@ def main():
 
       r1, r2 = games[0][0], games[1][0]
       p_value, avg, stderr = significance_test(pair_scores)
-      sig_str = f"  p={p_value:.3f}" if len(pair_scores) >= 5 else ""
+      sig_str = f"  p={p_value:.3f}" if len(pair_scores) >= args.min_num_games else ""
       print(f"  Pair {pair_num}: {e1_name} as W: {r1}, as B: {r2}  pair={pair_score:+.2f}  [{completed}/{args.games}]  [+{wins}-{losses}={draws}]{sig_str}")
 
       # Early stopping check
-      if args.alpha > 0 and len(pair_scores) >= 5 and p_value < args.alpha:
+      if args.alpha > 0 and len(pair_scores) >= args.min_num_games and p_value < args.alpha:
         print(f"\n  *** Stopping early: p={p_value:.4f} < alpha={args.alpha} after {completed} pairs ***")
         stopped_early = True
         # Cancel remaining futures
@@ -442,6 +462,13 @@ def main():
       print(f"  Elo: {elo_lo:.1f} to {elo_hi:.1f}")
     except (ValueError, ZeroDivisionError):
       pass
+    p_value, _, _ = significance_test(pair_scores)
+    if avg > 0:
+      print(f"  {e1_name} is stronger (p={p_value:.4f})")
+    elif avg < 0:
+      print(f"  {e2_name} is stronger (p={p_value:.4f})")
+    else:
+      print(f"  No difference detected (p={p_value:.4f})")
 
 
 if __name__ == "__main__":
