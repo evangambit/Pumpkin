@@ -303,6 +303,7 @@ inline uint8_t kSlideLookup[2048] = {
 inline uint8_t kPinLookup[8*256*256];
 
 inline uint8_t pin_lookup(size_t index) {
+  assert(index < 8*256*256);
   return kPinLookup[index];
 }
 
@@ -387,7 +388,7 @@ inline void initialize_sliding() {
 inline uint8_t sliding_pinmask(uint8_t loc, uint8_t occ, uint8_t pinners) {
   assert(std::popcount(loc) == 1);
   const size_t index = 65536*lsb_i_promise_board_is_not_empty(loc)+256*occ+pinners;
-  return kPinLookup[index];
+  return pin_lookup(index);
 }
 
 }  // namespace ChessEngine
