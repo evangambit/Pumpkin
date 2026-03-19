@@ -214,7 +214,7 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
   }
 
   // Prevent stack overflow - return static eval if we've gone too deep
-  if (quiescenceDepth >= kMaxQuiescenceDepth || plyFromRoot >= kMaxPlyFromRoot - 1) {
+  if (quiescenceDepth >= kMaxQuiescenceDepth || (frame - thread->frames_) >= kMaxPlyFromRoot - 1) {
     if (IS_PRINT_QNODE) {
       std::cout << repeat("  ", plyFromRoot) << "Max quiescence depth or ply limit reached, returning static evaluation." << std::endl;
     }
@@ -459,7 +459,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     return NegamaxResult<TURN>(kNullMove, beta);
   }
 
-  if (plyFromRoot >= kMaxPlyFromRoot - 1) {
+  if (frame - thread->frames_ >= kMaxPlyFromRoot - 1) {
     return qsearch<TURN>(thread, alpha, beta, plyFromRoot, kMaxQuiescenceDepth, frame, stopThinking);
   }
 
@@ -834,7 +834,8 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
       // Simple, full-window, full-depth search. Used for the first move in non-root search.
       // In the root node, we use this when multiPV==1, since we don't care about the exact
       // evaluation of moves that aren't the best move.
-      eval = to_parent_eval(negamax<opposite_color<TURN>(), SearchType::NORMAL_SEARCH>(thread, childDepth, to_child_eval(beta), to_child_eval(alpha), plyFromRoot + 1, frame + 1, stopThinking).evaluation);
+      constexpr SearchType firstMoveSearchType = SEARCH_TYPE == SearchType::ROOT ? SearchType::NORMAL_SEARCH : SEARCH_TYPE;
+      eval = to_parent_eval(negamax<opposite_color<TURN>(), firstMoveSearchType>(thread, childDepth, to_child_eval(beta), to_child_eval(alpha), plyFromRoot + 1, frame + 1, stopThinking).evaluation);
     }
 
     if (IS_PRINT_NODE) {
