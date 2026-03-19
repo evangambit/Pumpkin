@@ -34,15 +34,16 @@ struct ColoredEvaluation {
   bool operator!=(const ColoredEvaluation<TURN>& other) const {
     return value != other.value;
   }
-  ColoredEvaluation<TURN> operator+(Evaluation other) const {
-    return ColoredEvaluation<TURN>(std::clamp<int32_t>(int32_t(value) + other, kMinEval, kMaxEval));
+  bool is_mating() const {
+    return value <= kLongestForcedMate || value >= -kLongestForcedMate;
   }
-  ColoredEvaluation<TURN> operator-(Evaluation other) const {
-    return ColoredEvaluation<TURN>(std::clamp<int32_t>(int32_t(value) - other, kMinEval, kMaxEval));
+  ColoredEvaluation<TURN> operator+(int32_t delta) const {
+    delta *= !is_mating();  // Centipawn deltas are meaningless if we're mating or being mated.
+    return ColoredEvaluation<TURN>(std::clamp<int32_t>(int32_t(value) + delta, kMinEval, kMaxEval));
   }
-  ColoredEvaluation<TURN>& operator+=(const ColoredEvaluation<TURN>& other) {
-    value = std::clamp<int32_t>(int32_t(value) + other.value, kMinEval, kMaxEval);
-    return *this;
+  ColoredEvaluation<TURN> operator-(int32_t delta) const {
+    delta *= !is_mating();  // // Centipawn deltas are meaningless if we're mating or being mated.
+    return ColoredEvaluation<TURN>(std::clamp<int32_t>(int32_t(value) - delta, kMinEval, kMaxEval));
   }
   ColoredEvaluation<TURN>& clamp_(const ColoredEvaluation<TURN>& alpha, const ColoredEvaluation<TURN>& beta) {
     value = std::max(alpha.value, std::min(value, beta.value));
