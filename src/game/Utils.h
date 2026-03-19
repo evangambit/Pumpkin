@@ -11,7 +11,7 @@
 
 namespace ChessEngine {
 
-constexpr unsigned kMaxSearchDepth = 32;
+constexpr unsigned kMaxSearchDepth = 48;
 constexpr unsigned kMaxPlyFromRoot = 128;
 constexpr int kMaxQuiescenceDepth = 16;
 

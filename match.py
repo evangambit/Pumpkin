@@ -436,7 +436,7 @@ def main():
 
       r1, r2 = games[0][0], games[1][0]
       p_value, avg, stderr = significance_test(pair_scores)
-      print(f"  Pair {pair_num}: {e1_name} as W: {r1}, as B: {r2}  pair={pair_score:+.2f}  [{completed}/{args.games}]  [+{wins}-{losses}={draws}]    p={p_value:.3f}")
+      print(f"  Pair {pair_num}: {e1_name} as W: {r1}, as B: {r2}  pair={pair_score:+.2f}  [{completed}/{args.games}]  [+{wins}-{losses}={draws}]    p={p_value:.3f}  [{avg - stderr * 1.96:.4f}, {avg + stderr * 1.96:.4f}]")
 
       # Early stopping check
       if args.alpha > 0 and len(pair_scores) >= args.min_num_games and p_value < args.alpha:

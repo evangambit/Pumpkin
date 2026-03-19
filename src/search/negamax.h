@@ -814,9 +814,9 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
           && childDepth >= 3
           && move->capture == ColoredPiece::NO_COLORED_PIECE
           && move->move.moveType != MoveType::PROMOTION
-          && numQuietMovesSearched >= 4
+          && numQuietMovesSearched >= 3
           && !areWeInCheck;
-        lateMoveReduction += numQuietMovesSearched > 10 ? 1 : 0;
+        lateMoveReduction += numQuietMovesSearched > 8 ? 1 : 0;
         const int reducedChildDepth = std::max(childDepth - lateMoveReduction, 0);
       #else
         const int reducedChildDepth = childDepth;
