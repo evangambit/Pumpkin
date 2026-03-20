@@ -98,6 +98,7 @@ struct Thread {
   Frame buffer[4];  // Empty buffer so that frames_[plyFromRoot - 4] is valid.
   Frame frames_[kMaxPlyFromRoot];
   int32_t quietHistory_[Piece::NUM_PIECES][64];
+  int32_t captureHistory_[Piece::NUM_PIECES][Piece::NUM_PIECES][64];
 
   // This pointer should be considered non-owning. The TranspositionTable should created and
   // managed elsewhere since it should be shared across threads and searches.
@@ -113,6 +114,7 @@ struct Thread {
     std::memset(buffer, 0, sizeof(buffer));
     std::memset(frames_, 0, sizeof(frames_));
     std::memset(quietHistory_, 0, sizeof(quietHistory_));
+    std::memset(captureHistory_, 0, sizeof(captureHistory_));
   }
   
   Thread(const Thread& other)
@@ -130,6 +132,7 @@ struct Thread {
       std::memcpy(buffer, other.buffer, sizeof(buffer));
       std::memcpy(frames_, other.frames_, sizeof(frames_));
       std::memcpy(quietHistory_, other.quietHistory_, sizeof(quietHistory_));
+      std::memcpy(captureHistory_, other.captureHistory_, sizeof(captureHistory_));
     }
 
   // TODO: when we add multi-threading, we should share stopSearchFlag across threads.
@@ -700,6 +703,8 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
 
     if (move->capture == ColoredPiece::NO_COLORED_PIECE) {
       move->score += thread->quietHistory_[move->piece][move->move.to] / 64;
+    } else {
+      move->score += thread->captureHistory_[move->piece][cp2p(thread->position_.tiles_[move->move.to])][move->move.to] / 64;
     }
 
     // Penalize non-capture moves that move to a defended square.
@@ -767,7 +772,6 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   // bestResult.evaluation is the value we will return. When multiPV > 1 and we're in the root,
   // these are typically different values.
   NegamaxResult<TURN> bestResult(kNullMove, ColoredEvaluation<TURN>(kMinEval));
-  uint8_t numQuietMovesSearched = 0;
   for (ExtMove* move = moves; move < end; ++move) {
     constexpr ColoredPiece enemyKing = coloredPiece<opposite_color<TURN>(), Piece::KING>();
     assert((thread->position_.pieceBitboards_[enemyKing] & bb(move->move.to)) == 0);
@@ -808,10 +812,11 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
       std::cout << repeat("  ", plyFromRoot) << "Recursing with childDepth=" << childDepth << " (hash=" << thread->position_.currentState_.hash << "; move=" << move->move.uci() << ")" << std::endl;
     }
 
+    const int index = move - moves;
+
     const bool isQuiet = (
       (move->capture == ColoredPiece::NO_COLORED_PIECE) && (move->move.moveType != MoveType::PROMOTION)
-    ) || (move->capture != ColoredPiece::NO_COLORED_PIECE && move->score < 8000);
-    const int index = move - moves;
+    );
 
     if (move->move != moves[0].move && (SEARCH_TYPE != SearchType::ROOT || thread->multiPV_ == 1)) {
       #ifndef NO_LMR
@@ -853,7 +858,6 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     }
 
     undo<TURN>(&thread->position_);
-    numQuietMovesSearched += isQuiet;
     if (eval > bestResult.evaluation) {
       bestResult.bestMove = move->move;
       bestResult.evaluation = eval;
@@ -888,6 +892,10 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
         if (isQuiet) {
           int32_t bonus = std::min(depth * depth, 400);
           int32_t& hist = thread->quietHistory_[move->piece][move->move.to];
+          hist += bonus - hist * std::abs(bonus) / 16384;
+        } else {
+          int32_t bonus = std::min(depth * depth, 400);
+          int32_t& hist = thread->captureHistory_[move->piece][cp2p(move->capture)][move->move.to];
           hist += bonus - hist * std::abs(bonus) / 16384;
         }
         frame->killers.add(move->move);
