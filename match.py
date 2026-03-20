@@ -24,6 +24,20 @@ import chess
 import chess.pgn
 
 
+_active_processes_lock = threading.Lock()
+_active_processes = set()
+
+
+def _kill_all_engines():
+  """Kill all active engine subprocesses to unblock workers."""
+  with _active_processes_lock:
+    for proc in list(_active_processes):
+      try:
+        proc.kill()
+      except Exception:
+        pass
+
+
 class UCIEngine:
   def __init__(self, path, options=None):
     self.path = path
@@ -35,6 +49,8 @@ class UCIEngine:
       stdout=subprocess.PIPE,
       stderr=subprocess.DEVNULL,
     )
+    with _active_processes_lock:
+      _active_processes.add(self.process)
     self._send("uci")
     self._wait_for("uciok")
     if options:
@@ -45,8 +61,11 @@ class UCIEngine:
     self._wait_for("readyok")
 
   def _send(self, cmd):
-    self.process.stdin.write((cmd + "\n").encode())
-    self.process.stdin.flush()
+    try:
+      self.process.stdin.write((cmd + "\n").encode())
+      self.process.stdin.flush()
+    except (BrokenPipeError, OSError):
+      raise RuntimeError(f"Engine {self.name} crashed (broken pipe)")
 
   def _read_line(self):
     line = self.process.stdout.readline().decode()
@@ -90,6 +109,8 @@ class UCIEngine:
         return best, info_lines
 
   def quit(self):
+    with _active_processes_lock:
+      _active_processes.discard(self.process)
     try:
       self._send("quit")
       self.process.wait(timeout=5)
@@ -157,8 +178,14 @@ def _play_single_game(engine_w, engine_b, tc, opening_fen=chess.STARTING_FEN):
   else:
     game.headers["TimeControl"] = "-"
 
-  engine_w.new_game()
-  engine_b.new_game()
+  try:
+    engine_w.new_game()
+    engine_b.new_game()
+  except RuntimeError as e:
+    print(f"  Engine crash: {e}")
+    game.headers["Result"] = "1/2-1/2"
+    game.headers["Termination"] = "engine crash"
+    return "1/2-1/2", game
 
   wtime_ms = tc.get("time", 0)
   btime_ms = tc.get("time", 0)
@@ -442,7 +469,7 @@ def main():
       if args.alpha > 0 and len(pair_scores) >= args.min_num_games and p_value < args.alpha:
         print(f"\n  *** Stopping early: p={p_value:.4f} < alpha={args.alpha} after {completed} pairs ***")
         stopped_early = True
-        # Cancel remaining futures
+        _kill_all_engines()
         for f in futures:
           f.cancel()
         futures.clear()
@@ -478,4 +505,8 @@ def main():
 
 
 if __name__ == "__main__":
-  main()
+  try:
+    main()
+  except KeyboardInterrupt:
+    _kill_all_engines()
+    print("\n  Interrupted.")
