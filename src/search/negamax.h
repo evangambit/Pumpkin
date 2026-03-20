@@ -808,15 +808,18 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
       std::cout << repeat("  ", plyFromRoot) << "Recursing with childDepth=" << childDepth << " (hash=" << thread->position_.currentState_.hash << "; move=" << move->move.uci() << ")" << std::endl;
     }
 
+    const bool isQuiet = (
+      (move->capture == ColoredPiece::NO_COLORED_PIECE) && (move->move.moveType != MoveType::PROMOTION)
+    ) || (move->capture != ColoredPiece::NO_COLORED_PIECE && move->score < 8000);
+    const int index = move - moves;
+
     if (move->move != moves[0].move && (SEARCH_TYPE != SearchType::ROOT || thread->multiPV_ == 1)) {
       #ifndef NO_LMR
         int lateMoveReduction = SEARCH_TYPE != SearchType::ROOT
           && childDepth >= 3
-          && move->capture == ColoredPiece::NO_COLORED_PIECE
-          && move->move.moveType != MoveType::PROMOTION
-          && numQuietMovesSearched >= 3
+          && index >= 3
           && !areWeInCheck;
-        lateMoveReduction += numQuietMovesSearched > 8 ? 1 : 0;
+        lateMoveReduction += index > 8 ? 1 : 0;
         const int reducedChildDepth = std::max(childDepth - lateMoveReduction, 0);
       #else
         const int reducedChildDepth = childDepth;
@@ -851,7 +854,6 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     }
 
     undo<TURN>(&thread->position_);
-    bool isQuiet = (move->capture == ColoredPiece::NO_COLORED_PIECE) && (move->move.moveType != MoveType::PROMOTION);
     numQuietMovesSearched += isQuiet;
     if (eval > bestResult.evaluation) {
       bestResult.bestMove = move->move;
