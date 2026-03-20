@@ -815,8 +815,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
 
     if (move->move != moves[0].move && (SEARCH_TYPE != SearchType::ROOT || thread->multiPV_ == 1)) {
       #ifndef NO_LMR
-        int lateMoveReduction = SEARCH_TYPE != SearchType::ROOT
-          && childDepth >= 3
+        int lateMoveReduction = childDepth >= 3
           && index >= 3
           && !areWeInCheck;
         lateMoveReduction += index > 8 ? 1 : 0;
