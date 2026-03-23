@@ -562,8 +562,9 @@ def main():
       total_completed = sum(s["completed"] for s in matchup_state.values())
       total_target = n_matchups * args.games
       print(
-        f"  [{engine_names[i]} vs {engine_names[j]}] "
-        f"pair {pair_num}: W:{r1} B:{r2}  ps={pair_score:+.2f}  "
+        # f"  [{engine_names[i]} vs {engine_names[j]}] "
+        f"  [engine {i} vs engine {j}] "
+        f"pair {pair_num:4}: ps={pair_score:+.2f}  "
         f"[{st['completed']}/{args.games}]  +{w}-{l}={d}  p={p_value:.3f}  "
         f"({total_completed}/{total_target} total)"
       )
