@@ -42,10 +42,11 @@ def _kill_all_engines():
 
 
 class UCIEngine:
-  def __init__(self, path, options=None):
+  def __init__(self, path, options=None, timeout=30):
     self.path = path
     self.cmd = shlex.split(path)
     self.name = self.cmd[0]
+    self.timeout = timeout
     self.process = subprocess.Popen(
       self.cmd,
       stdin=subprocess.PIPE,
@@ -71,7 +72,16 @@ class UCIEngine:
       raise RuntimeError(f"Engine {self.name} crashed (broken pipe)")
 
   def _read_line(self):
-    line = self.process.stdout.readline().decode()
+    result = [None]
+    def _reader():
+      result[0] = self.process.stdout.readline()
+    t = threading.Thread(target=_reader, daemon=True)
+    t.start()
+    t.join(timeout=self.timeout)
+    if t.is_alive():
+      self.process.kill()
+      raise RuntimeError(f"Engine {self.name} timed out after {self.timeout}s")
+    line = result[0].decode()
     if line == "":
       raise RuntimeError(f"Engine {self.name} crashed (empty read)")
     return line.strip()
@@ -183,12 +193,26 @@ def _play_single_game(engine_w, engine_b, tc, opening_fen=chess.STARTING_FEN):
 
   try:
     engine_w.new_game()
+  except RuntimeError as e:
+    print(f"  Engine crash during new_game: {e}")
+    try:
+      engine_w.restart()
+    except Exception:
+      pass
+    game.headers["Result"] = "0-1"
+    game.headers["Termination"] = "engine crash"
+    return "0-1", game
+  try:
     engine_b.new_game()
   except RuntimeError as e:
-    print(f"  Engine crash: {e}")
-    game.headers["Result"] = "1/2-1/2"
+    print(f"  Engine crash during new_game: {e}")
+    try:
+      engine_b.restart()
+    except Exception:
+      pass
+    game.headers["Result"] = "1-0"
     game.headers["Termination"] = "engine crash"
-    return "1/2-1/2", game
+    return "1-0", game
 
   wtime_ms = tc.get("time", 0)
   btime_ms = tc.get("time", 0)
@@ -210,7 +234,11 @@ def _play_single_game(engine_w, engine_b, tc, opening_fen=chess.STARTING_FEN):
       best_move, _ = engine.go(fen0, moves_uci, go_params)
     except RuntimeError as e:
       print(f"  Engine crash: {e}")
-      # The crashed engine loses
+      # The crashed engine loses; restart it for the next game
+      try:
+        engine.restart()
+      except Exception:
+        pass
       result = "0-1" if is_white else "1-0"
       game.headers["Result"] = result
       game.headers["Termination"] = "engine crash"
@@ -290,10 +318,10 @@ def play_game(e1, e2, tc, opening_fen=chess.STARTING_FEN):
   return [(result1, pgn1, True), (result2, pgn2, False)], pair_score
 
 
-def play_pair_worker(engine1_path, engine2_path, options1, options2, tc, fen, matchup_key=None):
+def play_pair_worker(engine1_path, engine2_path, options1, options2, tc, fen, matchup_key=None, timeout=30):
   """Worker: spawn engines, play a pair, quit engines."""
-  e1 = UCIEngine(engine1_path, options1)
-  e2 = UCIEngine(engine2_path, options2)
+  e1 = UCIEngine(engine1_path, options1, timeout=timeout)
+  e2 = UCIEngine(engine2_path, options2, timeout=timeout)
   try:
     games, pair_score = play_game(e1, e2, tc, fen)
   finally:
@@ -357,6 +385,8 @@ def main():
             help="Minimum game pairs per matchup before early stopping can occur (default: 100)")
   parser.add_argument("--option", action="append", default=[],
             help="UCI option for engine N: 'N:key=value' (1-indexed, repeatable)")
+  parser.add_argument("--timeout", type=int, default=30,
+            help="Per-move timeout in seconds; engines killed if unresponsive (default: 30)")
   args = parser.parse_args()
 
   if len(args.engine) < 2:
@@ -384,7 +414,7 @@ def main():
   engine_names = []
   for i, path in enumerate(args.engine):
     print(f"Engine {i + 1}: {path}")
-    probe = UCIEngine(path, engine_options[i])
+    probe = UCIEngine(path, engine_options[i], timeout=args.timeout)
     engine_names.append(probe.name)
     probe.quit()
     print(f"  -> {engine_names[-1]}")
@@ -475,7 +505,7 @@ def main():
             play_pair_worker,
             args.engine[i], args.engine[j],
             engine_options[i], engine_options[j],
-            tc, fen, key,
+            tc, fen, key, args.timeout,
           )
           futures[future] = (key, st["next_pair"] + 1)
           st["next_pair"] += 1
