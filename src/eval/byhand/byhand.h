@@ -21,7 +21,7 @@ namespace ChessEngine {
 namespace ByHand {
 
 enum EF {
-  EARLINESS = 0,
+  EARLINESS,
 
   PAWNS,
   KNIGHTS,
@@ -110,8 +110,12 @@ enum EF {
   BvR,
   RvR,
 
+  PAWN_FORKS_Q,
+  PAWN_FORKS_R,
   PAWN_FORKS,
   PAWN_FORK_THREATS,
+  KNIGHT_FORKS_Q,
+  KNIGHT_FORKS_R,
   KNIGHT_FORKS,
   KNIGHT_FORK_THREATS,
 
@@ -190,9 +194,13 @@ inline std::string to_string(EF e) {
     case BvB_same: return "BvB_same";
     case BvR: return "BvR";
     case RvR: return "RvR";
+    case PAWN_FORKS_Q: return "PAWN_FORKS_Q";
+    case PAWN_FORKS_R: return "PAWN_FORKS_R";
     case PAWN_FORKS: return "PAWN_FORKS";
     case PAWN_FORK_THREATS: return "PAWN_FORK_THREATS";
     case KNIGHT_FORKS: return "KNIGHT_FORKS";
+    case KNIGHT_FORKS_Q: return "KNIGHT_FORKS_Q";
+    case KNIGHT_FORKS_R: return "KNIGHT_FORKS_R";
     case KNIGHT_FORK_THREATS: return "KNIGHT_FORK_THREATS";
     case TRAPPED_KNIGHT: return "TRAPPED_KNIGHT";
     case TRAPPED_BISHOP: return "TRAPPED_BISHOP";
@@ -501,6 +509,8 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
   out[EF::RvR] = (weOnlyHaveOneRook && theyOnlyHaveOneRook);
 
   // Note: this "overcounts" true forks, since two different pawns can attack two different pieces, but this is probably a good thing.
+  out[EF::PAWN_FORKS_Q] = (std::popcount(ourPawnTargets & theirRoyalty) >= 2) - (std::popcount(theirPawnTargets & ourRoyalty) >= 2);
+  out[EF::PAWN_FORKS_R] = (std::popcount(ourPawnTargets & theirHeavies) >= 2) - (std::popcount(theirPawnTargets & ourHeavies) >= 2);
   out[EF::PAWN_FORKS] = (std::popcount(ourPawnTargets & theirPieces) >= 2) - (std::popcount(theirPawnTargets & ourPieces) >= 2);
 
   // Squares our pawns can safely move to, that attack 2+ enemy pieces.
@@ -509,6 +519,8 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
   out[EF::PAWN_FORK_THREATS] = std::popcount(ourPawnForkThreats) - std::popcount(theirPawnForkThreats);
 
   // Overcounts true knight forks, similar to EF::PAWN_FORKS.
+  out[EF::KNIGHT_FORKS_Q] = (std::popcount(ourKnightTargets & theirRoyalty) >= 2) - (std::popcount(theirKnightTargets & ourRoyalty) >= 2);
+  out[EF::KNIGHT_FORKS_R] = (std::popcount(ourKnightTargets & theirHeavies) >= 2) - (std::popcount(theirKnightTargets & ourHeavies) >= 2);
   out[EF::KNIGHT_FORKS] = (std::popcount(ourKnightTargets & theirPieces) >= 2) - (std::popcount(theirKnightTargets & ourPieces) >= 2);
 
   // Squares our knights can move to, that attack rooks or royalty.
