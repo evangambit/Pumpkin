@@ -95,4 +95,11 @@ PYBIND11_MODULE(_byhand_dataset, m) {
         .def(pybind11::init<std::vector<std::string>, int>())
         .def("__iter__", [](ChunkedDataset& s) -> ChunkedDataset& { return s; })
         .def("__next__", &ChunkedDataset::next);
+
+    m.def("feature_name", [](int index) -> std::string {
+        if (index < 0 || index >= ByHand::EF_COUNT) {
+            throw pybind11::value_error("Feature index out of range");
+        }
+        return ByHand::to_string(static_cast<ByHand::EF>(index));
+    }, "Returns the name of a feature given its index.");
 }

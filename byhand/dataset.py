@@ -6,7 +6,7 @@ from typing import List
 
 # Ensure the extension is built via setup.py
 try:
-    from _byhand_dataset import ChunkedDataset
+    from _byhand_dataset import ChunkedDataset, feature_name
 except ImportError:
     raise ImportError("C++ extension _byhand_dataset not found. Please run 'python setup.py build_ext --inplace --force' in the byhand directory first.")
 
@@ -16,6 +16,9 @@ class ByHandDataset(IterableDataset):
         self.file_paths = file_paths
         self.chunk_size = chunk_size
         self.total_lines = total_lines
+    
+    def feature_name(self, index: int) -> str:
+        return feature_name(index)
 
     def __len__(self):
         if self.total_lines is None:
