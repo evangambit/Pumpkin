@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
-"""Play two UCI chess engines against each other in a match."""
+"""Round-robin tournament between N UCI chess engines."""
 
 """
 python3 match.py \
---engine1 "./old \"evaluator byhand\"" \
---engine2 "./uci \"evaluator byhand byhand/runs/20260316-172658/model.bin\"" \
---tc movetime=10 --concurrency=4 --games=10000 --opening 6mvs_+90_+99.epd
+  --engine "./old \"evaluator byhand\"" \
+  --engine "./uci \"evaluator byhand byhand/runs/20260316-172658/model.bin\"" \
+  --engine "./uci \"evaluator nnue nnue/runs/.../model.bin\"" \
+  --option 1:Hash=64 --option 2:Threads=2 \
+  --tc movetime=10 --concurrency=4 --games=10000 --opening 6mvs_+90_+99.epd
 """
 
 import argparse
+import itertools
 import math
 import random
 import re
@@ -287,7 +290,7 @@ def play_game(e1, e2, tc, opening_fen=chess.STARTING_FEN):
   return [(result1, pgn1, True), (result2, pgn2, False)], pair_score
 
 
-def play_pair_worker(engine1_path, engine2_path, options1, options2, tc, fen):
+def play_pair_worker(engine1_path, engine2_path, options1, options2, tc, fen, matchup_key=None):
   """Worker: spawn engines, play a pair, quit engines."""
   e1 = UCIEngine(engine1_path, options1)
   e2 = UCIEngine(engine2_path, options2)
@@ -296,7 +299,7 @@ def play_pair_worker(engine1_path, engine2_path, options1, options2, tc, fen):
   finally:
     e1.quit()
     e2.quit()
-  return games, pair_score
+  return games, pair_score, matchup_key
 
 
 def elo_diff(wins, draws, losses):
@@ -336,10 +339,11 @@ def significance_test(pair_scores):
 
 
 def main():
-  parser = argparse.ArgumentParser(description="Play two UCI engines against each other")
-  parser.add_argument("--engine1", required=True, help="Path to first engine")
-  parser.add_argument("--engine2", required=True, help="Path to second engine")
-  parser.add_argument("--games", type=int, default=10, help="Number of game pairs (default: 10, so 20 games total)")
+  parser = argparse.ArgumentParser(description="Round-robin tournament between N UCI chess engines")
+  parser.add_argument("--engine", action="append", default=[],
+            help="Engine command (repeatable, at least 2 required)")
+  parser.add_argument("--games", type=int, default=10,
+            help="Number of game pairs per matchup (default: 10, so 20 games per pair)")
   parser.add_argument("--tc", default="nodes=10000",
             help="Time control: nodes=N, depth=N, movetime=N (ms), or S+I (seconds+increment)")
   parser.add_argument("--pgn", default="match.pgn", help="Output PGN file (default: match.pgn)")
@@ -348,29 +352,53 @@ def main():
   parser.add_argument("--concurrency", type=int, default=1,
             help="Number of game pairs to play in parallel (default: 1)")
   parser.add_argument("--alpha", type=float, default=0.01,
-            help="Significance level for early stopping (default: 0.01, 0 to disable)")
+            help="Significance level for per-matchup early stopping (default: 0.01, 0 to disable)")
   parser.add_argument("--min_num_games", type=int, default=100,
-            help="Minimum number of game pairs before early stopping can occur (default: 5)")
-  parser.add_argument("--option1", action="append", default=[],
-            help="UCI option for engine1, e.g. 'Hash=64' (repeatable)")
-  parser.add_argument("--option2", action="append", default=[],
-            help="UCI option for engine2, e.g. 'Hash=64' (repeatable)")
+            help="Minimum game pairs per matchup before early stopping can occur (default: 100)")
+  parser.add_argument("--option", action="append", default=[],
+            help="UCI option for engine N: 'N:key=value' (1-indexed, repeatable)")
   args = parser.parse_args()
+
+  if len(args.engine) < 2:
+    parser.error("at least 2 --engine flags are required")
+
+  n_engines = len(args.engine)
+
+  # Parse per-engine options: --option 1:Hash=64 -> engine_options[0] = ["Hash=64"]
+  engine_options = [[] for _ in range(n_engines)]
+  for opt_str in args.option:
+    colon_pos = opt_str.find(":")
+    if colon_pos < 1:
+      parser.error(f"bad --option format '{opt_str}', expected N:key=value")
+    try:
+      idx = int(opt_str[:colon_pos]) - 1
+    except ValueError:
+      parser.error(f"bad engine index in --option '{opt_str}'")
+    if idx < 0 or idx >= n_engines:
+      parser.error(f"engine index {idx + 1} out of range [1, {n_engines}] in --option '{opt_str}'")
+    engine_options[idx].append(opt_str[colon_pos + 1:])
 
   tc = parse_time_control(args.tc)
 
   # Probe engines to get their names
-  print(f"Starting engine 1: {args.engine1}")
-  probe1 = UCIEngine(args.engine1, args.option1)
-  e1_name = probe1.name
-  probe1.quit()
-  print(f"  -> {e1_name}")
+  engine_names = []
+  for i, path in enumerate(args.engine):
+    print(f"Engine {i + 1}: {path}")
+    probe = UCIEngine(path, engine_options[i])
+    engine_names.append(probe.name)
+    probe.quit()
+    print(f"  -> {engine_names[-1]}")
 
-  print(f"Starting engine 2: {args.engine2}")
-  probe2 = UCIEngine(args.engine2, args.option2)
-  e2_name = probe2.name
-  probe2.quit()
-  print(f"  -> {e2_name}")
+  # Disambiguate duplicate engine names
+  name_counts = {}
+  for name in engine_names:
+    name_counts[name] = name_counts.get(name, 0) + 1
+  if any(c > 1 for c in name_counts.values()):
+    seen = {}
+    for i, name in enumerate(engine_names):
+      if name_counts[name] > 1:
+        seen[name] = seen.get(name, 0) + 1
+        engine_names[i] = f"{name} #{seen[name]}"
 
   # Load opening positions
   opening_label = args.opening
@@ -387,121 +415,226 @@ def main():
     random.shuffle(epd_fens)
     opening_label = f"{args.opening} ({len(epd_fens)} positions)"
 
-  print(f"\nMatch: {e1_name} vs {e2_name}")
-  print(f"Game pairs: {args.games}, TC: {args.tc}, Opening: {opening_label}, Concurrency: {args.concurrency}")
+  # Build matchup list: all pairs (i, j) with i < j
+  matchups = list(itertools.combinations(range(n_engines), 2))
+  n_matchups = len(matchups)
+
+  print(f"\nTournament: {n_engines} engines, {n_matchups} matchups (round-robin)")
+  print(f"Engines: {', '.join(engine_names)}")
+  print(f"Game pairs per matchup: {args.games}, TC: {args.tc}, Opening: {opening_label}")
+  print(f"Concurrency: {args.concurrency}")
   if args.alpha > 0:
     print(f"Early stopping: alpha={args.alpha}, min_num_games={args.min_num_games}")
   print(f"PGN output: {args.pgn}")
   print()
 
-  wins, draws, losses = 0, 0, 0
-  pair_scores = []
-  completed = 0
+  # Pre-generate openings per matchup (same FENs for each matchup for fairness)
+  matchup_fens = {}
+  for key in matchups:
+    fens = []
+    for g in range(args.games):
+      if epd_fens:
+        fens.append(epd_fens[g % len(epd_fens)])
+      elif args.opening == "random":
+        fens.append(random_opening())
+      else:
+        fens.append(chess.STARTING_FEN)
+    matchup_fens[key] = fens
 
-  # Pre-generate openings
-  fens = []
-  for i in range(args.games):
-    if epd_fens:
-      fens.append(epd_fens[i % len(epd_fens)])
-    elif args.opening == "random":
-      fens.append(random_opening())
-    else:
-      fens.append(chess.STARTING_FEN)
+  # Per-matchup state: wins/draws/losses from engine i's perspective,
+  # pair_scores, completed count, stopped_early flag
+  matchup_state = {}
+  for key in matchups:
+    matchup_state[key] = {
+      "wins": 0, "draws": 0, "losses": 0,
+      "pair_scores": [], "completed": 0, "stopped_early": False,
+      "next_pair": 0,
+    }
+
+  # Cross-table: score_matrix[i][j] = points scored by engine i vs engine j
+  score_matrix = [[0.0] * n_engines for _ in range(n_engines)]
+  games_matrix = [[0] * n_engines for _ in range(n_engines)]
 
   with open(args.pgn, "w") as pgn_file, \
        ThreadPoolExecutor(max_workers=args.concurrency) as pool:
     futures = {}
-    next_pair = 0
-    stopped_early = False
 
-    def submit_batch():
-      nonlocal next_pair
-      # Keep up to concurrency jobs in flight
-      while len(futures) < args.concurrency and next_pair < args.games:
-        fen = fens[next_pair]
-        future = pool.submit(
-          play_pair_worker,
-          args.engine1, args.engine2,
-          args.option1, args.option2,
-          tc, fen,
-        )
-        futures[future] = next_pair + 1
-        next_pair += 1
+    def submit_work():
+      """Submit pairs round-robin across matchups, up to concurrency limit."""
+      while len(futures) < args.concurrency:
+        submitted = False
+        for key in matchups:
+          if len(futures) >= args.concurrency:
+            break
+          st = matchup_state[key]
+          if st["stopped_early"] or st["next_pair"] >= args.games:
+            continue
+          i, j = key
+          fen = matchup_fens[key][st["next_pair"]]
+          future = pool.submit(
+            play_pair_worker,
+            args.engine[i], args.engine[j],
+            engine_options[i], engine_options[j],
+            tc, fen, key,
+          )
+          futures[future] = (key, st["next_pair"] + 1)
+          st["next_pair"] += 1
+          submitted = True
+        if not submitted:
+          break
 
-    submit_batch()
+    submit_work()
 
     while futures:
-      # Wait for next completion
       done_iter = as_completed(futures)
       future = next(done_iter)
-      pair_num = futures.pop(future)
+      (key, pair_num) = futures.pop(future)
+      i, j = key
+
       try:
-        games, pair_score = future.result()
+        games, pair_score, _ = future.result()
       except Exception as e:
-        print(f"  Pair {pair_num}: ERROR - {e}")
-        submit_batch()
+        print(f"  [{engine_names[i]} vs {engine_names[j]}] Pair {pair_num}: ERROR - {e}")
+        submit_work()
         continue
 
-      completed += 1
-      pair_scores.append(pair_score)
+      st = matchup_state[key]
+      st["completed"] += 1
+      st["pair_scores"].append(pair_score)
 
-      for result, pgn_game, e1_was_white in games:
+      for result, pgn_game, ei_was_white in games:
         if result == "1-0":
-          if e1_was_white:
-            wins += 1
+          if ei_was_white:
+            st["wins"] += 1
+            score_matrix[i][j] += 1.0
           else:
-            losses += 1
+            st["losses"] += 1
+            score_matrix[j][i] += 1.0
         elif result == "0-1":
-          if not e1_was_white:
-            wins += 1
+          if not ei_was_white:
+            st["wins"] += 1
+            score_matrix[i][j] += 1.0
           else:
-            losses += 1
+            st["losses"] += 1
+            score_matrix[j][i] += 1.0
         else:
-          draws += 1
+          st["draws"] += 1
+          score_matrix[i][j] += 0.5
+          score_matrix[j][i] += 0.5
+        games_matrix[i][j] += 1
+        games_matrix[j][i] += 1
         print(pgn_game, file=pgn_file, end="\n\n")
       pgn_file.flush()
 
       r1, r2 = games[0][0], games[1][0]
-      p_value, avg, stderr = significance_test(pair_scores)
-      print(f"  Pair {pair_num}: {e1_name} as W: {r1}, as B: {r2}  pair={pair_score:+.2f}  [{completed}/{args.games}]  [+{wins}-{losses}={draws}]    p={p_value:.3f}  [{avg - stderr * 1.96:.4f}, {avg + stderr * 1.96:.4f}]")
+      w, d, l = st["wins"], st["draws"], st["losses"]
+      p_value, avg, stderr = significance_test(st["pair_scores"])
+      total_completed = sum(s["completed"] for s in matchup_state.values())
+      total_target = n_matchups * args.games
+      print(
+        f"  [{engine_names[i]} vs {engine_names[j]}] "
+        f"pair {pair_num}: W:{r1} B:{r2}  ps={pair_score:+.2f}  "
+        f"[{st['completed']}/{args.games}]  +{w}-{l}={d}  p={p_value:.3f}  "
+        f"({total_completed}/{total_target} total)"
+      )
 
-      # Early stopping check
-      if args.alpha > 0 and len(pair_scores) >= args.min_num_games and p_value < args.alpha:
-        print(f"\n  *** Stopping early: p={p_value:.4f} < alpha={args.alpha} after {completed} pairs ***")
-        stopped_early = True
-        _kill_all_engines()
-        for f in futures:
+      # Per-matchup early stopping
+      if (args.alpha > 0
+          and len(st["pair_scores"]) >= args.min_num_games
+          and p_value < args.alpha):
+        print(
+          f"  *** [{engine_names[i]} vs {engine_names[j]}] "
+          f"Stopping early: p={p_value:.4f} < alpha={args.alpha} "
+          f"after {st['completed']} pairs ***"
+        )
+        st["stopped_early"] = True
+        # Cancel queued futures for this matchup
+        to_cancel = [f for f, (k, _) in futures.items() if k == key]
+        for f in to_cancel:
           f.cancel()
-        futures.clear()
-        break
+          del futures[f]
 
-      submit_batch()
+      submit_work()
 
-  total_games = wins + draws + losses
-  print(f"\n{'='*50}")
-  print(f"Match result ({e1_name} vs {e2_name}):")
-  print(f"  +{wins} -{losses} ={draws}  ({total_games} games)")
-  if total_games > 0:
-    score_pct = (wins + draws * 0.5) / total_games * 100
-    print(f"  Score: {score_pct:.1f}%")
-  if len(pair_scores) > 1:
-    avg = sum(pair_scores) / len(pair_scores)
-    variance = sum((x - avg) ** 2 for x in pair_scores) / (len(pair_scores) - 1)
-    stderr = math.sqrt(variance / len(pair_scores))
-    print(f"  Pair score: {avg:+.4f} +/- {stderr:.4f}")
-    try:
-      elo_lo = math.log(1 / (0.5 + avg - stderr) - 1.0) / math.log(10) * -400
-      elo_hi = math.log(1 / (0.5 + avg + stderr) - 1.0) / math.log(10) * -400
-      print(f"  Elo: {elo_lo:.1f} to {elo_hi:.1f}")
-    except (ValueError, ZeroDivisionError):
-      pass
-    p_value, _, _ = significance_test(pair_scores)
-    if avg > 0:
-      print(f"  {e1_name} is stronger (p={p_value:.4f})")
-    elif avg < 0:
-      print(f"  {e2_name} is stronger (p={p_value:.4f})")
+  # ========================== RESULTS ==========================
+  print(f"\n{'=' * 60}")
+  print("TOURNAMENT RESULTS")
+  print(f"{'=' * 60}")
+
+  # Per-matchup summaries
+  print(f"\n--- Matchup Results ---")
+  for key in matchups:
+    i, j = key
+    st = matchup_state[key]
+    w, d, l = st["wins"], st["draws"], st["losses"]
+    total = w + d + l
+    tag = " (stopped early)" if st["stopped_early"] else ""
+    print(f"\n  {engine_names[i]} vs {engine_names[j]}  [{total} games{tag}]")
+    print(f"    +{w} -{l} ={d}")
+    if total > 0:
+      score_pct = (w + d * 0.5) / total * 100
+      print(f"    Score: {score_pct:.1f}% ({engine_names[i]})")
+    if len(st["pair_scores"]) > 1:
+      avg = sum(st["pair_scores"]) / len(st["pair_scores"])
+      variance = sum((x - avg) ** 2 for x in st["pair_scores"]) / (len(st["pair_scores"]) - 1)
+      stderr = math.sqrt(variance / len(st["pair_scores"]))
+      print(f"    Pair score: {avg:+.4f} +/- {stderr:.4f}")
+      try:
+        elo_lo = math.log(1 / (0.5 + avg - stderr) - 1.0) / math.log(10) * -400
+        elo_hi = math.log(1 / (0.5 + avg + stderr) - 1.0) / math.log(10) * -400
+        print(f"    Elo: {elo_lo:.1f} to {elo_hi:.1f}")
+      except (ValueError, ZeroDivisionError):
+        pass
+      p_value, _, _ = significance_test(st["pair_scores"])
+      if avg > 0:
+        print(f"    {engine_names[i]} is stronger (p={p_value:.4f})")
+      elif avg < 0:
+        print(f"    {engine_names[j]} is stronger (p={p_value:.4f})")
+      else:
+        print(f"    No difference detected (p={p_value:.4f})")
+
+  # Cross-table
+  print(f"\n--- Cross Table ---")
+  max_name = max(len(n) for n in engine_names)
+  col_w = 10
+  header = " " * (max_name + 2)
+  for n in engine_names:
+    header += f"{n:>{col_w}}"
+  header += f"{'Total':>{col_w}}{'Score%':>{col_w}}"
+  print(header)
+
+  standings = []  # (total_score, total_games, engine_index)
+  for i in range(n_engines):
+    row = f"{engine_names[i]:<{max_name}}  "
+    total_score = 0.0
+    total_games = 0
+    for j in range(n_engines):
+      if i == j:
+        row += f"{'---':>{col_w}}"
+      elif games_matrix[i][j] > 0:
+        pct = score_matrix[i][j] / games_matrix[i][j] * 100
+        cell = f"{score_matrix[i][j]:g}/{games_matrix[i][j]}"
+        row += f"{cell:>{col_w}}"
+        total_score += score_matrix[i][j]
+        total_games += games_matrix[i][j]
+      else:
+        row += f"{'':>{col_w}}"
+    if total_games > 0:
+      total_pct = total_score / total_games * 100
+      row += f"{total_score:>{col_w}g}"
+      row += f"{total_pct:>{col_w - 1}.1f}%"
     else:
-      print(f"  No difference detected (p={p_value:.4f})")
+      row += f"{'':>{col_w}}{'':>{col_w}}"
+    standings.append((total_score, total_games, i))
+    print(row)
+
+  # Standings
+  standings.sort(key=lambda x: (-x[0], x[2]))
+  print(f"\n--- Standings ---")
+  print(f"  {'#':<4}{'Engine':<{max_name + 2}}{'Score':>8}{'Games':>8}{'Score%':>9}")
+  for rank, (score, games_played, idx) in enumerate(standings, 1):
+    pct = score / games_played * 100 if games_played > 0 else 0
+    print(f"  {rank:<4}{engine_names[idx]:<{max_name + 2}}{score:>8g}{games_played:>8}{pct:>8.1f}%")
 
 
 if __name__ == "__main__":
