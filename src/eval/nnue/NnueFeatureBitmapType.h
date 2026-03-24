@@ -12,29 +12,20 @@ enum NnueFeatureBitmapType {
   NF_WHITE_BISHOP,
   NF_WHITE_ROOK,
   NF_WHITE_QUEEN,
-  NF_WHITE_KING,
-  NF_WHITE_HANGING_PAWNS,
-  NF_WHITE_HANGING_KNIGHTS,
-  NF_WHITE_HANGING_BISHOPS,
-  NF_WHITE_HANGING_ROOKS,
-  NF_WHITE_HANGING_QUEENS,
-  NF_WHITE_HANGING_KINGS,
   NF_BLACK_PAWN,
   NF_BLACK_KNIGHT,
   NF_BLACK_BISHOP,
   NF_BLACK_ROOK,
   NF_BLACK_QUEEN,
-  NF_BLACK_KING,
-  NF_BLACK_HANGING_PAWNS,
-  NF_BLACK_HANGING_KNIGHTS,
-  NF_BLACK_HANGING_BISHOPS,
-  NF_BLACK_HANGING_ROOKS,
-  NF_BLACK_HANGING_QUEENS,
-  NF_BLACK_HANGING_KINGS,
   NF_COUNT
 };
 static_assert(NF_COUNT % 2 == 0, "NF_COUNT must be even");
 static_assert(NF_COUNT / 2 == NF_BLACK_PAWN, "Half of the features must be for black pieces and half for white pieces");
+
+
+constexpr int16_t NNUE_INPUT_DIM = NF_COUNT * 64;
+constexpr uint64_t MAX_FEATURE_INDEX = 64 * 64 * 10;
+
 
 // It is impossible for a pawn to be on the first or last rank, so we can
 // use these indices to encode other things.
@@ -75,25 +66,11 @@ inline std::string nnue_feature_to_string(NnueFeatureBitmapType feature) {
     case NF_WHITE_BISHOP: return "White Bishop";
     case NF_WHITE_ROOK: return "White Rook";
     case NF_WHITE_QUEEN: return "White Queen";
-    case NF_WHITE_KING: return "White King";
-    case NF_WHITE_HANGING_PAWNS: return "White Hanging Pawns";
-    case NF_WHITE_HANGING_KNIGHTS: return "White Hanging Knights";
-    case NF_WHITE_HANGING_BISHOPS: return "White Hanging Bishops";
-    case NF_WHITE_HANGING_ROOKS: return "White Hanging Rooks";
-    case NF_WHITE_HANGING_QUEENS: return "White Hanging Queens";
-    case NF_WHITE_HANGING_KINGS: return "White Hanging Kings";
     case NF_BLACK_PAWN: return "Black Pawn";
     case NF_BLACK_KNIGHT: return "Black Knight";
     case NF_BLACK_BISHOP: return "Black Bishop";
     case NF_BLACK_ROOK: return "Black Rook";
     case NF_BLACK_QUEEN: return "Black Queen";
-    case NF_BLACK_KING: return "Black King";
-    case NF_BLACK_HANGING_PAWNS: return "Black Hanging Pawns";
-    case NF_BLACK_HANGING_KNIGHTS: return "Black Hanging Knights";
-    case NF_BLACK_HANGING_BISHOPS: return "Black Hanging Bishops";
-    case NF_BLACK_HANGING_ROOKS: return "Black Hanging Rooks";
-    case NF_BLACK_HANGING_QUEENS: return "Black Hanging Queens";
-    case NF_BLACK_HANGING_KINGS: return "Black Hanging Kings";
     default:
       std::cerr << "Invalid NnueFeatureBitmapType: " << feature << std::endl;
       return "Invalid Feature";

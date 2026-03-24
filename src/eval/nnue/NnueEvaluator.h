@@ -45,6 +45,8 @@ struct Frame {
   TypeSafeArray<Bitboard, NF_COUNT, NnueFeatureBitmapType> pieceBitboards;
   Vector<EMBEDDING_DIM, T> whiteAcc;
   Vector<EMBEDDING_DIM, T> blackAcc;
+  SafeSquare whiteKingSquare;
+  SafeSquare blackKingSquare;
 };
 
 template<typename T>
@@ -69,6 +71,8 @@ struct NnueEvaluator : public EvaluatorInterface {
       frames[i].pieceBitboards.fill(kEmptyBitboard);
       frames[i].whiteAcc.setZero();
       frames[i].blackAcc.setZero();
+      frames[i].whiteKingSquare = SafeSquare(0);
+      frames[i].blackKingSquare = SafeSquare(0);
     }
   }
   void place_piece(ColoredPiece cp, SafeSquare square) override {
@@ -111,7 +115,9 @@ struct NnueEvaluator : public EvaluatorInterface {
 
   // Very slow, but useful for testing (to ensure that incremental updates are correct).
   Evaluation from_scratch(const Position& pos, const Threats& threats) const {
-    Features features;
+    ChessEngine::SafeSquare whiteKingSquare = ChessEngine::lsb_i_promise_board_is_not_empty(pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_KING]);
+    ChessEngine::SafeSquare blackKingSquare = ChessEngine::lsb_i_promise_board_is_not_empty(pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_KING]);
+    Features features(whiteKingSquare, blackKingSquare);
     for (NnueFeatureBitmapType i = NnueFeatureBitmapType(0); i < NF_COUNT; i = NnueFeatureBitmapType(i + 1)) {
       Bitboard bb = nnue_feature_to_bitboard(i, pos, threats);
       while (bb) {
@@ -125,7 +131,10 @@ struct NnueEvaluator : public EvaluatorInterface {
     whiteAcc.setZero();
     blackAcc.setZero();
     for (int i = 0; i < features.size(); i++) {
-      nnue_model->increment(&whiteAcc, &blackAcc, features[i]);
+      int16_t pieceIdx = features[i];
+      size_t whiteIdx = whiteKingSquare * NNUE_INPUT_DIM + pieceIdx;
+      size_t blackIdx = vertically_flip_square(blackKingSquare) * NNUE_INPUT_DIM + flip_feature_index(pieceIdx);
+      nnue_model->increment(&whiteAcc, whiteIdx, &blackAcc, blackIdx);
     }
     T score;
     if (pos.turn_ == Color::WHITE) {
@@ -151,22 +160,74 @@ struct NnueEvaluator : public EvaluatorInterface {
     }
     Frame<T> *lastFrame = frames + plyFromRoot;
     Frame<T> *currentFrame = frames + plyFromRoot + 1;
-    currentFrame->whiteAcc = lastFrame->whiteAcc;
-    currentFrame->blackAcc = lastFrame->blackAcc;
-    currentFrame->pieceBitboards = lastFrame->pieceBitboards;
+
+    // Get current king positions
+    SafeSquare wk = lsb_i_promise_board_is_not_empty(pos.pieceBitboards_[ColoredPiece::WHITE_KING]);
+    SafeSquare bk = lsb_i_promise_board_is_not_empty(pos.pieceBitboards_[ColoredPiece::BLACK_KING]);
+    SafeSquare flipped_bk = vertically_flip_square(bk);
+    bool whiteKingMoved = (wk != lastFrame->whiteKingSquare);
+    bool blackKingMoved = (bk != lastFrame->blackKingSquare);
+    currentFrame->whiteKingSquare = wk;
+    currentFrame->blackKingSquare = bk;
+
+    // Initialize accumulators: recompute from scratch if king moved, otherwise copy from last frame
+    if (whiteKingMoved) {
+      currentFrame->whiteAcc.setZero();
+    } else {
+      currentFrame->whiteAcc = lastFrame->whiteAcc;
+    }
+    if (blackKingMoved) {
+      currentFrame->blackAcc.setZero();
+    } else {
+      currentFrame->blackAcc = lastFrame->blackAcc;
+    }
+
     for (NnueFeatureBitmapType i = static_cast<NnueFeatureBitmapType>(0); i < NF_COUNT; i = static_cast<NnueFeatureBitmapType>(i + 1)) {
       const Bitboard oldBitboard = lastFrame->pieceBitboards[i];
       const Bitboard newBitboard = nnue_feature_to_bitboard(i, pos, threats);
-      Bitboard diff = oldBitboard & ~newBitboard;
-      while (diff) {
-        const SafeSquare sq = pop_lsb_i_promise_board_is_not_empty(diff);
-        nnue_model->decrement(&currentFrame->whiteAcc, &currentFrame->blackAcc, feature_index(i, sq));
+
+      if (whiteKingMoved) {
+        // Add all current pieces for white side
+        Bitboard added = newBitboard;
+        while (added) {
+          const SafeSquare sq = pop_lsb_i_promise_board_is_not_empty(added);
+          currentFrame->whiteAcc += nnue_model->embWeights[wk * NNUE_INPUT_DIM + feature_index(i, sq)];
+        }
+      } else {
+        // Incremental update for white side
+        Bitboard removed = oldBitboard & ~newBitboard;
+        while (removed) {
+          const SafeSquare sq = pop_lsb_i_promise_board_is_not_empty(removed);
+          currentFrame->whiteAcc -= nnue_model->embWeights[wk * NNUE_INPUT_DIM + feature_index(i, sq)];
+        }
+        Bitboard added = newBitboard & ~oldBitboard;
+        while (added) {
+          const SafeSquare sq = pop_lsb_i_promise_board_is_not_empty(added);
+          currentFrame->whiteAcc += nnue_model->embWeights[wk * NNUE_INPUT_DIM + feature_index(i, sq)];
+        }
       }
-      diff = newBitboard & ~oldBitboard;
-      while (diff) {
-        const SafeSquare sq = pop_lsb_i_promise_board_is_not_empty(diff);
-        nnue_model->increment(&currentFrame->whiteAcc, &currentFrame->blackAcc, feature_index(i, sq));
+
+      if (blackKingMoved) {
+        // Add all current pieces for black side
+        Bitboard added = newBitboard;
+        while (added) {
+          const SafeSquare sq = pop_lsb_i_promise_board_is_not_empty(added);
+          currentFrame->blackAcc += nnue_model->embWeights[flipped_bk * NNUE_INPUT_DIM + flip_feature_index(feature_index(i, sq))];
+        }
+      } else {
+        // Incremental update for black side
+        Bitboard removed = oldBitboard & ~newBitboard;
+        while (removed) {
+          const SafeSquare sq = pop_lsb_i_promise_board_is_not_empty(removed);
+          currentFrame->blackAcc -= nnue_model->embWeights[flipped_bk * NNUE_INPUT_DIM + flip_feature_index(feature_index(i, sq))];
+        }
+        Bitboard added = newBitboard & ~oldBitboard;
+        while (added) {
+          const SafeSquare sq = pop_lsb_i_promise_board_is_not_empty(added);
+          currentFrame->blackAcc += nnue_model->embWeights[flipped_bk * NNUE_INPUT_DIM + flip_feature_index(feature_index(i, sq))];
+        }
       }
+
       currentFrame->pieceBitboards[i] = newBitboard;
     }
 

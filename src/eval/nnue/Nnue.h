@@ -705,7 +705,7 @@ inline void concat_and_matmul(const Matrix<HEIGHT, COMBINED_WIDTH, int8_t>& mat,
 
 template<typename T>
 struct Nnue {
-  Vector<EMBEDDING_DIM, T> embWeights[NNUE_INPUT_DIM];
+  Vector<EMBEDDING_DIM, T> embWeights[MAX_FEATURE_INDEX];
 
   Matrix<HIDDEN1_DIM, EMBEDDING_DIM * 2, int8_t> layer1;
   Vector<HIDDEN1_DIM, T> bias1;
@@ -726,18 +726,20 @@ struct Nnue {
     output.setZero();
   }
 
-  void increment(Vector<EMBEDDING_DIM, T> *whiteAcc, Vector<EMBEDDING_DIM, T> *blackAcc, size_t index) {
-    *whiteAcc += embWeights[index];
-    *blackAcc += embWeights[flip_feature_index(index)];
+  void increment(Vector<EMBEDDING_DIM, T> *whiteAcc, size_t whiteIndex,
+                  Vector<EMBEDDING_DIM, T> *blackAcc, size_t blackIndex) {
+    *whiteAcc += embWeights[whiteIndex];
+    *blackAcc += embWeights[blackIndex];
   }
 
-  void decrement(Vector<EMBEDDING_DIM, T> *whiteAcc, Vector<EMBEDDING_DIM, T> *blackAcc, size_t index) {
-    *whiteAcc -= embWeights[index];
-    *blackAcc -= embWeights[flip_feature_index(index)];
+  void decrement(Vector<EMBEDDING_DIM, T> *whiteAcc, size_t whiteIndex,
+                  Vector<EMBEDDING_DIM, T> *blackAcc, size_t blackIndex) {
+    *whiteAcc -= embWeights[whiteIndex];
+    *blackAcc -= embWeights[blackIndex];
   }
 
   void randn_() {
-    for (size_t i = 0; i < NNUE_INPUT_DIM; ++i) {
+    for (size_t i = 0; i < MAX_FEATURE_INDEX; ++i) {
       embWeights[i].randn_();
     }
     layer1.randn_();
@@ -747,9 +749,9 @@ struct Nnue {
   }
 
   void load(std::istream& in) {
-    auto emb = std::make_unique<Matrix<NNUE_INPUT_DIM, EMBEDDING_DIM, T>>();
+    auto emb = std::make_unique<Matrix<MAX_FEATURE_INDEX, EMBEDDING_DIM, T>>();
     emb->load_from_stream(in);
-    for (size_t i = 0; i < NNUE_INPUT_DIM; ++i) {
+    for (size_t i = 0; i < MAX_FEATURE_INDEX; ++i) {
       embWeights[i].load_from_row(*emb, i);
     }
     layer1.load_from_stream(in);
@@ -765,9 +767,11 @@ struct Nnue {
   }
 
   void use_debug_weights() {
-    for (size_t i = 0; i < NNUE_INPUT_DIM; ++i) {
+    for (size_t i = 0; i < MAX_FEATURE_INDEX; ++i) {
       embWeights[i].setZero();
-      embWeights[i].data[i] = static_cast<int16_t>(1);
+      if (i < EMBEDDING_DIM) {
+        embWeights[i].data[i] = static_cast<int16_t>(1);
+      }
     }
     layer1.randn_();
     bias1.randn_();
@@ -844,7 +848,7 @@ struct Nnue {
 
   std::shared_ptr<Nnue> clone() const {
     std::shared_ptr<Nnue> copy = std::make_shared<Nnue>();
-    for (size_t i = 0; i < NNUE_INPUT_DIM; ++i) {
+    for (size_t i = 0; i < MAX_FEATURE_INDEX; ++i) {
       copy->embWeights[i] = this->embWeights[i];
     }
     copy->layer1 = this->layer1;

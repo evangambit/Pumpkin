@@ -60,14 +60,15 @@ CHUNK_SIZE = 128
 assert BATCH_SIZE % CHUNK_SIZE == 0
 
 def collate_fn(rows):
-  values, lengths, labels, turns = zip(*rows)
+  values, lengths, labels, turns, kings = zip(*rows)
   values = torch.from_numpy(np.concatenate(values))
   lengths = torch.from_numpy(np.concatenate(lengths))
   labels = torch.from_numpy(np.stack(labels))
   turns = torch.from_numpy(np.stack(turns))
+  kings = torch.from_numpy(np.concatenate(kings))
   labels = labels.reshape(labels.shape[0] * labels.shape[1], *labels.shape[2:])
   turns = turns.reshape(turns.shape[0] * turns.shape[1], *turns.shape[2:])
-  return values, lengths, labels, turns
+  return values, lengths, labels, turns, kings
 
 
 if __name__ == "__main__":
@@ -80,14 +81,14 @@ if __name__ == "__main__":
   device = torch.device('mps' if torch.backends.mps.is_available() else 'cuda' if torch.cuda.is_available() else 'cpu')
 
   print("Loading dataset...")
-  dataset = ndata.NnueDataset(['../data/pos.shuf.txt'])
+  dataset = ndata.NnueDataset(['../data/pos.10m.txt'])
 
   print(f'Dataset loaded with {len(dataset) * CHUNK_SIZE} rows.')
 
   dataloader = tdata.DataLoader(dataset, batch_size=BATCH_SIZE//CHUNK_SIZE, shuffle=False, num_workers=0, pin_memory=True, drop_last=True, collate_fn=collate_fn)
 
   print("Creating model...")
-  model = NNUE(hidden_sizes=[1024, 32], output_size=1).to(device)
+  model = NNUE(hidden_sizes=[256, 16], output_size=1).to(device)
 
   print("Creating optimizer...")
   opt = torch.optim.AdamW(model.parameters(), lr=0.0, weight_decay=0.1)
@@ -136,10 +137,10 @@ if __name__ == "__main__":
       scheduler.step()
       
       batch = [x.to(device) for x in batch]
-      values, lengths, label, turn = batch
+      values, lengths, label, turn, kings = batch
       t_transfer = time.time()
 
-      output, layers = model(values, lengths)
+      output, layers = model(values, lengths, kings)
 
       penalty = 0.0
       for layer_output in layers:
@@ -171,7 +172,7 @@ if __name__ == "__main__":
       # Save a model every 10 minutes.
       if time.time() - last_save_time > 10 * 60:
         with open(os.path.join(run_dir, f'model-{num_models_saved}.bin'), 'wb') as f:
-          save_tensor(model.emb.weight(model.emb.merged_tiles())[:-1], 'embedding', f)
+          save_tensor(model.emb.weight(model.emb.merged_tiles()), 'embedding', f)
           for i, layer in enumerate(model.mlp[::2]):
             assert isinstance(layer, nn.Linear)
             save_tensor(layer.weight, f'linear{i}.weight', f)
@@ -187,7 +188,7 @@ if __name__ == "__main__":
     torch.save(model.state_dict(), f)
 
   with open(os.path.join(run_dir, 'model.bin'), 'wb') as f:
-    save_tensor(model.emb.weight(model.emb.merged_tiles())[:-1], 'embedding', f)
+    save_tensor(model.emb.weight(model.emb.merged_tiles()), 'embedding', f)
     for i, layer in enumerate(model.mlp[::2]):
       assert isinstance(layer, nn.Linear)
       save_tensor(layer.weight, f'linear{i}.weight', f)

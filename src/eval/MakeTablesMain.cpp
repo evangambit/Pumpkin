@@ -161,6 +161,7 @@ int main(int argc, char *argv[]) {
   
   std::ofstream sparseNnueValueWriter(outpath + "-nnue-sparse-values", std::ios::binary);
   std::ofstream sparseNnueLengthWriter(outpath + "-nnue-sparse-lengths", std::ios::binary);
+  WriterI8 nnueKingWriter(outpath + "-nnue-kings", { 2 });
 
   std::chrono::time_point<std::chrono::system_clock> startTime = std::chrono::system_clock::now();
 
@@ -205,6 +206,11 @@ int main(int argc, char *argv[]) {
         uint16_t nnueLen = results[i].nnueFeatures.size();
         sparseNnueValueWriter.write(reinterpret_cast<const char*>(results[i].nnueFeatures.onIndices.data()), sizeof(uint16_t) * nnueLen);
         sparseNnueLengthWriter.write(reinterpret_cast<const char*>(&nnueLen), sizeof(nnueLen));
+        int8_t kings[2] = {
+          static_cast<int8_t>(results[i].nnueFeatures.whiteKingSquare),
+          static_cast<int8_t>(results[i].nnueFeatures.blackKingSquare)
+        };
+        nnueKingWriter.write_row(kings);
       }
       
       evalWriter.write_row(results[i].wdl);

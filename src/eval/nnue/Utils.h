@@ -40,31 +40,34 @@ inline int16_t feature_index(NnueFeatureBitmapType feature, unsigned square) {
   return feature * 64 + square;
 }
 
+inline ChessEngine::SafeSquare vertically_flip_square(ChessEngine::SafeSquare square) {
+  return ChessEngine::SafeSquare((7 - (square / 8)) * 8 + (square % 8));
+}
+
 inline int16_t flip_feature_index(int16_t index) {
   // Flip the board position vertically (rank 8 <-> rank 1, etc.) and swap colors.
   int16_t piece_type = (((index / 64) + (NF_COUNT / 2)) % NF_COUNT) * 64;
   int16_t square = index % 64;
-  int16_t flipped_square = (7 - (square / 8)) * 8 + (square % 8);
+  int16_t flipped_square = vertically_flip_square(ChessEngine::SafeSquare(square));
   return piece_type + flipped_square;
 }
 
 // Shift used for int16_t fixed-point scaling.
 constexpr int SCALE_SHIFT = 8;
-constexpr int EMBEDDING_DIM = 1024;
-constexpr int HIDDEN1_DIM = 32;
+constexpr int EMBEDDING_DIM = 256;
+constexpr int HIDDEN1_DIM = 16;
 constexpr int OUTPUT_DIM = 1;
 
-// 32 pieces, 4 castling rights, and 32 hanging pieces.
-// We ignore tha 16 'no pawns on a file' features, since they
-// can only become 1 at the expense of making other features 0.
-constexpr int MAX_NUM_ONES_IN_INPUT = 32 + 4 + 32;
-
-constexpr int16_t NNUE_INPUT_DIM = NF_COUNT * 64;
-
 struct Features {
+  ChessEngine::SafeSquare whiteKingSquare;
+  ChessEngine::SafeSquare blackKingSquare;
   std::vector<uint16_t> onIndices;
   Features() {
-    onIndices.reserve(MAX_NUM_ONES_IN_INPUT);
+    onIndices.reserve(36);
+  }
+  Features(ChessEngine::SafeSquare whiteKingSquare, ChessEngine::SafeSquare blackKingSquare)
+    : whiteKingSquare(whiteKingSquare), blackKingSquare(blackKingSquare) {
+    onIndices.reserve(36);
   }
   void addFeature(uint16_t index) {
     onIndices.push_back(static_cast<uint16_t>(index));
@@ -79,6 +82,9 @@ struct Features {
     for (size_t i = 0; i < onIndices.size(); i++) {
       onIndices[i] = flip_feature_index(onIndices[i]);
     }
+    ChessEngine::SafeSquare temp = whiteKingSquare;
+    whiteKingSquare = vertically_flip_square(blackKingSquare);
+    blackKingSquare = vertically_flip_square(temp);
   }
   std::vector<uint16_t> to_vector() const {
     return onIndices;
@@ -88,19 +94,13 @@ struct Features {
 inline ChessEngine::Bitboard nnue_feature_to_bitboard(NnueFeatureBitmapType feature, const ChessEngine::Position& pos, const ChessEngine::Threats& threats) {
   switch (feature) {
     case NF_WHITE_PAWN: {
-      // We use the 7th rank (56 - 63) to store whether there are any
-      // white pawns on a file. We use the 0th rank (0 - 7) to store
-      // castling rights. This trick works because pawns can never
-      // occupy these squares, so these bits are unused. Importantly,
-      // everything is vertically flipped for the black pawns (i.e.
-      // open files use the 0th rank and castling rights use the 7th
-      // rank). This way the same vertical symmetry that we use for
-      // our piece features automatically works for these features too.
+      // We use the 0th rank (0 - 7) to store castling rights. This
+      // trick works because pawns can never occupy these squares,
+      // so these bits are unused. Importantly, everything is
+      // vertically flipped for the black pawns (i.e. castling rights
+      // use the 7th rank). This way the same vertical symmetry that we
+      // use for our piece features automatically works for these features too.
       ChessEngine::Bitboard r = pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_PAWN];
-      for (File file = File(0); file <= File(7); file = File(file + 1)) {
-        const bool noWhitePawnsOnFile = (ChessEngine::kFiles[file] & pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_PAWN]) == ChessEngine::kEmptyBitboard;
-        r |= ChessEngine::bb(56 + file);
-      }
       if (pos.currentState_.castlingRights & ChessEngine::kCastlingRights_WhiteKing) {
         r |= ChessEngine::bb(0);
       }
@@ -117,26 +117,8 @@ inline ChessEngine::Bitboard nnue_feature_to_bitboard(NnueFeatureBitmapType feat
       return pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_ROOK];
     case NF_WHITE_QUEEN:
       return pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_QUEEN];
-    case NF_WHITE_KING:
-      return pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_KING];
-    case NF_WHITE_HANGING_PAWNS: 
-      return threats.badForCp(ChessEngine::ColoredPiece::WHITE_PAWN) & pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_PAWN];
-    case NF_WHITE_HANGING_KNIGHTS:
-      return threats.badForCp(ChessEngine::ColoredPiece::WHITE_KNIGHT) & pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_KNIGHT];
-    case NF_WHITE_HANGING_BISHOPS:
-      return threats.badForCp(ChessEngine::ColoredPiece::WHITE_BISHOP) & pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_BISHOP];
-    case NF_WHITE_HANGING_ROOKS:
-      return threats.badForCp(ChessEngine::ColoredPiece::WHITE_ROOK) & pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_ROOK];
-    case NF_WHITE_HANGING_QUEENS:
-      return threats.badForCp(ChessEngine::ColoredPiece::WHITE_QUEEN) & pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_QUEEN];
-    case NF_WHITE_HANGING_KINGS:
-      return threats.badForCp(ChessEngine::ColoredPiece::WHITE_KING) & pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_KING];
     case NF_BLACK_PAWN: {
       ChessEngine::Bitboard r = pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_PAWN];
-      for (File file = File(0); file <= File(7); file = File(file + 1)) {
-        const bool noBlackPawnsOnFile = (ChessEngine::kFiles[file] & pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_PAWN]) == ChessEngine::kEmptyBitboard;
-        r |= ChessEngine::bb(file);
-      }
       if (pos.currentState_.castlingRights & ChessEngine::kCastlingRights_BlackKing) {
         r |= ChessEngine::bb(56);
       }
@@ -153,20 +135,6 @@ inline ChessEngine::Bitboard nnue_feature_to_bitboard(NnueFeatureBitmapType feat
       return pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_ROOK];
     case NF_BLACK_QUEEN:
       return pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_QUEEN];
-    case NF_BLACK_KING:
-      return pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_KING];
-    case NF_BLACK_HANGING_PAWNS:
-      return threats.badForCp(ChessEngine::ColoredPiece::BLACK_PAWN) & pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_PAWN];
-    case NF_BLACK_HANGING_KNIGHTS:
-      return threats.badForCp(ChessEngine::ColoredPiece::BLACK_KNIGHT) & pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_KNIGHT];
-    case NF_BLACK_HANGING_BISHOPS:
-      return threats.badForCp(ChessEngine::ColoredPiece::BLACK_BISHOP) & pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_BISHOP];
-    case NF_BLACK_HANGING_ROOKS:
-      return threats.badForCp(ChessEngine::ColoredPiece::BLACK_ROOK) & pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_ROOK];
-    case NF_BLACK_HANGING_QUEENS:
-      return threats.badForCp(ChessEngine::ColoredPiece::BLACK_QUEEN) & pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_QUEEN];
-    case NF_BLACK_HANGING_KINGS:
-      return threats.badForCp(ChessEngine::ColoredPiece::BLACK_KING) & pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_KING];
     default:
       std::cerr << "Invalid NnueFeatureBitmapType: " << feature << std::endl;
   }
@@ -174,7 +142,9 @@ inline ChessEngine::Bitboard nnue_feature_to_bitboard(NnueFeatureBitmapType feat
 }
 
 inline Features pos2features(const ChessEngine::Position& pos, const ChessEngine::Threats& threats) {
-  Features features;
+  ChessEngine::SafeSquare whiteKingSquare = ChessEngine::lsb_i_promise_board_is_not_empty(pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_KING]);
+  ChessEngine::SafeSquare blackKingSquare = ChessEngine::lsb_i_promise_board_is_not_empty(pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_KING]);
+  Features features(whiteKingSquare, blackKingSquare);
   for (NnueFeatureBitmapType i = NnueFeatureBitmapType(0); i < NF_COUNT; i = NnueFeatureBitmapType(i + 1)) {
     ChessEngine::Bitboard bb = nnue_feature_to_bitboard(i, pos, threats);
     while (bb) {

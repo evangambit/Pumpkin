@@ -30,6 +30,7 @@ struct ChunkedDataset {
         std::vector<int16_t> all_lengths;
         std::vector<float> all_evals;
         std::vector<int8_t> all_turns;
+        std::vector<int8_t> all_kings;
         
         int lines_read = 0;
         std::string line;
@@ -63,12 +64,14 @@ struct ChunkedDataset {
                 features.flip_();
             }
             
-            for (size_t i = 0; i < features.length; i++) {
+            for (size_t i = 0; i < features.size(); i++) {
                 all_values.push_back(features[i]);
             }
-            all_lengths.push_back(features.length);
+            all_lengths.push_back(features.size());
             all_evals.push_back(eval);
             all_turns.push_back(static_cast<int8_t>(pos.turn_));
+            all_kings.push_back(static_cast<int8_t>(features.whiteKingSquare));
+            all_kings.push_back(static_cast<int8_t>(features.blackKingSquare));
             lines_read++;
         }
 
@@ -88,7 +91,10 @@ struct ChunkedDataset {
         auto turn_tensor = torch::empty({(long)all_turns.size()}, torch::TensorOptions().dtype(torch::kInt8));
         std::memcpy(turn_tensor.data_ptr<int8_t>(), all_turns.data(), all_turns.size() * sizeof(int8_t));
 
-        return {values_tensor, lengths_tensor, evals_tensor, turn_tensor};
+        auto kings_tensor = torch::empty({(long)all_turns.size(), 2}, torch::TensorOptions().dtype(torch::kInt8));
+        std::memcpy(kings_tensor.data_ptr<int8_t>(), all_kings.data(), all_kings.size() * sizeof(int8_t));
+
+        return {values_tensor, lengths_tensor, evals_tensor, turn_tensor, kings_tensor};
     }
 };
 
