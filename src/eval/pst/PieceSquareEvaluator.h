@@ -19,8 +19,8 @@ struct PieceSquareEvaluator : public EvaluatorInterface {
 
   ColoredEvaluation<Color::WHITE> evaluate_white(const Position& pos, const Threats& threats, int plyFromRoot, ColoredEvaluation<Color::WHITE> alpha, ColoredEvaluation<Color::WHITE> beta) override {
     int32_t stage = earliness(pos);
-    int32_t eval = early * stage + late * (16 - stage);
-    return ColoredEvaluation<Color::WHITE>(eval / 16);
+    int32_t eval = early * stage + late * (18 - stage);
+    return ColoredEvaluation<Color::WHITE>(eval / 18);
   }
 
   ColoredEvaluation<Color::BLACK> evaluate_black(const Position& pos, const Threats& threats, int plyFromRoot, ColoredEvaluation<Color::BLACK> alpha, ColoredEvaluation<Color::BLACK> beta) override {
@@ -73,8 +73,7 @@ struct PieceSquareEvaluator : public EvaluatorInterface {
     return "PieceSquareEvaluator";
   }
 
- private:
-  inline int32_t earliness(const Position& pos) const {
+  static inline int32_t earliness(const Position& pos) {
     int32_t t = 0;
     t += std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_QUEEN]) * 4;
     t += std::popcount(pos.pieceBitboards_[ColoredPiece::BLACK_QUEEN]) * 4;
@@ -82,10 +81,12 @@ struct PieceSquareEvaluator : public EvaluatorInterface {
     t += std::popcount(pos.pieceBitboards_[ColoredPiece::BLACK_ROOK]) * 1;
     t += std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_BISHOP]) * 1;
     t += std::popcount(pos.pieceBitboards_[ColoredPiece::BLACK_BISHOP]) * 1;
+    t += std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_KNIGHT]) * 1;
+    t += std::popcount(pos.pieceBitboards_[ColoredPiece::BLACK_KNIGHT]) * 1;
     return t;
   }
 
-  inline size_t index_for(SafeColoredPiece cp, SafeSquare square) const {
+  static inline size_t index_for(SafeColoredPiece cp, SafeSquare square) {
     Piece piece = cp2p(cp);
     Color color = cp2color(cp);
     const int y = color == Color::WHITE ? square / 8 : 7 - (square / 8);
