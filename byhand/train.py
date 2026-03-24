@@ -55,6 +55,17 @@ class CosineAnnealingWithWarmup:
         
         self.current_step += 1
 
+class MyModel(nn.Module):
+    def __init__(self, num_features):
+        super(MyModel, self).__init__()
+        self.linear = nn.Linear(num_features, 2)
+        nn.init.normal_(self.linear.weight, 0, 0.01)
+        nn.init.constant_(self.linear.bias, 0.0)
+
+    def forward(self, x, earliness):
+        x = self.linear(x)
+        return x[:,0] * (1.0 - earliness) + x[:,1] * earliness
+
 if __name__ == "__main__":
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     run_dir = os.path.join("runs", timestamp)
@@ -75,11 +86,7 @@ if __name__ == "__main__":
     num_features = values.shape[1]
     print(f"Number of features: {num_features}")
 
-    model = nn.Linear(num_features, 2).to(device)
-    
-    # Optional: Initialize weights with small values
-    nn.init.normal_(model.weight, 0, 0.01)
-    nn.init.constant_(model.bias, 0.0)
+    model = MyModel(num_features).to(device)
 
     opt = torch.optim.AdamW(model.parameters(), lr=0.0, weight_decay=0.01)
     
@@ -126,10 +133,7 @@ if __name__ == "__main__":
             
             earliness = earliness.clip(0, 18) / 18
             
-            # Predict
-            # Convert values to float for Linear layer
-            output = model(values.float())
-            output = output[:,0] * (1.0 - earliness) + output[:,1] * earliness
+            output = model(values.float(), earliness)
             
             # Use Sigmoid to match eval output
             output_sig = torch.sigmoid(output)
@@ -162,16 +166,16 @@ if __name__ == "__main__":
 
     print("Saving model to " + os.path.join(run_dir, 'model.bin'))
     with open(os.path.join(run_dir, 'model.bin'), 'wb') as f:
-        save_tensor(model.weight.data, 'weights', f)
-        save_tensor(model.bias.data, 'bias', f)
+        save_tensor(model.linear.weight.data, 'weights', f)
+        save_tensor(model.linear.bias.data, 'bias', f)
 
     # Print out learned feature weights
     print("\nLearned Weights:")
-    weights = model.weight.data.detach().cpu().numpy()
-    bias = model.bias.detach().cpu().numpy()
+    weights = model.linear.weight.data.detach().cpu().numpy()
+    bias = model.linear.bias.data.detach().cpu().numpy()
     scale = 100 / weights[0,1].mean()  # Make endgame pawns == 100
     for i, w in enumerate(weights.T):
-        print(f"Feature {i}: {np.round(w * scale)}")
+        print(f"{dataset.feature_name(i)}: {np.round(w * scale)}")
     print(f"Bias: {np.round(bias * scale)}")
 
     dataset = ndata.ByHandDataset(['../data/pos.10m-test.txt'])
@@ -179,8 +183,8 @@ if __name__ == "__main__":
     for batch in dataloader:
         values, labels, turns = [x.to(device) for x in batch]
         values = values.to(torch.float32)
-        output = model(values.float())
-        output = output[:,0] * (1.0 - earliness) + output[:,1] * earliness
+        earliness = values[:,0].clip(0, 18) / 18
+        output = model(values.float(), earliness)
         output_sig = torch.sigmoid(output)
         label_sig = torch.sigmoid(labels * LABEL_SCALE)
         print("Output:", output_sig[:10].cpu().detach().numpy())
