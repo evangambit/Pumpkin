@@ -369,6 +369,7 @@ class SetEvaluatorTask : public Task {
       std::cout << "info string Evaluator set to qst." << std::endl;
     } else {
       std::cout << "Error: unrecognized evaluator name \"" << evaluatorName << "\"" << std::endl;
+      exit(1);
     }
     state->tt_->clear();
   }

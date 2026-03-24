@@ -202,8 +202,9 @@ int main(int argc, char *argv[]) {
         qstInputWriter.write_row(results[i].qstFeatures);
       }
       if (FLAGS_emit_nnue) {
-        sparseNnueValueWriter.write(reinterpret_cast<const char*>(results[i].nnueFeatures.onIndices), sizeof(results[i].nnueFeatures.onIndices[0]) * results[i].nnueFeatures.length);
-        sparseNnueLengthWriter.write(reinterpret_cast<const char*>(&results[i].nnueFeatures.length), sizeof(results[i].nnueFeatures.length));
+        uint16_t nnueLen = results[i].nnueFeatures.size();
+        sparseNnueValueWriter.write(reinterpret_cast<const char*>(results[i].nnueFeatures.onIndices.data()), sizeof(uint16_t) * nnueLen);
+        sparseNnueLengthWriter.write(reinterpret_cast<const char*>(&nnueLen), sizeof(nnueLen));
       }
       
       evalWriter.write_row(results[i].wdl);

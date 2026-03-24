@@ -36,9 +36,17 @@ double randn(double stddev = 1.0);
 
 NnueFeatureBitmapType cp2nfbt(ChessEngine::ColoredPiece cp);
 
-int16_t feature_index(NnueFeatureBitmapType feature, unsigned square);
+inline int16_t feature_index(NnueFeatureBitmapType feature, unsigned square) {
+  return feature * 64 + square;
+}
 
-int16_t flip_feature_index(int16_t index);
+inline int16_t flip_feature_index(int16_t index) {
+  // Flip the board position vertically (rank 8 <-> rank 1, etc.) and swap colors.
+  int16_t piece_type = (((index / 64) + (NF_COUNT / 2)) % NF_COUNT) * 64;
+  int16_t square = index % 64;
+  int16_t flipped_square = (7 - (square / 8)) * 8 + (square % 8);
+  return piece_type + flipped_square;
+}
 
 // Shift used for int16_t fixed-point scaling.
 constexpr int SCALE_SHIFT = 8;
@@ -54,24 +62,26 @@ constexpr int MAX_NUM_ONES_IN_INPUT = 32 + 4 + 32;
 constexpr int16_t NNUE_INPUT_DIM = NF_COUNT * 64;
 
 struct Features {
-  uint16_t length;
-  uint16_t onIndices[MAX_NUM_ONES_IN_INPUT];
-  Features() : length(0) {
-    std::fill_n(onIndices, MAX_NUM_ONES_IN_INPUT, NNUE_INPUT_DIM);
+  std::vector<uint16_t> onIndices;
+  Features() {
+    onIndices.reserve(MAX_NUM_ONES_IN_INPUT);
   }
   void addFeature(uint16_t index) {
-    onIndices[length++] = static_cast<uint16_t>(index);
+    onIndices.push_back(static_cast<uint16_t>(index));
   }
   uint16_t operator[](size_t i) const {
     return onIndices[i];
   }
+  size_t size() const {
+    return onIndices.size();
+  }
   void flip_() {
-    for (size_t i = 0; i < length; i++) {
+    for (size_t i = 0; i < onIndices.size(); i++) {
       onIndices[i] = flip_feature_index(onIndices[i]);
     }
   }
   std::vector<uint16_t> to_vector() const {
-    return std::vector<uint16_t>(onIndices, onIndices + length);
+    return onIndices;
   }
 };
 

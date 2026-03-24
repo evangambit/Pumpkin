@@ -124,7 +124,7 @@ struct NnueEvaluator : public EvaluatorInterface {
     Vector<EMBEDDING_DIM, T> blackAcc;
     whiteAcc.setZero();
     blackAcc.setZero();
-    for (int i = 0; i < features.length; i++) {
+    for (int i = 0; i < features.size(); i++) {
       nnue_model->increment(&whiteAcc, &blackAcc, features[i]);
     }
     T score;

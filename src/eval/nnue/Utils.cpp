@@ -56,16 +56,5 @@ NnueFeatureBitmapType cp2nfbt(ChessEngine::ColoredPiece cp) {
   }
 }
 
-int16_t feature_index(NnueFeatureBitmapType feature, unsigned square) {
-  return feature * 64 + square;
-}
-
-int16_t flip_feature_index(int16_t index) {
-  // Flip the board position vertically (rank 8 <-> rank 1, etc.) and swap colors.
-  int16_t piece_type = (((index / 64) + (NF_COUNT / 2)) % NF_COUNT) * 64;
-  int16_t square = index % 64;
-  int16_t flipped_square = (7 - (square / 8)) * 8 + (square % 8);
-  return piece_type + flipped_square;
-}
 
 }
