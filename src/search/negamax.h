@@ -233,6 +233,14 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
     lsb_i_promise_board_is_not_empty(thread->position_.pieceBitboards_[moverKing])
   );
 
+  // Check if draw by repetition. is_3fold_repetition short-circuits when the
+  // last move was a capture or pawn move, so this is near-free in the common
+  // qsearch case (captures). It still correctly detects repetitions through
+  // check sequences.
+  if (thread->position_.is_3fold_repetition(plyFromRoot)) {
+    return NegamaxResult<TURN>(kNullMove, ColoredEvaluation<TURN>(kDraw).clamp_(alpha, beta));
+  }
+
   // Transposition Table probe
   TTEntry entry;
   uint64_t key = thread->position_.currentState_.hash;

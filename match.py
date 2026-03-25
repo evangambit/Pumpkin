@@ -296,15 +296,8 @@ def _play_single_game(engine_w, engine_b, tc, opening_fen=chess.STARTING_FEN):
   return result, game
 
 
-def play_game(e1, e2, tc, opening_fen=chess.STARTING_FEN):
-  """Play a game pair from the same position with colors swapped.
-
-  Returns (games, pair_score) where:
-    games: list of (result_str, pgn_game) for each game
-    pair_score: score from e1's perspective in [-0.5, 0.5]
-  """
-  result1, pgn1 = _play_single_game(e1, e2, tc, opening_fen)
-  result2, pgn2 = _play_single_game(e2, e1, tc, opening_fen)
+def play_pair_worker(engine1_path, engine2_path, options1, options2, tc, fen, matchup_key=None, timeout=30):
+  """Worker: spawn fresh engines for each game in a pair to avoid hash contamination."""
 
   def _score(result, e1_is_white):
     if result == "1-0":
@@ -313,20 +306,26 @@ def play_game(e1, e2, tc, opening_fen=chess.STARTING_FEN):
       return -0.5 if e1_is_white else 0.5
     return 0.0
 
-  pair_score = (_score(result1, True) + _score(result2, False)) / 2.0
-  # e1_was_white: True for game 1, False for game 2
-  return [(result1, pgn1, True), (result2, pgn2, False)], pair_score
-
-
-def play_pair_worker(engine1_path, engine2_path, options1, options2, tc, fen, matchup_key=None, timeout=30):
-  """Worker: spawn engines, play a pair, quit engines."""
+  # Game 1: engine1 as white, engine2 as black
   e1 = UCIEngine(engine1_path, options1, timeout=timeout)
   e2 = UCIEngine(engine2_path, options2, timeout=timeout)
   try:
-    games, pair_score = play_game(e1, e2, tc, fen)
+    result1, pgn1 = _play_single_game(e1, e2, tc, fen)
   finally:
     e1.quit()
     e2.quit()
+
+  # Game 2: engine2 as white, engine1 as black (fresh instances)
+  e1 = UCIEngine(engine1_path, options1, timeout=timeout)
+  e2 = UCIEngine(engine2_path, options2, timeout=timeout)
+  try:
+    result2, pgn2 = _play_single_game(e2, e1, tc, fen)
+  finally:
+    e1.quit()
+    e2.quit()
+
+  pair_score = (_score(result1, True) + _score(result2, False)) / 2.0
+  games = [(result1, pgn1, True), (result2, pgn2, False)]
   return games, pair_score, matchup_key
 
 
@@ -562,10 +561,9 @@ def main():
       total_completed = sum(s["completed"] for s in matchup_state.values())
       total_target = n_matchups * args.games
       print(
-        # f"  [{engine_names[i]} vs {engine_names[j]}] "
         f"  [engine {i} vs engine {j}] "
-        f"pair {pair_num:4}: ps={pair_score:+.2f}  "
-        f"[{st['completed']}/{args.games}]  +{w}-{l}={d}  p={p_value:.3f}  "
+        f"result={pair_score:+.2f}  "
+        f"[{st['completed']}/{args.games}]  +{w}-{l}={d}  {avg:.3f}±{stderr:.3f}  p={p_value:.3f}  "
         f"({total_completed}/{total_target} total)"
       )
 

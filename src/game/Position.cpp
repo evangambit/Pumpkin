@@ -236,6 +236,11 @@ void Position::assert_valid_state(const std::string& msg) const {
 
 bool Position::is_3fold_repetition(unsigned plyFromRoot) const {
   const size_t n = this->states_.size();
+  // If there are no previous states, or the last move was a capture or pawn move,
+  // the position cannot be a repetition.
+  if (n == 0 || this->history_[n - 1].capture != ColoredPiece::NO_COLORED_PIECE || this->history_[n - 1].piece == Piece::PAWN) {
+    return false;
+  }
   size_t counter = 1;
   for (size_t i = n - 1; i < n; i -= 1) {
     if (this->states_[i].hash == this->currentState_.hash) {

@@ -281,7 +281,8 @@ class StopTask : public Task {
 class NewGameTask : public Task {
  public:
   void start(UciEngineState *state) {
-    state->tt_->new_search();
+    // state->tt_->new_search();  // Faster, but less guaranteed to let us reproduce games.
+    state->tt_->clear();
   }
 };
 
@@ -305,7 +306,7 @@ class SetEvaluatorTask : public Task {
     } else if (evaluatorName == "byhand") {
       auto evaluator = std::make_shared<ByHand::ByHandEvaluator>();
       state->position.set_listener(evaluator);
-      std::cout << "into string evaluator set to byhand." << std::endl;
+      std::cout << "info string evaluator set to byhand." << std::endl;
       if (command.size() > 0) {
         std::string modelFile = command.at(0);
         command.pop_front();
