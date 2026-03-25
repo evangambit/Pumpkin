@@ -236,26 +236,27 @@ void Position::assert_valid_state(const std::string& msg) const {
 
 bool Position::is_3fold_repetition(unsigned plyFromRoot) const {
   const size_t n = this->states_.size();
-  // If there are no previous states, or the last move was a capture or pawn move,
-  // the position cannot be a repetition.
-  if (n == 0 || this->history_[n - 1].capture != ColoredPiece::NO_COLORED_PIECE || this->history_[n - 1].piece == Piece::PAWN) {
-    return false;
-  }
+  // Use halfMoveCounter to bound how far back we need to look (it resets on
+  // captures and pawn moves). Step by 2 since only same-side-to-move positions
+  // can possibly match (the hash includes the turn).
+  const int limit = std::min((int)currentState_.halfMoveCounter, (int)n);
+  if (limit < 4) return false;
+
   size_t counter = 1;
-  for (size_t i = n - 1; i < n; i -= 1) {
-    if (this->states_[i].hash == this->currentState_.hash) {
+  for (int i = 4; i <= limit; i += 2) {
+    if (this->states_[n - i].hash == this->currentState_.hash) {
       counter += 1;
       // If this position has been repeated once since the root then we consider
       // it a draw. This helps detect repetitions much more quickly during searches.
-      if (n - i <= plyFromRoot) {
+      if ((unsigned)i <= plyFromRoot) {
+        return true;
+      }
+      if (counter >= 3) {
         return true;
       }
     }
-    if (this->history_[i].capture != ColoredPiece::NO_COLORED_PIECE || this->history_[i].piece == Piece::PAWN) {
-      break;
-    }
   }
-  return counter >= 3;
+  return false;
 }
 bool Position::is_fifty_move_rule() const {
   return this->currentState_.halfMoveCounter >= 100;
