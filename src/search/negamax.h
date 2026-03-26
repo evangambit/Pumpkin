@@ -34,6 +34,7 @@
 // #define IS_PRINT_NODE (frame->hash == hash=17514753775184410351ULL && SEARCH_TYPE == SearchType::NORMAL_SEARCH)
 // #define IS_PRINT_NODE (plyFromRoot == 0 || frame->hash == 15932567610229845462ULL || frame->hash == 15427882709703266013ULL)
 // #define IS_PRINT_NODE (thread->position_.currentState_.hash == 412260009870427727ULL)
+// #define IS_PRINT_NODE (thread->frames_[0].hash == 383495967171122001ULL && plyFromRoot <= 2)
 #endif
 
 #ifndef IS_PRINT_QNODE

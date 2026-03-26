@@ -124,6 +124,17 @@ enum EF {
   TRAPPED_ROOK,
   TRAPPED_QUEEN,
 
+  CURRENT_KING_HOME_QUALITY,
+  KINGSIDE_HOME_QUALITY,
+  QUEENSIDE_HOME_QUALITY,
+  POTENTIAL_HOME_QUALITY,
+  PAWN_WEST_OF_KING,
+  PAWN_AHEAD_OF_KING,
+  PAWN_EAST_OF_KING,
+  PAWN_WEST_OF_KING_2,
+  PAWN_AHEAD_OF_KING_2,
+  PAWN_EAST_OF_KING_2,
+
   EF_COUNT
 };
 
@@ -206,6 +217,16 @@ inline std::string to_string(EF e) {
     case TRAPPED_BISHOP: return "TRAPPED_BISHOP";
     case TRAPPED_ROOK: return "TRAPPED_ROOK";
     case TRAPPED_QUEEN: return "TRAPPED_QUEEN";
+    case CURRENT_KING_HOME_QUALITY: return "CURRENT_KING_HOME_QUALITY";
+    case KINGSIDE_HOME_QUALITY: return "KINGSIDE_HOME_QUALITY";
+    case QUEENSIDE_HOME_QUALITY: return "QUEENSIDE_HOME_QUALITY";
+    case POTENTIAL_HOME_QUALITY: return "POTENTIAL_HOME_QUALITY";
+    case PAWN_WEST_OF_KING: return "PAWN_WEST_OF_KING";
+    case PAWN_AHEAD_OF_KING: return "PAWN_AHEAD_OF_KING";
+    case PAWN_EAST_OF_KING: return "PAWN_EAST_OF_KING";
+    case PAWN_WEST_OF_KING_2: return "PAWN_WEST_OF_KING_2";
+    case PAWN_AHEAD_OF_KING_2: return "PAWN_AHEAD_OF_KING_2";
+    case PAWN_EAST_OF_KING_2: return "PAWN_EAST_OF_KING_2";
     default: return "UNKNOWN";
   }
 }
@@ -233,6 +254,32 @@ static const Bitboard kBlackRanks[8] = {
 };
 
 const int kMaxEarliness = 18;
+
+template<Color KING_COLOR>
+inline int kingHomeQuality(const Position& pos, const SafeSquare kingSq) {
+  static constexpr Direction FORWARD = KING_COLOR == Color::WHITE ? Direction::NORTH : Direction::SOUTH;
+  static constexpr Direction BACKWARD = KING_COLOR == Color::WHITE ? Direction::SOUTH : Direction::NORTH;
+  static constexpr Direction FORWARD_EAST = KING_COLOR == Color::WHITE ? Direction::NORTH_EAST : Direction::SOUTH_EAST;
+  static constexpr Direction FORWARD_WEST = KING_COLOR == Color::WHITE ? Direction::NORTH_WEST : Direction::SOUTH_WEST;
+
+  const Bitboard ourKings = bb(kingSq);
+  const Bitboard ourPawns = pos.pieceBitboards_[coloredPiece<KING_COLOR, Piece::PAWN>()];
+  const Bitboard ourPawnsShiftedDown = shift<BACKWARD>(ourPawns);
+  
+  const int distFromBackRank = KING_COLOR == Color::WHITE ? 7 - kingSq / 8 : kingSq / 8;
+
+  // +2 for pawns immediately in front of the king, +1 for pawns one step further removed.
+  int pawnQuality = 0;
+  pawnQuality += (shift<FORWARD>(ourKings) & ourPawns) ? 2 : 0;
+  pawnQuality += (shift<FORWARD>(ourKings) & ourPawnsShiftedDown) ? 1 : 0;
+  pawnQuality += (shift<FORWARD_EAST>(ourKings) & ourPawns) ? 2 : 0;
+  pawnQuality += (shift<FORWARD_EAST>(ourKings) & ourPawnsShiftedDown) ? 1 : 0;
+  pawnQuality += (shift<FORWARD_WEST>(ourKings) & ourPawns) ? 2 : 0;
+  pawnQuality += (shift<FORWARD_WEST>(ourKings) & ourPawnsShiftedDown) ? 1 : 0;
+
+  int homeQuality = (pawnQuality * 4) / (distFromBackRank + 1);
+  return homeQuality;
+}
 
 template<Color US>
 void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
@@ -546,6 +593,64 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
   out[EF::TRAPPED_BISHOP] = (std::popcount(ourBishopTargets) == 0 && ((ourBishops & ourRanks[0]) != 0)) - (std::popcount(theirBishopTargets) == 0 && ((theirBishops & theirRanks[0]) != 0));
   out[EF::TRAPPED_ROOK] = (std::popcount(ourRookTargets) == 0 && ((ourRooks & ourRanks[0]) != 0)) - (std::popcount(theirRookTargets) == 0 && ((theirRooks & theirRanks[0]) != 0));
   out[EF::TRAPPED_QUEEN] = (std::popcount(ourQueenTargets) == 0 && ((ourQueens & ourRanks[0]) != 0)) - (std::popcount(theirQueenTargets) == 0 && ((theirQueens & theirRanks[0]) != 0));
+
+  const bool canWeCastleKingside = pos.currentState_.castlingRights & (
+    US == Color::WHITE ? ChessEngine::kCastlingRights_WhiteKing : ChessEngine::kCastlingRights_BlackKing
+  );
+  const bool canWeCastleQueenside = pos.currentState_.castlingRights & (
+    US == Color::WHITE ? ChessEngine::kCastlingRights_WhiteQueen : ChessEngine::kCastlingRights_BlackQueen
+  );
+  const bool canTheyCastleKingside = pos.currentState_.castlingRights & (
+    THEM == Color::WHITE ? ChessEngine::kCastlingRights_WhiteKing : ChessEngine::kCastlingRights_BlackKing
+  );
+  const bool canTheyCastleQueenside = pos.currentState_.castlingRights & (
+    THEM == Color::WHITE ? ChessEngine::kCastlingRights_WhiteQueen : ChessEngine::kCastlingRights_BlackQueen
+  );
+  const bool canWeCastle = canWeCastleKingside || canWeCastleQueenside;
+  const bool canTheyCastle = canTheyCastleKingside || canTheyCastleQueenside;
+
+  // G or H file, or can castle kingside.
+  const bool areWeOnKingside = (ourKingSq % 8) > 5 || canWeCastleKingside;
+  const bool areTheyOnKingside = (theirKingSq % 8) > 5 || canTheyCastleKingside;
+  // A, B, or C file, or can castle queenside.
+  const bool areWeOnQueenside = (ourKingSq % 8) <= 2 || canWeCastleQueenside;
+  const bool areTheyOnQueenside = (theirKingSq % 8) <= 2 || canTheyCastleQueenside;
+
+  const int ourCurrentHomeQuality = kingHomeQuality<US>(pos, ourKingSq);
+  const int ourKingsideHomeQuality = (
+    kingHomeQuality<US>(pos, US == Color::WHITE ? SafeSquare::SG1 : SafeSquare::SG8)
+  ) * areWeOnKingside;
+  const int ourQueensideHomeQuality = (
+    kingHomeQuality<US>(pos, US == Color::WHITE ? SafeSquare::SB1 : SafeSquare::SB8)
+  ) * areWeOnQueenside;
+  const int theirCurrentHomeQuality = kingHomeQuality<THEM>(pos, theirKingSq);
+  const int theirKingsideHomeQuality = (
+    kingHomeQuality<THEM>(pos, THEM == Color::WHITE ? SafeSquare::SG1 : SafeSquare::SG8)
+  ) * areTheyOnKingside;
+  const int theirQueensideHomeQuality = (
+    kingHomeQuality<THEM>(pos, THEM == Color::WHITE ? SafeSquare::SB1 : SafeSquare::SB8)
+  ) * areTheyOnQueenside;
+
+  const int ourPotentialHomeQuality = std::max(ourCurrentHomeQuality, std::max(ourKingsideHomeQuality, ourQueensideHomeQuality));
+  const int theirPotentialHomeQuality = std::max(theirCurrentHomeQuality, std::max(theirKingsideHomeQuality, theirQueensideHomeQuality));
+
+  out[EF::CURRENT_KING_HOME_QUALITY] = ourCurrentHomeQuality - theirCurrentHomeQuality;
+  out[EF::KINGSIDE_HOME_QUALITY] = ourKingsideHomeQuality - theirKingsideHomeQuality;
+  out[EF::QUEENSIDE_HOME_QUALITY] = ourQueensideHomeQuality - theirQueensideHomeQuality;
+  out[EF::POTENTIAL_HOME_QUALITY] = ourPotentialHomeQuality - theirPotentialHomeQuality;
+
+  out[EF::PAWN_WEST_OF_KING] = std::popcount(ourPawns & shift<FORWARD_WEST>(ourKings)) * (!canWeCastle) - std::popcount(theirPawns & shift<BACKWARD_WEST>(theirKings)) * (!canTheyCastle);
+  out[EF::PAWN_AHEAD_OF_KING] = std::popcount(ourPawns & shift<FORWARD>(ourKings)) * (!canWeCastle) - std::popcount(theirPawns & shift<BACKWARD>(theirKings)) * (!canTheyCastle);
+  out[EF::PAWN_EAST_OF_KING] = std::popcount(ourPawns & shift<FORWARD_EAST>(ourKings)) * (!canWeCastle) - std::popcount(theirPawns & shift<BACKWARD_EAST>(theirKings)) * (!canTheyCastle);
+  out[EF::PAWN_WEST_OF_KING_2] = std::popcount(
+    ourPawns & shift<FORWARD>(shift<FORWARD_WEST>(ourKings))) * (!canWeCastle) - std::popcount(
+      theirPawns & shift<BACKWARD>(shift<BACKWARD_WEST>(theirKings))) * (!canTheyCastle);
+  out[EF::PAWN_AHEAD_OF_KING_2] = std::popcount(
+    ourPawns & shift<FORWARD>(shift<FORWARD>(ourKings))) * (!canWeCastle) - std::popcount(
+      theirPawns & shift<BACKWARD>(shift<BACKWARD>(theirKings))) * (!canTheyCastle);
+  out[EF::PAWN_EAST_OF_KING_2] = std::popcount(
+    ourPawns & shift<FORWARD>(shift<FORWARD_EAST>(ourKings))) * (!canWeCastle) - std::popcount(
+      theirPawns & shift<BACKWARD>(shift<BACKWARD_EAST>(theirKings))) * (!canTheyCastle);
 }
 
 struct ByHandEvaluator : public EvaluatorInterface {

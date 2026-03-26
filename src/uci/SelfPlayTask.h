@@ -53,7 +53,9 @@ class SelfPlayTask : public Task {
   static void _threaded_selfplay(UciEngineState* state, bool* isRunning, uint64_t nodeLimit) {
     std::unordered_map<uint64_t, int> positionCounts;
 
-    while (true) {
+    const size_t kMaxGameLength = 200;
+
+    for (size_t i = 0; i < kMaxGameLength; ++i) {
       // Check for threefold repetition
       uint64_t currentHash = state->position.currentState_.hash;
       positionCounts[currentHash]++;

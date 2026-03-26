@@ -234,7 +234,7 @@ struct MoveTask : public Task {
 class PrintFenTask : public Task {
  public:
   void start(UciEngineState *state) {
-    std::cout << state->position.fen() << std::endl;
+    std::cout << state->position.fen() << "|" << state->position.currentState_.hash << std::endl;
   }
 };
 
