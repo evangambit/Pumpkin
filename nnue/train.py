@@ -78,10 +78,11 @@ if __name__ == "__main__":
   run_dir = os.path.join("runs", timestamp)
   os.makedirs(run_dir, exist_ok=True)
 
-  device = torch.device('mps' if torch.backends.mps.is_available() else 'cuda' if torch.cuda.is_available() else 'cpu')
+  # device = torch.device('mps' if torch.backends.mps.is_available() else 'cuda' if torch.cuda.is_available() else 'cpu')
+  device = torch.device('cpu')
 
   print("Loading dataset...")
-  dataset = ndata.NnueDataset(['../data/pos.10m.txt'])
+  dataset = ndata.NnueDataset(['../data/pos.20m.txt'])
 
   print(f'Dataset loaded with {len(dataset) * CHUNK_SIZE} rows.')
 

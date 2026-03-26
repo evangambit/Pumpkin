@@ -132,8 +132,8 @@ struct NnueEvaluator : public EvaluatorInterface {
     blackAcc.setZero();
     for (int i = 0; i < features.size(); i++) {
       int16_t pieceIdx = features[i];
-      size_t whiteIdx = whiteKingSquare * NNUE_INPUT_DIM + pieceIdx;
-      size_t blackIdx = vertically_flip_square(blackKingSquare) * NNUE_INPUT_DIM + flip_feature_index(pieceIdx);
+      size_t whiteIdx = kKingBuckets[whiteKingSquare] * NNUE_INPUT_DIM + pieceIdx;
+      size_t blackIdx = kKingBuckets[vertically_flip_square(blackKingSquare)] * NNUE_INPUT_DIM + flip_feature_index(pieceIdx);
       nnue_model->increment(&whiteAcc, whiteIdx, &blackAcc, blackIdx);
     }
     T score;
@@ -165,6 +165,8 @@ struct NnueEvaluator : public EvaluatorInterface {
     SafeSquare wk = lsb_i_promise_board_is_not_empty(pos.pieceBitboards_[ColoredPiece::WHITE_KING]);
     SafeSquare bk = lsb_i_promise_board_is_not_empty(pos.pieceBitboards_[ColoredPiece::BLACK_KING]);
     SafeSquare flipped_bk = vertically_flip_square(bk);
+    int wk_bucket = kKingBuckets[wk];
+    int bk_bucket = kKingBuckets[flipped_bk];
     bool whiteKingMoved = (wk != lastFrame->whiteKingSquare);
     bool blackKingMoved = (bk != lastFrame->blackKingSquare);
     currentFrame->whiteKingSquare = wk;
@@ -191,19 +193,19 @@ struct NnueEvaluator : public EvaluatorInterface {
         Bitboard added = newBitboard;
         while (added) {
           const SafeSquare sq = pop_lsb_i_promise_board_is_not_empty(added);
-          currentFrame->whiteAcc += nnue_model->embWeights[wk * NNUE_INPUT_DIM + feature_index(i, sq)];
+          currentFrame->whiteAcc += nnue_model->embWeights[wk_bucket * NNUE_INPUT_DIM + feature_index(i, sq)];
         }
       } else {
         // Incremental update for white side
         Bitboard removed = oldBitboard & ~newBitboard;
         while (removed) {
           const SafeSquare sq = pop_lsb_i_promise_board_is_not_empty(removed);
-          currentFrame->whiteAcc -= nnue_model->embWeights[wk * NNUE_INPUT_DIM + feature_index(i, sq)];
+          currentFrame->whiteAcc -= nnue_model->embWeights[wk_bucket * NNUE_INPUT_DIM + feature_index(i, sq)];
         }
         Bitboard added = newBitboard & ~oldBitboard;
         while (added) {
           const SafeSquare sq = pop_lsb_i_promise_board_is_not_empty(added);
-          currentFrame->whiteAcc += nnue_model->embWeights[wk * NNUE_INPUT_DIM + feature_index(i, sq)];
+          currentFrame->whiteAcc += nnue_model->embWeights[wk_bucket * NNUE_INPUT_DIM + feature_index(i, sq)];
         }
       }
 
@@ -212,19 +214,19 @@ struct NnueEvaluator : public EvaluatorInterface {
         Bitboard added = newBitboard;
         while (added) {
           const SafeSquare sq = pop_lsb_i_promise_board_is_not_empty(added);
-          currentFrame->blackAcc += nnue_model->embWeights[flipped_bk * NNUE_INPUT_DIM + flip_feature_index(feature_index(i, sq))];
+          currentFrame->blackAcc += nnue_model->embWeights[bk_bucket * NNUE_INPUT_DIM + flip_feature_index(feature_index(i, sq))];
         }
       } else {
         // Incremental update for black side
         Bitboard removed = oldBitboard & ~newBitboard;
         while (removed) {
           const SafeSquare sq = pop_lsb_i_promise_board_is_not_empty(removed);
-          currentFrame->blackAcc -= nnue_model->embWeights[flipped_bk * NNUE_INPUT_DIM + flip_feature_index(feature_index(i, sq))];
+          currentFrame->blackAcc -= nnue_model->embWeights[bk_bucket * NNUE_INPUT_DIM + flip_feature_index(feature_index(i, sq))];
         }
         Bitboard added = newBitboard & ~oldBitboard;
         while (added) {
           const SafeSquare sq = pop_lsb_i_promise_board_is_not_empty(added);
-          currentFrame->blackAcc += nnue_model->embWeights[flipped_bk * NNUE_INPUT_DIM + flip_feature_index(feature_index(i, sq))];
+          currentFrame->blackAcc += nnue_model->embWeights[bk_bucket * NNUE_INPUT_DIM + flip_feature_index(feature_index(i, sq))];
         }
       }
 

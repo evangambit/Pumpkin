@@ -24,7 +24,20 @@ static_assert(NF_COUNT / 2 == NF_BLACK_PAWN, "Half of the features must be for b
 
 
 constexpr int16_t NNUE_INPUT_DIM = NF_COUNT * 64;
-constexpr uint64_t MAX_FEATURE_INDEX = 64 * 64 * 10;
+
+constexpr int kKingBuckets[64] = {
+  0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0,
+  3, 3, 0, 0, 1, 0, 2, 2,
+};
+constexpr int kNumKingBuckets = 4;
+
+constexpr uint64_t MAX_FEATURE_INDEX = kNumKingBuckets * NNUE_INPUT_DIM;
 
 
 // It is impossible for a pawn to be on the first or last rank, so we can
