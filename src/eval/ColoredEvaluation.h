@@ -50,7 +50,14 @@ struct ColoredEvaluation {
     return *this;
   }
   friend std::ostream& operator<<(std::ostream& os, const ColoredEvaluation<TURN>& eval) {
-    os << (TURN == Color::WHITE ? eval.value : -eval.value);
+    const Evaluation rawEval = TURN == Color::WHITE ? eval.value : -eval.value;
+    if (rawEval <= kLongestForcedMate) {
+      os << rawEval << "(" << (kLongestForcedMate - rawEval) << "mate)";
+    } else if (rawEval >= -kLongestForcedMate) {
+      os << rawEval << "(" << (rawEval + kLongestForcedMate) << "mate)";
+    } else {
+      os << rawEval << "cp";
+    }
     return os;
   }
 };

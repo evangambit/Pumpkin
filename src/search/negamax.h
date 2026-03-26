@@ -393,7 +393,7 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
     )) {
       // Need this check because of en passant captures into check.
       // e.g. b5c6 in position 8/1k6/6R1/KPpr4/8/8/8/8 w - c6 0 62
-      if (IS_PRINT_NODE) {
+      if (IS_PRINT_QNODE) {
         std::cout << repeat("  ", plyFromRoot) << "Illegal move generated that leaves us in check: " << move->move.uci() << std::endl;
       }
       undo<TURN>(&thread->position_);
@@ -457,7 +457,7 @@ template<Color TURN, SearchType SEARCH_TYPE>
 NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> alpha, ColoredEvaluation<TURN> beta, int plyFromRoot, Frame *frame, std::atomic<bool> *stopThinking) {
   assert(thread->position_.turn_ == TURN);
   if (IS_PRINT_NODE) {
-    std::cout << repeat("  ", plyFromRoot) << "Negamax called: depth=" << depth << " alpha=" << alpha.value << " beta=" << beta.value << " plyFromRoot=" << plyFromRoot << " history " << thread->position_.history_ << std::endl;
+    std::cout << repeat("  ", plyFromRoot) << "Negamax called: depth=" << depth << " alpha=" << alpha << " beta=" << beta << " plyFromRoot=" << plyFromRoot << " history " << thread->position_.history_ << std::endl;
   }
   const ColoredEvaluation<TURN> originalAlpha = alpha;
   const uint64_t key = thread->position_.currentState_.hash;
@@ -465,14 +465,18 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   // Because of how we handle checkmate values, this condition is basically
   // how we avoid looking for mate-in-5 if we already found mate-in-4.
   if (alpha >= beta) {
-    if (IS_PRINT_QNODE) {
+    if (IS_PRINT_NODE) {
       std::cout << repeat("  ", plyFromRoot) << "Alpha-beta window is invalid (alpha >= beta). Returning beta." << std::endl;
     }
     return NegamaxResult<TURN>(kNullMove, beta);
   }
 
   if (frame - thread->frames_ >= kMaxPlyFromRoot - 1) {
-    return qsearch<TURN>(thread, alpha, beta, plyFromRoot, kMaxQuiescenceDepth, frame, stopThinking);
+    const auto r = qsearch<TURN>(thread, alpha, beta, plyFromRoot, kMaxQuiescenceDepth, frame, stopThinking);
+    if (IS_PRINT_NODE) {
+      std::cout << repeat("  ", plyFromRoot) << "Max ply from root reached, returning from quiescence search: " << r << std::endl;
+    }
+    return r;
   }
 
   if (depth == 0) {
@@ -535,7 +539,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
           alpha = ColoredEvaluation<TURN>(entry.value).clamp_(alpha, beta);
         } else if (entry.bound == BoundType::UPPER) {
           if (entry.value <= alpha.value) {
-          if (IS_PRINT_NODE) {
+            if (IS_PRINT_NODE) {
               std::cout << repeat("  ", plyFromRoot) << "Returning (TT Hit: UPPER)" << std::endl;
             }
             return NegamaxResult<TURN>(entry.bestMove, alpha);
@@ -622,11 +626,19 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   #if EVAL_AGNOSTIC == 0
   static constexpr int kRazoringMargin = 50;
   if (depth == 1 && frame->staticEval < alpha.value - kRazoringMargin) {
-    return qsearch<TURN>(thread, alpha, beta, plyFromRoot, 0, frame, stopThinking);
+    const auto r = qsearch<TURN>(thread, alpha, beta, plyFromRoot, 0, frame, stopThinking);
+    if (IS_PRINT_NODE) {
+      std::cout << repeat("  ", plyFromRoot) << "Razoring: static eval is much worse than alpha. Returning from quiescence search: " << r << std::endl;
+    }
+    return r;
   }
   // Reverse futility pruning (+29.6 ± 2.7)
   if (depth == 1 && frame->staticEval > beta.value + kRazoringMargin) {
-    return NegamaxResult<TURN>(kNullMove, beta);
+    const auto r = NegamaxResult<TURN>(kNullMove, beta);
+    if (IS_PRINT_NODE) {
+      std::cout << repeat("  ", plyFromRoot) << "Reverse futility pruning: static eval is much better than beta. Returning beta." << std::endl;
+    }
+    return r;
   }
   #endif
 
@@ -647,6 +659,9 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     ).evaluation);
     undo_nullmove<TURN>(&thread->position_);
     if (r >= beta) {
+      if (IS_PRINT_NODE) {
+        std::cout << repeat("  ", plyFromRoot) << "Null move pruning: null move search returned " << r.value << " which is >= beta. Returning beta." << std::endl;
+      }
       return NegamaxResult<TURN>(kNullMove, beta);
     }
   }
@@ -920,6 +935,9 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     // Search was stopped externally. We cannot trust the result
     // of our for loop above, so we return early to avoid writing
     // an inaccurate result to the transposition table.
+    if (IS_PRINT_NODE) {
+      std::cout << repeat("  ", plyFromRoot) << "Returning (Search stopped externally)." << std::endl;
+    }
     return bestResult;
   }
 
