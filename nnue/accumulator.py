@@ -12,6 +12,9 @@ from features import kRoughEstimateOfNumberOfOnesInInput
 
 import torch.nn.functional as F
 
+# If you change this, make sure to also change
+# src/eval/nnue/NnueFeatureBitmapType.h and
+# re-train the model.
 kKingBuckets = torch.tensor([
   0, 0, 0, 0, 0, 0, 0, 0,
   0, 0, 0, 0, 0, 0, 0, 0,
@@ -23,6 +26,7 @@ kKingBuckets = torch.tensor([
   3, 3, 0, 0, 1, 0, 2, 2,
 ], dtype=torch.int64)
 kNumKingBuckets = kKingBuckets.max().item() + 1
+# </end of things that need to be changed if kKingBuckets is changed>
 
 class Emb(nn.Module):
   def __init__(self, dout):
