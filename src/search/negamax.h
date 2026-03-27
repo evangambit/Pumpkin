@@ -851,7 +851,6 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
       #ifndef NO_LMR
         int lateMoveReduction = childDepth >= 3 && index >= 3;
         lateMoveReduction += index > 8 ? 1 : 0;
-        lateMoveReduction -= areWeInCheck ? 1 : 0;
         lateMoveReduction -= isGoodCapture ? 1 : 0;
         lateMoveReduction -= isSafePassedPawnPush ? 1 : 0;
         const int reducedChildDepth = std::max(childDepth - std::max(0, lateMoveReduction), 0);
