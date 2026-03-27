@@ -31,6 +31,7 @@
 
 #ifndef IS_PRINT_NODE
 #define IS_PRINT_NODE 0
+// #define IS_PRINT_NODE (thread->position_.currentState_.hash == 8614104399537843458ULL || thread->position_.currentState_.hash == 14669261985347518465ULL)
 // #define IS_PRINT_NODE (frame->hash == hash=17514753775184410351ULL && SEARCH_TYPE == SearchType::NORMAL_SEARCH)
 // #define IS_PRINT_NODE (plyFromRoot == 0 || frame->hash == 15932567610229845462ULL || frame->hash == 15427882709703266013ULL)
 // #define IS_PRINT_NODE (thread->position_.currentState_.hash == 412260009870427727ULL)
@@ -205,6 +206,7 @@ ColoredEvaluation<opposite_color<TURN>()> to_child_eval(ColoredEvaluation<TURN> 
 
 template<Color TURN>
 NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, ColoredEvaluation<TURN> beta, int plyFromRoot, int quiescenceDepth, Frame *frame, std::atomic<bool> *stopThinking) {
+  frame->hash = thread->position_.currentState_.hash;
   if (IS_PRINT_QNODE) {
     std::cout << repeat("  ", plyFromRoot) << "Quiescence search called: alpha=" << alpha.value << " beta=" << beta.value << " plyFromRoot=" << plyFromRoot << " quiescenceDepth=" << quiescenceDepth << " history" << thread->position_.history_ << std::endl;
   }
@@ -227,7 +229,6 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
     return NegamaxResult<TURN>(kNullMove, evaluate<TURN>(thread->position_.evaluator_, thread->position_, threats, plyFromRoot, alpha, beta).clamp_(alpha, beta));
   }
 
-  frame->hash = thread->position_.currentState_.hash;
   constexpr ColoredPiece moverKing = coloredPiece<TURN, Piece::KING>();
   frame->inCheck = can_enemy_attack<TURN>(
     thread->position_,
@@ -456,11 +457,12 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
 template<Color TURN, SearchType SEARCH_TYPE>
 NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> alpha, ColoredEvaluation<TURN> beta, int plyFromRoot, Frame *frame, std::atomic<bool> *stopThinking) {
   assert(thread->position_.turn_ == TURN);
+  const uint64_t key = thread->position_.currentState_.hash;
+  frame->hash = key;
   if (IS_PRINT_NODE) {
     std::cout << repeat("  ", plyFromRoot) << "Negamax called: depth=" << depth << " alpha=" << alpha << " beta=" << beta << " plyFromRoot=" << plyFromRoot << " history " << thread->position_.history_ << std::endl;
   }
   const ColoredEvaluation<TURN> originalAlpha = alpha;
-  const uint64_t key = thread->position_.currentState_.hash;
 
   // Because of how we handle checkmate values, this condition is basically
   // how we avoid looking for mate-in-5 if we already found mate-in-4.
@@ -490,7 +492,6 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   // TODO: Check if any move leads to a draw by repetition.
   // If so, set alpha to kDraw.
 
-  frame->hash = key;
   constexpr ColoredPiece moverKing = coloredPiece<TURN, Piece::KING>();
   if (SEARCH_TYPE == SearchType::ROOT) {
     // Normally our parent computes frame->inCheck and passes it down to us,
@@ -833,7 +834,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     // }
 
     if (IS_PRINT_NODE) {
-      std::cout << repeat("  ", plyFromRoot) << "Recursing with childDepth=" << childDepth << " (hash=" << thread->position_.currentState_.hash << "; move=" << move->move.uci() << ")" << std::endl;
+      std::cout << repeat("  ", plyFromRoot) << "Recursing with childDepth=" << childDepth << " (hash=" << thread->position_.currentState_.hash << "; move=" << move->move.uci() << "; alpha=" << alpha.value << "; beta=" << beta.value << ")" << std::endl;
     }
 
     const int index = move - moves;
@@ -842,7 +843,11 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
       (move->capture == ColoredPiece::NO_COLORED_PIECE) && (move->move.moveType != MoveType::PROMOTION)
     );
 
-    if (move->move != moves[0].move && (SEARCH_TYPE != SearchType::ROOT || thread->multiPV_ == 1)) {
+    // TODO: we can probably remove the "not checkmating" check here, but we need to be careful since null window bounds,
+    // as they are currently written, can be equal! If you want to remove the "not checkmating" condition, you should test
+    // with
+    // $ ./uci "position fen r5k1/3Q1p2/2p3pp/4b3/p7/P1P1q3/1rBR2bP/1K1R4 w - - 0 26 moves b1a1 e3c3" "go depth 4" "lazyquit"
+    if (move->move != moves[0].move && (SEARCH_TYPE != SearchType::ROOT || thread->multiPV_ == 1) && alpha.value > kLongestForcedMate && alpha.value < -kLongestForcedMate) {
       #ifndef NO_LMR
         int lateMoveReduction = childDepth >= 3 && index >= 3;
         lateMoveReduction += index > 8 ? 1 : 0;
