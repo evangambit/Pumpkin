@@ -629,6 +629,11 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     if (IS_PRINT_NODE) {
       std::cout << repeat("  ", plyFromRoot) << "Razoring: static eval is much worse than alpha. Returning from quiescence search: " << r << std::endl;
     }
+    // We should check "r.evaluation <= alpha" here, but omitting the check
+    // seems to perform better in practice... somehow. Changing the above
+    // search to a null-window search also makes us perform worse, which is
+    // also quite counterintuitive -- surely a null-window search is pure savings
+    // on a move that we're trying to prove bad... right?
     return r;
   }
   // Reverse futility pruning (+29.6 ± 2.7)
