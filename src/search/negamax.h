@@ -659,7 +659,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     const int reducedDepth = std::max(0, depth - reduction);
     make_nullmove<TURN>(&thread->position_);
     ColoredEvaluation<TURN> r = to_parent_eval(negamax<opposite_color<TURN>(), SearchType::NULL_WINDOW_SEARCH>(
-      thread, reducedDepth, to_child_eval(beta), to_child_eval(beta - 1), plyFromRoot + 1, frame, stopThinking
+      thread, reducedDepth, to_child_eval(beta), to_child_eval(beta - 1), plyFromRoot + 1, frame + 1, stopThinking
     ).evaluation);
     undo_nullmove<TURN>(&thread->position_);
     if (r >= beta) {
@@ -712,7 +712,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     , kMoveOrderingPieceValue[move->piece]);
 
     // Prioritize the killer move(s) as equivalent to a non-sacking capture.
-    move->score += thread->frames_[plyFromRoot].killers.contains(move->move) ? 8000 : 0;
+    move->score += frame->killers.contains(move->move) ? 8000 : 0;
 
     if (move->capture == ColoredPiece::NO_COLORED_PIECE) {
       move->score += thread->quietHistory_[move->piece][move->move.to] / 64;
