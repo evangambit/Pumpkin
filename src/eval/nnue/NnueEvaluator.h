@@ -67,7 +67,7 @@ struct NnueEvaluator : public EvaluatorInterface {
 
   // Board listener
   void empty() override {
-    for (int i = 0; i < kMaxPlyFromRoot + 1; i++) {
+    for (unsigned i = 0; i < kMaxPlyFromRoot + 1; i++) {
       frames[i].pieceBitboards.fill(kEmptyBitboard);
       frames[i].whiteAcc.setZero();
       frames[i].blackAcc.setZero();

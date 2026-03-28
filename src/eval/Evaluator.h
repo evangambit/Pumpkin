@@ -22,7 +22,7 @@ struct SimpleEvaluator : public EvaluatorInterface {
       }
     }
     ColoredEvaluation<Color::WHITE> totalEval(0);
-    for (int i = 0; i < kNumColoredPieces; ++i) {
+    for (unsigned i = 0; i < kNumColoredPieces; ++i) {
       totalEval = ColoredEvaluation<Color::WHITE>(totalEval.value + kPieceValues[i].value * std::popcount(pos.pieceBitboards_[ColoredPiece(i)]));
     }
     return totalEval;

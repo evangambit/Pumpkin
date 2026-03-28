@@ -118,7 +118,7 @@ SearchResult<TURN> search(Thread* thread, std::atomic<bool> *stopThinking, std::
   if (onDepthCompleted != nullptr) {
     onDepthCompleted(1, searchResult);
   }
-  for (int i = 2; i <= std::min(thread->depth_, kMaxSearchDepth); ++i) {
+  for (unsigned i = 2; i <= std::min(thread->depth_, kMaxSearchDepth); ++i) {
     if (stopThinking->load()) {
       break;
     }
