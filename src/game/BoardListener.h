@@ -19,7 +19,7 @@
 
 namespace ChessEngine {
 
-struct Position;
+class Position;
 
 struct EvaluatorInterface {
   virtual ~EvaluatorInterface() = default;

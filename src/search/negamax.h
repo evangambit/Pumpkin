@@ -112,7 +112,7 @@ struct Thread {
     uint64_t multiPV,
     const std::unordered_set<Move>& permittedMoves,
     TranspositionTable* tt
-  ) : id_(id), position_(pos), permittedMoves_(permittedMoves), multiPV_(multiPV), tt_(tt) {
+  ) : id_(id), multiPV_(multiPV), position_(pos), permittedMoves_(permittedMoves), tt_(tt) {
     std::memset(buffer, 0, sizeof(buffer));
     std::memset(frames_, 0, sizeof(frames_));
     std::memset(quietHistory_, 0, sizeof(quietHistory_));
@@ -328,8 +328,6 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
     assert(move->move.from < kNumSquares);
     assert(move->move.to < kNumSquares);
     assert(move->piece >= Piece::NO_PIECE && move->piece < Piece::NUM_PIECES);
-    Piece capturedPiece = cp2p(thread->position_.tiles_[move->move.to]);
-    assert(capturedPiece < Piece::NUM_PIECES);
     assert(cp2p(move->capture) < Piece::NUM_PIECES);
 
     move->score = kQMoveOrderingPieceValue[cp2p(move->capture)];

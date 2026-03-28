@@ -491,9 +491,6 @@ struct QstEvaluator : public EvaluatorInterface {
   template<Color US>
   ColoredEvaluation<US> evaluate(const Position& pos, const Threats& threats) {
     constexpr Color THEM = opposite_color<US>();
-    constexpr Direction kForward = US == Color::WHITE ? Direction::NORTH : Direction::SOUTH;
-    constexpr Direction kBackward = US == Color::WHITE ? Direction::SOUTH : Direction::NORTH;
-
     const OrientedBitboard ourPawns = orient<US>(pos.pieceBitboards_[coloredPiece<US, Piece::PAWN>()]);
     const OrientedBitboard theirPawns = orient<US>(pos.pieceBitboards_[coloredPiece<THEM, Piece::PAWN>()]);
 

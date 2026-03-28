@@ -43,7 +43,7 @@ struct PositionState {
 };
 
 std::ostream& operator<<(std::ostream& stream, const PositionState& state);
-struct Position;
+class Position;
 std::ostream& operator<<(std::ostream& stream, const Position& pos);
 
 void print_zorbrist_debug(uint64_t actual, uint64_t expected);
@@ -182,19 +182,6 @@ extern Position *gDebugPos;
 std::ostream& operator<<(std::ostream& stream, const Position& pos);
 
 namespace {
-
-// Maps (0 -> 0), (7 -> 1), (56 -> 2), and (63 -> 3)
-uint8_t four_corners_to_byte(Bitboard b) {
-  constexpr Bitboard mask = bb(SafeSquare::SA1) | bb(SafeSquare::SA8) | bb(SafeSquare::SH1) | bb(SafeSquare::SH8);
-  return ((b & mask) * 0x1040000000000041) >> 60;
-}
-
-// Maps (4 -> {0, 1}) and (60 -> {3, 4})
-uint8_t king_starts_to_byte(Bitboard b) {
-  constexpr Bitboard mask = bb(SafeSquare::SE1) | bb(SafeSquare::SE8);
-  constexpr Bitboard magic = bb(SafeSquare(6)) | bb(SafeSquare(7)) | bb(SafeSquare(60)) | bb(SafeSquare(61));
-  return (((b & mask) >> 4) * magic) >> 60;
-}
 
 constexpr Bitboard kKingStartingPosition = bb(SafeSquare::SE1) | bb(SafeSquare::SE8);
 

@@ -42,6 +42,8 @@ class Task {
  public:
   virtual void start(UciEngineState *state) = 0;
 
+  virtual ~Task() = default;
+
   virtual bool is_running() {
     return false;
   }

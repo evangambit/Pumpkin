@@ -24,11 +24,6 @@ void create_threats(const TypeSafeArray<Bitboard, kNumColoredPieces, ColoredPiec
 
   const Bitboard everyone = colorBitboards[Color::WHITE] | colorBitboards[Color::BLACK];
 
-  const Bitboard ourRooklikePieces = pieceBitboards[coloredPiece<Color::WHITE, Piece::ROOK>()] | pieceBitboards[coloredPiece<Color::WHITE, Piece::QUEEN>()];
-  const Bitboard theirRooklikePieces = pieceBitboards[coloredPiece<Color::BLACK, Piece::ROOK>()] | pieceBitboards[coloredPiece<Color::BLACK, Piece::QUEEN>()];
-  const Bitboard ourBishoplikePieces = pieceBitboards[coloredPiece<Color::WHITE, Piece::BISHOP>()] | pieceBitboards[coloredPiece<Color::WHITE, Piece::QUEEN>()];
-  const Bitboard theirBishoplikePieces = pieceBitboards[coloredPiece<Color::BLACK, Piece::BISHOP>()] | pieceBitboards[coloredPiece<Color::BLACK, Piece::QUEEN>()];
-
   Bitboard ourPawn1 = shift<kForwardRight>(pieceBitboards[coloredPiece<Color::WHITE, Piece::PAWN>()]);
   Bitboard ourPawn2 = shift<kForwardLeft>(pieceBitboards[coloredPiece<Color::WHITE, Piece::PAWN>()]);
   Bitboard theirPawn1 = shift<kBackwardRight>(pieceBitboards[coloredPiece<Color::BLACK, Piece::PAWN>()]);

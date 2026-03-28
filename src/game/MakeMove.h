@@ -5,6 +5,12 @@
 
 namespace ChessEngine {
 
+// Maps (0 -> 0), (7 -> 1), (56 -> 2), and (63 -> 3)
+inline uint8_t four_corners_to_byte(Bitboard b) {
+  constexpr Bitboard mask = bb(SafeSquare::SA1) | bb(SafeSquare::SA8) | bb(SafeSquare::SH1) | bb(SafeSquare::SH8);
+  return ((b & mask) * 0x1040000000000041) >> 60;
+}
+
 template<Color TURN>
 void make_nullmove(Position *pos) {
   pos->states_.push_back(pos->currentState_);

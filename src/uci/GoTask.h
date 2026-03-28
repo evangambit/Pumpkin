@@ -119,7 +119,7 @@ GoCommand make_go_command(std::deque<std::string> *command, Position *pos) {
 
 class GoTask : public Task {
  public:
-  GoTask(std::deque<std::string> command) : command(command), isRunning(false), thread(nullptr) {}
+  GoTask(std::deque<std::string> command) : command(command), thread(nullptr), isRunning(false) {}
   void start(UciEngineState *state) override {
     assert(!isRunning);
     isRunning = true;

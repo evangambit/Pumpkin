@@ -308,7 +308,6 @@ ExtMove *compute_bishop_like_moves(const Position& pos, ExtMove *moves, Bitboard
   constexpr ColoredPiece myQueenPiece = (US == Color::WHITE ? ColoredPiece::WHITE_QUEEN : ColoredPiece::BLACK_QUEEN);
   const Bitboard friends = pos.colorBitboards_[US];
   const Bitboard enemies = pos.colorBitboards_[opposite_color<US>()];
-  const Bitboard everyone = friends | enemies;
   const Bitboard myQueens = pos.pieceBitboards_[myQueenPiece];
   Bitboard bishopLikePieces = pos.pieceBitboards_[myBishopPiece] | myQueens;
 
