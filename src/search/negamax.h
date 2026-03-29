@@ -697,7 +697,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     move->score = 0;
 
     // Prioritize captures after the TT move.
-    move->score += move->capture != ColoredPiece::NO_COLORED_PIECE ? 8000 : -8000;
+    move->score += move->capture != ColoredPiece::NO_COLORED_PIECE ? 8000 : 0;
 
     // Bonus for moves that give check.
     move->score += checkMap.data[move->piece] & bb(move->move.to) ? 100 : 0;
