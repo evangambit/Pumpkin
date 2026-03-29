@@ -725,11 +725,11 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
       ((threats.badForOur<TURN>(move->piece) & bb(move->move.to)) > 0)
       &&
       move->capture == ColoredPiece::NO_COLORED_PIECE
-    , 200);
+    , kMoveOrderingPieceValue[move->piece]);
     // Bonus for moving a piece that is under attack.
     move->score += value_or_zero(
       ((threats.badForOur<TURN>(move->piece) & bb(move->move.from)) > 0)
-    , 50);
+    , kMoveOrderingPieceValue[move->piece] / 2);
 
     // Prioritize moves that caused a beta cutoff in a similar position, in response to a similar move.
     move->score += frame->responseTo[move->piece][lastMove.to] == move->move ? 20 : 0;
