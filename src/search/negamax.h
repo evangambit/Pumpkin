@@ -372,12 +372,12 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
     make_move<TURN>(&thread->position_, move->move);
 
     // Move generation can sometimes generate illegal en passant moves.
+    const bool moveGivesCheck = can_enemy_attack<TURN>(
+      thread->position_,
+      lsb_i_promise_board_is_not_empty(thread->position_.pieceBitboards_[moverKing])
+    );
     if (move->move.moveType == MoveType::EN_PASSANT) {
-      const bool inCheck = can_enemy_attack<TURN>(
-        thread->position_,
-        lsb_i_promise_board_is_not_empty(thread->position_.pieceBitboards_[moverKing])
-      );
-      if (inCheck) {
+      if (moveGivesCheck) {
         if (IS_PRINT_QNODE) {
           std::cout << repeat("  ", plyFromRoot) << "Illegal en passant move generated: " << move->move.uci() << std::endl;
         }
@@ -385,6 +385,7 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
         continue;
       }
     }
+    (frame + 1)->inCheck = moveGivesCheck;
 
     if (can_enemy_attack<TURN>(
       thread->position_,
