@@ -82,13 +82,14 @@ if __name__ == "__main__":
   device = torch.device('cpu')
 
   print("Loading dataset...")
-  dataset = ndata.NnueDataset(['../data/pos.20m.txt'])
+  dataset = ndata.NnueDataset(['../data/pos.100m.txt'])
 
   print(f'Dataset loaded with {len(dataset) * CHUNK_SIZE} rows.')
 
   dataloader = tdata.DataLoader(dataset, batch_size=BATCH_SIZE//CHUNK_SIZE, shuffle=False, num_workers=0, pin_memory=True, drop_last=True, collate_fn=collate_fn)
 
   print("Creating model...")
+  # loss: 0.0142, mse: 0.3296, penalty: 0.0075
   model = NNUE(hidden_sizes=[256, 16], output_size=1).to(device)
 
   print("Creating optimizer...")
