@@ -30,6 +30,9 @@ struct ChunkedDataset {
         std::vector<int8_t> all_values;
         std::vector<float> all_evals;
         std::vector<int8_t> all_turns;
+        std::vector<int16_t> pst_values;
+        std::vector<int16_t> pst_signs;
+        std::vector<int16_t> pst_lengths;
         
         int lines_read = 0;
         std::string line;
@@ -70,6 +73,32 @@ struct ChunkedDataset {
             }
             all_evals.push_back(eval);
             all_turns.push_back(static_cast<int8_t>(pos.turn_));
+
+            const int whiteOffset = pos.turn_ == Color::WHITE ? 0 : 6;
+            const int blackOffset = pos.turn_ == Color::BLACK ? 0 : 6;
+            size_t bag_start = pst_values.size();
+            for (Piece i = Piece::PAWN; i <= Piece::KING; i = Piece(i + 1)) {
+                const Bitboard white = pos.pieceBitboards_[coloredPiece(Color::WHITE, i)];
+                const Bitboard black = pos.pieceBitboards_[coloredPiece(Color::BLACK, i)];
+                // We can save a little bit of compute while training by dropping pieces
+                // that have corresponding enemies on the board (e.g. a white knight on F3
+                // and a black knight on F6). To do this symmetrically, we vertical-flip black.
+                const Bitboard flippedBlack = flip_vertically(black);
+                const Bitboard overlap = white & flippedBlack;
+                Bitboard onlyWhite = white ^ overlap;
+                Bitboard onlyBlackFlipped = flippedBlack ^ overlap;
+
+                while (onlyWhite) {
+                    int sq = pop_lsb_i_promise_board_is_not_empty(onlyWhite);
+                    pst_values.push_back((i - Piece::PAWN + whiteOffset) * 64 + sq);
+                }
+                while (onlyBlackFlipped) {
+                    int sq = pop_lsb_i_promise_board_is_not_empty(onlyBlackFlipped);
+                    pst_values.push_back((i - Piece::PAWN + blackOffset) * 64 + sq);
+                }
+            }
+            pst_lengths.push_back(pst_values.size() - bag_start);
+
             lines_read++;
         }
 
@@ -86,7 +115,12 @@ struct ChunkedDataset {
         auto turn_tensor = torch::empty({(long)all_turns.size()}, torch::TensorOptions().dtype(torch::kInt8));
         std::memcpy(turn_tensor.data_ptr<int8_t>(), all_turns.data(), all_turns.size() * sizeof(int8_t));
 
-        return {values_tensor, evals_tensor, turn_tensor};
+        auto pst_values_tensor = torch::empty({(long)pst_values.size()}, torch::TensorOptions().dtype(torch::kInt16));
+        std::memcpy(pst_values_tensor.data_ptr<int16_t>(), pst_values.data(), pst_values.size() * sizeof(int16_t));
+        auto pst_lengths_tensor = torch::empty({(long)pst_lengths.size()}, torch::TensorOptions().dtype(torch::kInt16));
+        std::memcpy(pst_lengths_tensor.data_ptr<int16_t>(), pst_lengths.data(), pst_lengths.size() * sizeof(int16_t));
+
+        return {values_tensor, evals_tensor, turn_tensor, pst_values_tensor, pst_lengths_tensor};
     }
 };
 

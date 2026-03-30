@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+from torch.nn import functional as F
 import numpy as np
 import os
 import datetime
@@ -28,11 +29,13 @@ def save_tensor(tensor: torch.Tensor, name: str, out: io.BufferedWriter):
   out.write(tensor.tobytes())
 
 def collate_fn(rows):
-    values, labels, turns = zip(*rows)
+    values, labels, turns, pst_values, pst_lengths = zip(*rows)
     values = torch.cat(values, dim=0)
     labels = torch.cat(labels, dim=0)
     turns = torch.cat(turns, dim=0)
-    return values, labels, turns
+    pst_values = torch.cat(pst_values, dim=0)
+    pst_lengths = torch.cat(pst_lengths, dim=0)
+    return values, labels, turns, pst_values, pst_lengths
 
 class CosineAnnealingWithWarmup:
     def __init__(self, optimizer, max_lr=3e-3, min_lr=1e-5, warmup_steps=100, total_steps=None):
@@ -61,10 +64,30 @@ class MyModel(nn.Module):
         self.linear = nn.Linear(num_features, 2)
         nn.init.normal_(self.linear.weight, 0, 0.01)
         nn.init.constant_(self.linear.bias, 0.0)
+        self._pst = nn.Parameter(torch.zeros(6 * 64, 2), requires_grad=True)
+    
+    @property
+    def pst(self):
+        # We subtract the mean so that the PST values are centered around 0.
+        # This prevents colinearities with the linear layer.
+        r = self._pst.view(6, 64, 2)
+        r = r - r.mean(dim=1, keepdim=True)
+        return r.reshape(-1, 2)
 
-    def forward(self, x, earliness):
-        x = self.linear(x)
-        return x[:,0] * (1.0 - earliness) + x[:,1] * earliness
+    def forward(self, x, earliness, pst_values, pst_lengths):
+        feature_hat = self.linear(x)
+        pst_values = pst_values.to(torch.int64)
+        pst_lengths = pst_lengths.to(torch.int64)
+        offsets = pst_lengths.cumsum(0) - pst_lengths
+        pst = self.pst
+        pst_hat = F.embedding_bag(
+            pst_values, 
+            torch.cat([pst, -pst], dim=0),
+            offsets=offsets,
+            mode='sum'
+        )
+        z = feature_hat + pst_hat
+        return z[:,0] * (1.0 - earliness) + z[:,1] * earliness
 
 if __name__ == "__main__":
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -74,7 +97,7 @@ if __name__ == "__main__":
     device = torch.device('mps' if torch.backends.mps.is_available() else 'cuda' if torch.cuda.is_available() else 'cpu')
 
     print("Loading dataset...")
-    dataset = ndata.ByHandDataset(['../data/pos.20m.txt'])
+    dataset = ndata.ByHandDataset(['../data/pos.100m.txt'])
     
     print(f'Dataset chunk size: {CHUNK_SIZE}. Total length calculated dynamically.')
 
@@ -82,7 +105,7 @@ if __name__ == "__main__":
 
     # Fetch one batch to get the number of features
     first_batch = next(iter(dataloader))
-    values, labels, turns = first_batch
+    values, labels, turns, pst_values, pst_lengths = first_batch
     num_features = values.shape[1]
     print(f"Number of features: {num_features}")
 
@@ -119,7 +142,7 @@ if __name__ == "__main__":
             opt.zero_grad()
             scheduler.step()
             
-            values, labels, turns = [x.to(device) for x in batch]
+            values, labels, turns, pst_values, pst_lengths = [x.to(device) for x in batch]
             values = values.to(torch.float32)
 
             earliness = values[:,0]
@@ -133,7 +156,7 @@ if __name__ == "__main__":
             
             earliness = earliness.clip(0, 18) / 18
             
-            output = model(values.float(), earliness)
+            output = model(values.float(), earliness, pst_values, pst_lengths)
             
             # Use Sigmoid to match eval output
             output_sig = torch.sigmoid(output)
@@ -168,6 +191,8 @@ if __name__ == "__main__":
     with open(os.path.join(run_dir, 'model.bin'), 'wb') as f:
         save_tensor(model.linear.weight.data, 'weights', f)
         save_tensor(model.linear.bias.data, 'bias', f)
+        save_tensor(model.pst[:,0].reshape(6, 64), 'pst_late', f)
+        save_tensor(model.pst[:,1].reshape(6, 64), 'pst_early', f)
 
     # Print out learned feature weights
     print("\nLearned Weights:")
@@ -177,14 +202,19 @@ if __name__ == "__main__":
     for i, w in enumerate(weights.T):
         print(f"{dataset.feature_name(i)}: {np.round(w * scale)}")
     print(f"Bias: {np.round(bias * scale)}")
+    for name, pst in [("early", model.pst[:,1]), ("late", model.pst[:,0])]:
+        print(f"\n{name} PST:")
+        pst = pst.view(6, 8, 8)
+        for i in range(6):
+            print(f"{dataset.feature_name(i + 1)}\n{np.round(pst[i].detach().cpu().numpy() * scale)}")
 
     dataset = ndata.ByHandDataset(['../data/pos.10m-test.txt'])
     dataloader = tdata.DataLoader(dataset, batch_size=BATCH_SIZE//CHUNK_SIZE, shuffle=False, num_workers=0, pin_memory=True, drop_last=True, collate_fn=collate_fn)
     for batch in dataloader:
-        values, labels, turns = [x.to(device) for x in batch]
+        values, labels, turns, pst_values, pst_lengths = [x.to(device) for x in batch]
         values = values.to(torch.float32)
         earliness = values[:,0].clip(0, 18) / 18
-        output = model(values.float(), earliness)
+        output = model(values.float(), earliness, pst_values, pst_lengths)
         output_sig = torch.sigmoid(output)
         label_sig = torch.sigmoid(labels * LABEL_SCALE)
         print("Output:", output_sig[:10].cpu().detach().numpy())

@@ -380,7 +380,7 @@ def main():
             help="Number of game pairs to play in parallel (default: 1)")
   parser.add_argument("--alpha", type=float, default=0.01,
             help="Significance level for per-matchup early stopping (default: 0.01, 0 to disable)")
-  parser.add_argument("--min_num_games", type=int, default=100,
+  parser.add_argument("--min_num_games", type=int, default=20,
             help="Minimum game pairs per matchup before early stopping can occur (default: 100)")
   parser.add_argument("--option", action="append", default=[],
             help="UCI option for engine N: 'N:key=value' (1-indexed, repeatable)")

@@ -11,6 +11,7 @@
 #include "../../game/Geometry.h"
 #include "../../game/movegen/bishops.h"
 #include "../Evaluator.h"
+#include "../pst/PieceSquareEvaluator.h"
 #include "../ColoredEvaluation.h"
 #include "../pst/PieceSquareEvaluator.h"
 #include "../nnue/Nnue.h"
@@ -576,13 +577,13 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
     kKnightMoves[lsb_or_none(theirQueens)],
     kKnightMoves[lsb_or_none(theirRooks)],
     kKnightMoves[lsb_or_none(theirRooks & (theirRooks - 1))]
-  ) & ~threats.badFor<coloredPiece<US>(Piece::KNIGHT)>() & ~ourMen;
+  ) & ~threats.badFor<coloredPiece<US, Piece::KNIGHT>()>() & ~ourMen;
   const Bitboard theirForkTargets = at_least_two(
     kKnightMoves[to_unsafe_square(ourKingSq)],
     kKnightMoves[lsb_or_none(ourQueens)],
     kKnightMoves[lsb_or_none(ourRooks)],
     kKnightMoves[lsb_or_none(ourRooks & (ourRooks - 1))]
-  ) & ~threats.badFor<coloredPiece<US>(Piece::KNIGHT)>() & ~ourMen;
+  ) & ~threats.badFor<coloredPiece<US, Piece::KNIGHT>()>() & ~ourMen;
   out[EF::KNIGHT_FORK_THREATS] = std::popcount(ourKnightTargets & ourForkTargets) - std::popcount(theirKnightTargets & theirForkTargets);
 
   // This implementation is a little hacky:
@@ -653,7 +654,7 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
       theirPawns & shift<BACKWARD>(shift<BACKWARD_EAST>(theirKings))) * (!canTheyCastle);
 }
 
-struct ByHandEvaluator : public EvaluatorInterface {
+struct ByHandEvaluator : public PieceSquareEvaluator {
   NNUE::Matrix<2, EF::EF_COUNT, int16_t> weights;
   NNUE::Vector<2, int16_t> bias;
   NNUE::Vector<EF::EF_COUNT, int8_t> x;
@@ -667,8 +668,10 @@ struct ByHandEvaluator : public EvaluatorInterface {
   template<Color US>
   ColoredEvaluation<US> _evaluate(const Position& pos, const Threats& threats, ColoredEvaluation<US> alpha, ColoredEvaluation<US> beta) {
     pos2features<US>(pos, threats, x.data_ptr());
-    int32_t late = bias[0];
-    int32_t early = bias[1];
+    int32_t pst_late = US == Color::WHITE ? this->PieceSquareEvaluator::late : -this->PieceSquareEvaluator::late;
+    int32_t pst_early = US == Color::WHITE ? this->PieceSquareEvaluator::early : -this->PieceSquareEvaluator::early;
+    int32_t late = bias[0] + pst_late;
+    int32_t early = bias[1] + pst_early;
     for (size_t i = 0; i < EF::EF_COUNT; ++i) {
       late += x[i] * weights(0, i);
       early += x[i] * weights(1, i);
@@ -682,23 +685,34 @@ struct ByHandEvaluator : public EvaluatorInterface {
     auto copy = std::make_shared<ByHandEvaluator>();
     copy->weights = this->weights;
     copy->bias = this->bias;
+    std::copy(std::begin(this->pstWeights), std::end(this->pstWeights), std::begin(copy->pstWeights));
     return copy;
   }
 
   void load_from_stream(std::istream& in) {
     weights.load_from_stream(in, "weights");
     bias.load_from_stream(in, "bias");
+    NNUE::Matrix<6, 64, int16_t> pstLate;
+    pstLate.load_from_stream(in, "pst_late");
+    NNUE::Matrix<6, 64, int16_t> pstEarly;
+    pstEarly.load_from_stream(in, "pst_early");
+    for (int i = 0; i < 6; ++i) {
+      for (int j = 0; j < 64; ++j) {
+        this->pstWeights[i * 64 + j + 64] = pstEarly(i, j);
+        this->pstWeights[i * 64 + j + 8 * 64] = pstLate(i, j);
+      }
+    }
   }
 
   std::string to_string() const override {
     return "ByHandEvaluator";
   }
 
-  void place_piece(ColoredPiece cp, SafeSquare square) override {}
-  void remove_piece(ColoredPiece cp, SafeSquare square) override {}
-  void place_piece(SafeColoredPiece cp, SafeSquare square) override {}
-  void remove_piece(SafeColoredPiece cp, SafeSquare square) override {}
-  void empty() override {}
+  // void place_piece(ColoredPiece cp, SafeSquare square) override {}
+  // void remove_piece(ColoredPiece cp, SafeSquare square) override {}
+  // void place_piece(SafeColoredPiece cp, SafeSquare square) override {}
+  // void remove_piece(SafeColoredPiece cp, SafeSquare square) override {}
+  // void empty() override {}
 };
 
 };  // namespace ByHand

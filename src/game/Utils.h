@@ -179,6 +179,10 @@ constexpr ColoredPiece coloredPiece(Piece piece) {
   return ColoredPiece(((color - 1) * 6 + piece) * (piece != Piece::NO_PIECE));
 }
 
+inline ColoredPiece coloredPiece(Color color, Piece piece) {
+  return ColoredPiece(((color - 1) * 6 + piece) * (piece != Piece::NO_PIECE));
+}
+
 constexpr ColoredPiece compute_colored_piece(Piece piece, Color color) {
   assert((color != Color::BLACK) || (piece != Piece::NO_PIECE));
   return ColoredPiece((color - 1) * 6 + piece);

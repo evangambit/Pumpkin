@@ -14,8 +14,11 @@ struct PieceSquareEvaluator : public EvaluatorInterface {
   Evaluation early;
   Evaluation late;
   static const Evaluation kDefaultPieceSquareTables[2 * 7 * 64];
+  Evaluation pstWeights[2 * 7 * 64];
 
-  PieceSquareEvaluator() : early(0), late(0) {}
+  PieceSquareEvaluator() : early(0), late(0) {
+    std::copy(std::begin(kDefaultPieceSquareTables), std::end(kDefaultPieceSquareTables), std::begin(pstWeights));
+  }
 
   ColoredEvaluation<Color::WHITE> evaluate_white(const Position& pos, const Threats& threats, int plyFromRoot, ColoredEvaluation<Color::WHITE> alpha, ColoredEvaluation<Color::WHITE> beta) override {
     int32_t stage = earliness(pos);
@@ -28,7 +31,11 @@ struct PieceSquareEvaluator : public EvaluatorInterface {
   }
 
   std::shared_ptr<EvaluatorInterface> clone() const override {
-    return std::make_shared<PieceSquareEvaluator>();
+    auto r = std::make_shared<PieceSquareEvaluator>();
+    r->early = early;
+    r->late = late;
+    std::copy(std::begin(pstWeights), std::end(pstWeights), std::begin(r->pstWeights));
+    return r;
   }
 
   void empty() override {
@@ -51,21 +58,21 @@ struct PieceSquareEvaluator : public EvaluatorInterface {
   void place_piece(SafeColoredPiece cp, SafeSquare square) override {
     const size_t index = index_for(cp, square);
     if (cp2color(cp) == Color::WHITE) {
-        early += kDefaultPieceSquareTables[index];
-        late += kDefaultPieceSquareTables[index + 7 * 64];
+        early += pstWeights[index];
+        late += pstWeights[index + 7 * 64];
     } else {
-        early -= kDefaultPieceSquareTables[index];
-        late -= kDefaultPieceSquareTables[index + 7 * 64];
+        early -= pstWeights[index];
+        late -= pstWeights[index + 7 * 64];
     }
   }
   void remove_piece(SafeColoredPiece cp, SafeSquare square) override {
     const size_t index = index_for(cp, square);
     if (cp2color(cp) == Color::WHITE) {
-        early -= kDefaultPieceSquareTables[index];
-        late -= kDefaultPieceSquareTables[index + 7 * 64];
+        early -= pstWeights[index];
+        late -= pstWeights[index + 7 * 64];
     } else {
-        early += kDefaultPieceSquareTables[index];
-        late += kDefaultPieceSquareTables[index + 7 * 64];
+        early += pstWeights[index];
+        late += pstWeights[index + 7 * 64];
     }
   }
 
