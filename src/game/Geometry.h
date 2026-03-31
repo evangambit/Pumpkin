@@ -12,6 +12,25 @@
 
 namespace ChessEngine {
 
+template<class T, size_t SHIFT>
+struct FixedPoint {
+  T value;
+  FixedPoint() {}
+  FixedPoint(T value) : value(value) {}
+  FixedPoint(double d) : value(static_cast<T>(d * (1 << SHIFT))) {}
+  T floorToInt() const {
+    return std::floor(value / static_cast<double>(1 << SHIFT));
+  }
+  T operator+(const FixedPoint& that) const {
+    return FixedPoint(this->value + that.value);
+  }
+  T operator*(const FixedPoint& that) const {
+    return FixedPoint((this->value * that.value) >> SHIFT);
+  }
+};
+
+extern FixedPoint<int32_t, 8> kLnLookup[256];
+
 typedef uint64_t Bitboard;
 typedef uint64_t Location;
 

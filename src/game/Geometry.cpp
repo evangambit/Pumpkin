@@ -48,6 +48,7 @@ Bitboard kKingHome[64];
 Bitboard kSquaresBetween[64][64];
 Bitboard kSquareRuleYourTurn[Color::NUM_COLORS][64];
 Bitboard kSquareRuleTheirTurn[Color::NUM_COLORS][64];
+FixedPoint<int32_t, 8> kLnLookup[256];
 
 void initialize_geometry() {
   for (int dist = 0; dist < 8; ++dist) {
@@ -168,6 +169,11 @@ void initialize_geometry() {
     | bb(SafeSquare::SF7);
   kKingHome[SafeSquare::SH8] = bb(SafeSquare::SG7) | bb(SafeSquare::SG6)
     | bb(SafeSquare::SH7) | bb(SafeSquare::SH6);
+
+  kLnLookup[0] = FixedPoint<int32_t, 8>(0);
+  for (int i = 1; i < 256; ++i) {
+    kLnLookup[i] = FixedPoint<int32_t, 8>(std::log(i));
+  }
 }
 
 /*
