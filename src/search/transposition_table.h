@@ -51,14 +51,15 @@ struct TTEntry {
 
 class TranspositionTable {
  public:
-  TranspositionTable(size_t kilobytes);
+  TranspositionTable(size_t megabytes);
   void clear();
   void new_search();
   void store(uint64_t key, Move bestMove, int depth, int value, BoundType bound);
   bool probe(uint64_t key, TTEntry& entry) const;
   size_t kb_size() const { return table_.size() * sizeof(TTEntry) / 1024; }
-  void resize(size_t kilobytes) {
-    size_t size = std::max(1000LU, (kilobytes * 1024) / sizeof(TTEntry));  // Minimum size of 1000 entries.
+  void resize(size_t megabytes) {
+    const size_t bytes = megabytes * 1024 * 1024;
+    size_t size = std::max(1000LU, bytes / sizeof(TTEntry));  // Minimum size of 1000 entries.
     table_.resize(size);
     clear();
   }
