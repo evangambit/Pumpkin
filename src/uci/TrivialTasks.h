@@ -32,6 +32,52 @@ extern unsigned int byhand_bin_len;
 
 namespace ChessEngine {
 
+template <Color COLOR>
+NegamaxResult<COLOR> ez_qsearch(const Position& pos) {
+  // qsearch(thread, alpha, beta, plyFromRoot, 0, frame, stopThinking)
+  const unsigned int multiPV = 1;
+  auto tt = std::make_shared<TranspositionTable>(/* megabytes= */1);
+  auto thread = std::make_shared<Thread>(
+    /*id=*/ 0,
+    /*position=*/ pos,
+    /*multiPV=*/ multiPV,
+    /*excludedMoves=*/ std::unordered_set<Move>(),
+    /*tt=*/ tt.get()
+  );
+  std::atomic<bool> stopThinking = false;
+  return qsearch<COLOR>(
+      thread.get(),
+      ColoredEvaluation<COLOR>(kMinEval),
+      ColoredEvaluation<COLOR>(kMaxEval),
+      0, 0, thread->frames_, &stopThinking);
+}
+
+ColoredEvaluation<WHITE> foo(const Position& pos, bool q) {
+  Threats threats;
+  create_threats(pos.pieceBitboards_, pos.colorBitboards_, &threats);
+  if (pos.turn_ == Color::WHITE) {
+    if (q) {
+      auto r = ez_qsearch<WHITE>(pos);
+      std::cout << r.evaluation << " (w) " << r.bestMove.uci() << std::endl;
+      return r.evaluation;
+    } else {
+      ColoredEvaluation<WHITE> e = evaluate<WHITE>(pos.evaluator_, pos, threats, 0, ColoredEvaluation<WHITE>(kMinEval), ColoredEvaluation<WHITE>(kMaxEval));
+      std::cout << e << " (w)" << std::endl;
+      return e;
+    }
+  } else {
+    if (q) {
+      auto r = ez_qsearch<BLACK>(pos);
+      std::cout << r.evaluation << " (b) " << r.bestMove.uci() << std::endl;
+      return -r.evaluation;
+    } else {
+      ColoredEvaluation<BLACK> e = evaluate<BLACK>(pos.evaluator_, pos, threats, 0, ColoredEvaluation<BLACK>(kMinEval), ColoredEvaluation<BLACK>(kMaxEval));
+      std::cout << e << " (b)" << std::endl;
+      return -e;
+    }
+  }
+}
+
 class UnrecognizedCommandTask : public Task {
  public:
   UnrecognizedCommandTask(std::deque<std::string> command) : command(command) {}
@@ -78,7 +124,7 @@ class ProbeTask : public Task {
       } else if (entry.value >= -kLongestForcedMate) {
         std::cout << "  Value: " << "mate " << -(entry.value + kCheckmate - 1) / 2;
       } else {
-        std::cout << "  Value: " << "cp " << entry.value;
+        std::cout << "  Value: " << "wcp " << entry.value;
       }
       std::cout << "  Depth: " << entry.depth;
       std::cout << "  Bound: " << bound_type_to_string(entry.bound);
@@ -99,6 +145,11 @@ struct EvalTask : public Task {
   void start(UciEngineState *state) {
     Position pos = state->position;
     command.pop_front();
+    bool q = false;
+    if (command.size() > 0 && command.at(0) == "q") {
+      q = true;
+      command.pop_front();
+    }
     bool printAllChildren = false;
     while (command.size() > 0) {
       std::string moveStr = command.at(0);
@@ -115,15 +166,7 @@ struct EvalTask : public Task {
       ez_make_move(&pos, move);
     }
     if (!printAllChildren) {
-      Threats threats;
-      create_threats(pos.pieceBitboards_, pos.colorBitboards_, &threats);
-      if (pos.turn_ == Color::WHITE) {
-        ColoredEvaluation<WHITE> eval = evaluate<WHITE>(pos.evaluator_, pos, threats, 0, ColoredEvaluation<WHITE>(kMinEval), ColoredEvaluation<WHITE>(kMaxEval));
-        std::cout << eval.value << " (white) (" << pos.evaluator_->to_string() << ")" << std::endl;
-      } else {
-        ColoredEvaluation<BLACK> eval = evaluate<BLACK>(pos.evaluator_, pos, threats, 0, ColoredEvaluation<BLACK>(kMinEval), ColoredEvaluation<BLACK>(kMaxEval));
-        std::cout << eval.value << " (black) (" << pos.evaluator_->to_string() << ")" << std::endl;
-      }
+      foo(pos, q);
       return;
     }
     ExtMove moves[kMaxNumMoves];
@@ -135,12 +178,10 @@ struct EvalTask : public Task {
     }
     for (ExtMove* move = moves; move != end; ++move) {
       ez_make_move(&pos, move->move);
-      Threats threats;
-      create_threats(pos.pieceBitboards_, pos.colorBitboards_, &threats);
       if (pos.turn_ == Color::BLACK) {
-        move->score = -evaluate<BLACK>(pos.evaluator_, pos, threats, 0, ColoredEvaluation<BLACK>(kMinEval), ColoredEvaluation<BLACK>(kMaxEval)).value;
+        move->score = -foo(pos, q).value;
       } else {
-        move->score = evaluate<WHITE>(pos.evaluator_, pos, threats, 0, ColoredEvaluation<WHITE>(kMinEval), ColoredEvaluation<WHITE>(kMaxEval)).value;
+        move->score = foo(pos, q).value;
       }
       ez_undo(&pos);
     }
@@ -150,7 +191,9 @@ struct EvalTask : public Task {
       std::sort(moves, end, [](ExtMove a, ExtMove b) { return a.score > b.score; });
     }
     for (ExtMove* move = moves; move != end; ++move) {
-      std::cout << move->uci() << ": " << move->score << " (white) (" << pos.evaluator_->to_string() << ")" << std::endl;
+      ez_make_move(&pos, move->move);
+      foo(pos, q);
+      ez_undo(&pos);
     }
   }
  private:
