@@ -814,9 +814,6 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     bool isGoodCapture = move->capture != ColoredPiece::NO_COLORED_PIECE && cp2p(move->capture) > move->piece;
     // Also don't reduce depth for safe passed pawn pushes.
     bool isSafePassedPawnPush = move->piece == Piece::PAWN && (ourPassedPawnMask & ~theirTargets & bb(move->move.to)) > 0;
-    // if (isGoodCapture || isSafePassedPawnPush) {
-    //   childDepth += 1;
-    // }
 
     if (IS_PRINT_NODE) {
       std::cout << repeat("  ", plyFromRoot) << "Recursing with childDepth=" << childDepth << " (hash=" << thread->position_.currentState_.hash << "; move=" << move->move.uci() << "; alpha=" << alpha.value << "; beta=" << beta.value << ")" << std::endl;
@@ -838,6 +835,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
         lateMoveReduction += index > 8 ? 1 : 0;
         lateMoveReduction -= isGoodCapture ? 1 : 0;
         lateMoveReduction -= isSafePassedPawnPush ? 1 : 0;
+        lateMoveReduction -= frame->killers.contains(move->move) ? 1 : 0;
         const int reducedChildDepth = std::max(childDepth - std::max(0, lateMoveReduction), 0);
       #else
         const int reducedChildDepth = childDepth;
