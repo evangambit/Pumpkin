@@ -56,7 +56,7 @@ class Task {
 
 struct UciEngineState {
   UciEngineState()
-    : tt_(std::make_shared<TranspositionTable>(100'000)),
+    : tt_(std::make_shared<TranspositionTable>(/* kilobytes= */100'000)),
       moveOverheadMs(50),
       numThreads(1),
       multiPV(1) {
@@ -64,12 +64,21 @@ struct UciEngineState {
     // std::shared_ptr<NNUE::Nnue> nnue_model = std::make_shared<NNUE::Nnue>();
     // std::istringstream f(std::string(model_bin, model_bin_len));
     // nnue_model->load(f);
-    // this->position.set_listener(std::make_shared<NNUE::NnueEvaluator>(nnue_model));
+    #ifndef DEFAULT_EVALUATOR
     this->position.set_listener(std::make_shared<PieceSquareEvaluator>());
-    // auto evaluator = std::make_shared<ByHand::ByHandEvaluator>();
-    // std::istringstream f(std::string(byhand_bin, byhand_bin_len));
-    // evaluator->load_from_stream(f);
-    // this->position.set_listener(evaluator);
+    #elif DEFAULT_EVALUATOR == "byhand"
+    auto evaluator = std::make_shared<ByHand::ByHandEvaluator>();
+    std::istringstream f(std::string(byhand_bin, byhand_bin_len));
+    evaluator->load_from_stream(f);
+    this->position.set_listener(evaluator);
+    #elif DEFAULT_EVALUATOR == "nnue"
+    auto nnue_model = std::make_shared<NNUE::Nnue>();
+    std::istringstream f(std::string(model_bin, model_bin_len));
+    nnue_model->load(f);
+    this->position.set_listener(std::make_shared<NNUE::NnueEvaluator>(nnue_model));
+    #else
+    static_assert(false, "Invalid DEFAULT_EVALUATOR");
+    #endif
   }
 
   std::mutex mutex;
