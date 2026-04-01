@@ -2,9 +2,10 @@
 #ifndef SRC_EVAL_BYHAND_BYHAND_H
 #define SRC_EVAL_BYHAND_BYHAND_H
 
+#include <algorithm>
+#include <bit>
 #include <cstdint>
 #include <memory>
-#include <bit>
 #include "../../game/Position.h"
 #include "../../game/Utils.h"
 #include "../../game/BoardListener.h"
@@ -678,6 +679,15 @@ struct ByHandEvaluator : public PieceSquareEvaluator {
     }
     int32_t earliness = x[EF::EARLINESS];
     int32_t r = (early * earliness + late * (kMaxEarliness - earliness)) / kMaxEarliness;
+
+    // This seems to have no effect on playing strength (-0.0008 +/- 0.0021)
+    // int32_t halfMoveCounter = pos.currentState_.halfMoveCounter;
+    // if (halfMoveCounter >= 20) {
+    //   // When halfMoveCounter is 20, multiplies by 1
+    //   // When halfMoveCounter is 100, multiplies by 0.5
+    //   const int32_t scale = std::clamp(100 - halfMoveCounter, 0, 80);
+    //   r = r * (scale + 80) / 160;
+    // }
     return ColoredEvaluation<US>(r);
   }
 
