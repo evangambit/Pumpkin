@@ -82,7 +82,7 @@ if __name__ == "__main__":
   device = torch.device('cpu')
 
   print("Loading dataset...")
-  dataset = ndata.NnueDataset(['../data/pos.100m.txt'])
+  dataset = ndata.NnueDataset(['../data/pos.shuf.txt'])
 
   print(f'Dataset loaded with {len(dataset) * CHUNK_SIZE} rows.')
 

@@ -118,8 +118,9 @@ struct NnueEvaluator : public EvaluatorInterface {
     ChessEngine::SafeSquare whiteKingSquare = ChessEngine::lsb_i_promise_board_is_not_empty(pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_KING]);
     ChessEngine::SafeSquare blackKingSquare = ChessEngine::lsb_i_promise_board_is_not_empty(pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_KING]);
     Features features(whiteKingSquare, blackKingSquare);
+    const ChessEngine::PawnAnalysis<ChessEngine::Color::WHITE> pawnAnalysis(pos);
     for (NnueFeatureBitmapType i = NnueFeatureBitmapType(0); i < NF_COUNT; i = NnueFeatureBitmapType(i + 1)) {
-      Bitboard bb = nnue_feature_to_bitboard(i, pos, threats);
+      Bitboard bb = nnue_feature_to_bitboard(i, pos, threats, pawnAnalysis);
       while (bb) {
         unsigned sq = pop_lsb_i_promise_board_is_not_empty(bb);
         features.addFeature(feature_index(i, sq));
@@ -184,9 +185,10 @@ struct NnueEvaluator : public EvaluatorInterface {
       currentFrame->blackAcc = lastFrame->blackAcc;
     }
 
+    const ChessEngine::PawnAnalysis<Color::WHITE> pawnAnalysis(pos);
     for (NnueFeatureBitmapType i = static_cast<NnueFeatureBitmapType>(0); i < NF_COUNT; i = static_cast<NnueFeatureBitmapType>(i + 1)) {
       const Bitboard oldBitboard = lastFrame->pieceBitboards[i];
-      const Bitboard newBitboard = nnue_feature_to_bitboard(i, pos, threats);
+      const Bitboard newBitboard = nnue_feature_to_bitboard(i, pos, threats, pawnAnalysis);
 
       if (whiteKingMoved) {
         // Add all current pieces for white side

@@ -3,6 +3,7 @@
 
 #include "NnueFeatureBitmapType.h"
 #include "../../game/Geometry.h"
+#include "../PawnAnalysis.h"
 
 namespace NNUE {
 template<typename T> struct NnueEvaluator;
@@ -91,7 +92,11 @@ struct Features {
   }
 };
 
-inline ChessEngine::Bitboard nnue_feature_to_bitboard(NnueFeatureBitmapType feature, const ChessEngine::Position& pos, const ChessEngine::Threats& threats) {
+inline ChessEngine::Bitboard nnue_feature_to_bitboard(
+  NnueFeatureBitmapType feature,
+  const ChessEngine::Position& pos,
+  const ChessEngine::Threats& threats,
+  const ChessEngine::PawnAnalysis<ChessEngine::Color::WHITE>& whitePawnAnalysis) {
   switch (feature) {
     case NF_WHITE_PAWN: {
       // We use the 0th rank (0 - 7) to store castling rights. This
@@ -107,6 +112,7 @@ inline ChessEngine::Bitboard nnue_feature_to_bitboard(NnueFeatureBitmapType feat
       if (pos.currentState_.castlingRights & ChessEngine::kCastlingRights_WhiteQueen) {
         r |= ChessEngine::bb(1);
       }
+      r &= ~whitePawnAnalysis.ourPassedPawns;
       return r;
     }
     case NF_WHITE_KNIGHT:
@@ -117,6 +123,8 @@ inline ChessEngine::Bitboard nnue_feature_to_bitboard(NnueFeatureBitmapType feat
       return pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_ROOK];
     case NF_WHITE_QUEEN:
       return pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_QUEEN];
+    case NF_WHITE_PASSED_PAWN:
+      return whitePawnAnalysis.ourPassedPawns;
     case NF_BLACK_PAWN: {
       ChessEngine::Bitboard r = pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_PAWN];
       if (pos.currentState_.castlingRights & ChessEngine::kCastlingRights_BlackKing) {
@@ -125,6 +133,7 @@ inline ChessEngine::Bitboard nnue_feature_to_bitboard(NnueFeatureBitmapType feat
       if (pos.currentState_.castlingRights & ChessEngine::kCastlingRights_BlackQueen) {
         r |= ChessEngine::bb(57);
       }
+      r &= ~whitePawnAnalysis.theirPassedPawns;
       return r;
     }
     case NF_BLACK_KNIGHT:
@@ -135,6 +144,8 @@ inline ChessEngine::Bitboard nnue_feature_to_bitboard(NnueFeatureBitmapType feat
       return pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_ROOK];
     case NF_BLACK_QUEEN:
       return pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_QUEEN];
+    case NF_BLACK_PASSED_PAWN:
+      return whitePawnAnalysis.theirPassedPawns;
     default:
       std::cerr << "Invalid NnueFeatureBitmapType: " << feature << std::endl;
   }
@@ -145,8 +156,9 @@ inline Features pos2features(const ChessEngine::Position& pos, const ChessEngine
   ChessEngine::SafeSquare whiteKingSquare = ChessEngine::lsb_i_promise_board_is_not_empty(pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_KING]);
   ChessEngine::SafeSquare blackKingSquare = ChessEngine::lsb_i_promise_board_is_not_empty(pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_KING]);
   Features features(whiteKingSquare, blackKingSquare);
+  const ChessEngine::PawnAnalysis<ChessEngine::Color::WHITE> pawnAnalysis(pos);
   for (NnueFeatureBitmapType i = NnueFeatureBitmapType(0); i < NF_COUNT; i = NnueFeatureBitmapType(i + 1)) {
-    ChessEngine::Bitboard bb = nnue_feature_to_bitboard(i, pos, threats);
+    ChessEngine::Bitboard bb = nnue_feature_to_bitboard(i, pos, threats, pawnAnalysis);
     while (bb) {
       unsigned sq = ChessEngine::pop_lsb_i_promise_board_is_not_empty(bb);
       features.addFeature(feature_index(i, sq));

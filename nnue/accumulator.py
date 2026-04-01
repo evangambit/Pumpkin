@@ -110,4 +110,5 @@ class Emb(nn.Module):
     a = F.embedding_bag(mover_values, w, offsets=offsets.to(torch.int64), mode='sum')
     b = F.embedding_bag(waiter_values, w, offsets=offsets.to(torch.int64), mode='sum')
     return a.clip(0, 1), b.clip(0, 1)
-Emb.k = 10
+
+Emb.k = 12

@@ -33,9 +33,9 @@ def x2board(vec, turn):
       castling += 'K'
     if val == 1:
       castling += 'Q'
-    if val == 504:
+    if val == 568:
       castling += 'k'
-    if val == 505:
+    if val == 569:
       castling += 'q'
   # board.set_castling_fen(castling) doesn't work?
   parts = board.fen().split(' ')
@@ -50,7 +50,7 @@ def board2x(board):
     val += 'PNBRQKpnbrqk'.index(piece.symbol()) * 64
     val += 8 * (7 - sq // 8)
     val += sq % 8
-    assert val not in [0, 1, 504, 505], f"Piece on square {chess.square_name(sq)} conflicts with castling rights encoding."
+    assert val not in [0, 1, 568, 569], f"Piece on square {chess.square_name(sq)} conflicts with castling rights encoding."
     assert val < 768
     vec[i] = val
     i += 1
@@ -61,10 +61,10 @@ def board2x(board):
     vec[i] = 1  # White pawn on b1
     i += 1
   if board.has_kingside_castling_rights(chess.BLACK):
-    vec[i] = 504  # Black pawn on a8
+    vec[i] = 568  # Black pawn on a8
     i += 1
   if board.has_queenside_castling_rights(chess.BLACK):
-    vec[i] = 505  # Black pawn on b8
+    vec[i] = 569  # Black pawn on b8
     i += 1
   assert i <= kMaxNumOnesInInput
   vec.sort()

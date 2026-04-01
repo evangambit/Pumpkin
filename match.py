@@ -47,22 +47,42 @@ class UCIEngine:
     self.cmd = shlex.split(path)
     self.name = self.cmd[0]
     self.timeout = timeout
-    self.process = subprocess.Popen(
-      self.cmd,
-      stdin=subprocess.PIPE,
-      stdout=subprocess.PIPE,
-      stderr=subprocess.DEVNULL,
-    )
+    self.process = None
+    try:
+      self.process = subprocess.Popen(
+        self.cmd,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+      )
+      with _active_processes_lock:
+        _active_processes.add(self.process)
+      self._send("uci")
+      self._wait_for("uciok")
+      if options:
+        for opt in options:
+          name, _, value = opt.partition("=")
+          self.set_option(name.strip(), value.strip())
+      self._send("isready")
+      self._wait_for("readyok")
+    except Exception:
+      self._cleanup_process()
+      raise
+
+  def _cleanup_process(self):
+    if self.process is None:
+      return
     with _active_processes_lock:
-      _active_processes.add(self.process)
-    self._send("uci")
-    self._wait_for("uciok")
-    if options:
-      for opt in options:
-        name, _, value = opt.partition("=")
-        self.set_option(name.strip(), value.strip())
-    self._send("isready")
-    self._wait_for("readyok")
+      _active_processes.discard(self.process)
+    try:
+      self.process.kill()
+    except Exception:
+      pass
+    try:
+      self.process.wait(timeout=5)
+    except Exception:
+      pass
+    self.process = None
 
   def _send(self, cmd):
     try:
@@ -122,13 +142,21 @@ class UCIEngine:
         return best, info_lines
 
   def quit(self):
+    if self.process is None:
+      return
+    proc = self.process
     with _active_processes_lock:
-      _active_processes.discard(self.process)
+      _active_processes.discard(proc)
     try:
       self._send("quit")
-      self.process.wait(timeout=5)
+      proc.wait(timeout=5)
     except Exception:
-      self.process.kill()
+      try:
+        proc.kill()
+      except Exception:
+        pass
+    finally:
+      self.process = None
 
 
 def parse_time_control(tc_str):
@@ -174,6 +202,76 @@ def random_opening(n_plies=4):
   return board.fen()
 
 
+def _engine_label_from_path(path):
+  cmd = shlex.split(path)
+  return cmd[0] if cmd else path
+
+
+def _make_forfeit_game(white_name, black_name, tc, opening_fen, result, termination):
+  board = chess.Board(opening_fen)
+  game = chess.pgn.Game()
+  game.setup(board)
+
+  game.headers["Event"] = "Engine Match"
+  game.headers["Date"] = datetime.now().strftime("%Y.%m.%d")
+  game.headers["White"] = white_name
+  game.headers["Black"] = black_name
+  if tc["type"] == "clock":
+    base_s = tc["time"] / 1000
+    inc_s = tc["inc"] / 1000
+    game.headers["TimeControl"] = f"{base_s:g}+{inc_s:g}"
+  else:
+    game.headers["TimeControl"] = "-"
+  game.headers["Result"] = result
+  game.headers["Termination"] = termination
+  return game
+
+
+def _play_game_with_fresh_engines(white_path, black_path, white_options, black_options, tc, fen, timeout):
+  white_engine = None
+  black_engine = None
+  white_name = _engine_label_from_path(white_path)
+  black_name = _engine_label_from_path(black_path)
+
+  try:
+    try:
+      white_engine = UCIEngine(white_path, white_options, timeout=timeout)
+      white_name = white_engine.name
+    except Exception as e:
+      result = "0-1"
+      game = _make_forfeit_game(
+        white_name,
+        black_name,
+        tc,
+        fen,
+        result,
+        f"engine startup failure: {e}",
+      )
+      return result, game
+
+    try:
+      black_engine = UCIEngine(black_path, black_options, timeout=timeout)
+      black_name = black_engine.name
+    except Exception as e:
+      result = "1-0"
+      game = _make_forfeit_game(
+        white_name,
+        black_name,
+        tc,
+        fen,
+        result,
+        f"engine startup failure: {e}",
+      )
+      return result, game
+
+    return _play_single_game(white_engine, black_engine, tc, fen)
+  finally:
+    if white_engine is not None:
+      white_engine.quit()
+    if black_engine is not None:
+      black_engine.quit()
+
+
 def _play_single_game(engine_w, engine_b, tc, opening_fen=chess.STARTING_FEN):
   """Play a single game. Returns (result_str, pgn_game)."""
   board = chess.Board(opening_fen)
@@ -195,10 +293,6 @@ def _play_single_game(engine_w, engine_b, tc, opening_fen=chess.STARTING_FEN):
     engine_w.new_game()
   except RuntimeError as e:
     print(f"  Engine crash during new_game: {e}")
-    try:
-      engine_w.restart()
-    except Exception:
-      pass
     game.headers["Result"] = "0-1"
     game.headers["Termination"] = "engine crash"
     return "0-1", game
@@ -206,10 +300,6 @@ def _play_single_game(engine_w, engine_b, tc, opening_fen=chess.STARTING_FEN):
     engine_b.new_game()
   except RuntimeError as e:
     print(f"  Engine crash during new_game: {e}")
-    try:
-      engine_b.restart()
-    except Exception:
-      pass
     game.headers["Result"] = "1-0"
     game.headers["Termination"] = "engine crash"
     return "1-0", game
@@ -234,11 +324,7 @@ def _play_single_game(engine_w, engine_b, tc, opening_fen=chess.STARTING_FEN):
       best_move, _ = engine.go(fen0, moves_uci, go_params)
     except RuntimeError as e:
       print(f"  Engine crash: {e}")
-      # The crashed engine loses; restart it for the next game
-      try:
-        engine.restart()
-      except Exception:
-        pass
+      # The crashed engine loses; fresh engine instances will be used next game.
       result = "0-1" if is_white else "1-0"
       game.headers["Result"] = result
       game.headers["Termination"] = "engine crash"
@@ -307,22 +393,26 @@ def play_pair_worker(engine1_path, engine2_path, options1, options2, tc, fen, ma
     return 0.0
 
   # Game 1: engine1 as white, engine2 as black
-  e1 = UCIEngine(engine1_path, options1, timeout=timeout)
-  e2 = UCIEngine(engine2_path, options2, timeout=timeout)
-  try:
-    result1, pgn1 = _play_single_game(e1, e2, tc, fen)
-  finally:
-    e1.quit()
-    e2.quit()
+  result1, pgn1 = _play_game_with_fresh_engines(
+    engine1_path,
+    engine2_path,
+    options1,
+    options2,
+    tc,
+    fen,
+    timeout,
+  )
 
   # Game 2: engine2 as white, engine1 as black (fresh instances)
-  e1 = UCIEngine(engine1_path, options1, timeout=timeout)
-  e2 = UCIEngine(engine2_path, options2, timeout=timeout)
-  try:
-    result2, pgn2 = _play_single_game(e2, e1, tc, fen)
-  finally:
-    e1.quit()
-    e2.quit()
+  result2, pgn2 = _play_game_with_fresh_engines(
+    engine2_path,
+    engine1_path,
+    options2,
+    options1,
+    tc,
+    fen,
+    timeout,
+  )
 
   pair_score = (_score(result1, True) + _score(result2, False)) / 2.0
   games = [(result1, pgn1, True), (result2, pgn2, False)]
