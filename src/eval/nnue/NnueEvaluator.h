@@ -53,6 +53,8 @@ template<typename T>
 struct NnueEvaluator : public EvaluatorInterface {
   std::shared_ptr<Nnue<T>> nnue_model;
 
+  uint64_t numIncrements = 0;
+
   Frame<T> *frames;
 
   NnueEvaluator(std::shared_ptr<Nnue<T>> model) : nnue_model(model) {
@@ -135,6 +137,7 @@ struct NnueEvaluator : public EvaluatorInterface {
 
     // Initialize accumulators: recompute from scratch if king moved, otherwise copy from last frame
     if (whiteKingMoved) {
+      ++numIncrements;
       currentFrame->whiteAcc.setZero();
     } else {
       currentFrame->whiteAcc = lastFrame->whiteAcc;
@@ -155,6 +158,7 @@ struct NnueEvaluator : public EvaluatorInterface {
         Bitboard added = newBitboard;
         while (added) {
           const SafeSquare sq = pop_lsb_i_promise_board_is_not_empty(added);
+          ++numIncrements;
           currentFrame->whiteAcc += nnue_model->embWeights[wk_bucket * NNUE_INPUT_DIM + feature_index(i, sq)];
         }
       } else {
@@ -162,11 +166,13 @@ struct NnueEvaluator : public EvaluatorInterface {
         Bitboard removed = oldBitboard & ~newBitboard;
         while (removed) {
           const SafeSquare sq = pop_lsb_i_promise_board_is_not_empty(removed);
+          ++numIncrements;
           currentFrame->whiteAcc -= nnue_model->embWeights[wk_bucket * NNUE_INPUT_DIM + feature_index(i, sq)];
         }
         Bitboard added = newBitboard & ~oldBitboard;
         while (added) {
           const SafeSquare sq = pop_lsb_i_promise_board_is_not_empty(added);
+          ++numIncrements;
           currentFrame->whiteAcc += nnue_model->embWeights[wk_bucket * NNUE_INPUT_DIM + feature_index(i, sq)];
         }
       }
@@ -225,9 +231,9 @@ struct NnueEvaluator : public EvaluatorInterface {
   }
   std::string to_string() const override {
     if (std::is_same<T, int16_t>::value) {
-      return "NNUE Evaluator (int16_t)";
+      return "NNUE Evaluator (int16_t) (" + std::to_string(numIncrements) + ")";
     } else {
-      return "NNUE Evaluator (float)";
+      return "NNUE Evaluator (float) (" + std::to_string(numIncrements) + ")";
     }
   }
 };

@@ -334,7 +334,7 @@ class SetEvaluatorTask : public Task {
   SetEvaluatorTask(std::deque<std::string> command) : command(command) {}
   void start(UciEngineState *state) {
     if (command.size() < 2) {
-      std::cout << "Error: evaluator command requires an argument." << std::endl;
+      std::cout << state->position.evaluator_->to_string() << std::endl;
       return;
     }
     command.pop_front();
