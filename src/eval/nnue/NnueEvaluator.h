@@ -126,12 +126,17 @@ struct NnueEvaluator : public EvaluatorInterface {
 
     // Get current king positions
     SafeSquare wk = lsb_i_promise_board_is_not_empty(pos.pieceBitboards_[ColoredPiece::WHITE_KING]);
-    SafeSquare bk = lsb_i_promise_board_is_not_empty(pos.pieceBitboards_[ColoredPiece::BLACK_KING]);
-    SafeSquare flipped_bk = vertically_flip_square(bk);
+    SafeSquare bk = vertically_flip_square(lsb_i_promise_board_is_not_empty(pos.pieceBitboards_[ColoredPiece::BLACK_KING]));
+
     int wk_bucket = kKingBuckets[wk];
-    int bk_bucket = kKingBuckets[flipped_bk];
+    int bk_bucket = kKingBuckets[bk];
     bool whiteKingMoved = (wk != lastFrame->whiteKingSquare);
     bool blackKingMoved = (bk != lastFrame->blackKingSquare);
+
+    // TODO: it seems theoretically possible that currentFrame's king squares
+    // could be the same as wk/bk, in which case we should probably not
+    // reset the accumulators.
+
     currentFrame->whiteKingSquare = wk;
     currentFrame->blackKingSquare = bk;
 
