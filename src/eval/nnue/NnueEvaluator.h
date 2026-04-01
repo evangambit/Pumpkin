@@ -113,46 +113,6 @@ struct NnueEvaluator : public EvaluatorInterface {
     return false;
   }
 
-  // Very slow, but useful for testing (to ensure that incremental updates are correct).
-  Evaluation from_scratch(const Position& pos, const Threats& threats) const {
-    ChessEngine::SafeSquare whiteKingSquare = ChessEngine::lsb_i_promise_board_is_not_empty(pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_KING]);
-    ChessEngine::SafeSquare blackKingSquare = ChessEngine::lsb_i_promise_board_is_not_empty(pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_KING]);
-    Features features(whiteKingSquare, blackKingSquare);
-    const ChessEngine::PawnAnalysis<ChessEngine::Color::WHITE> pawnAnalysis(pos);
-    for (NnueFeatureBitmapType i = NnueFeatureBitmapType(0); i < NF_COUNT; i = NnueFeatureBitmapType(i + 1)) {
-      Bitboard bb = nnue_feature_to_bitboard(i, pos, threats, pawnAnalysis);
-      while (bb) {
-        unsigned sq = pop_lsb_i_promise_board_is_not_empty(bb);
-        features.addFeature(feature_index(i, sq));
-      }
-    }
-    
-    Vector<EMBEDDING_DIM, T> whiteAcc;
-    Vector<EMBEDDING_DIM, T> blackAcc;
-    whiteAcc.setZero();
-    blackAcc.setZero();
-    for (int i = 0; i < features.size(); i++) {
-      int16_t pieceIdx = features[i];
-      size_t whiteIdx = kKingBuckets[whiteKingSquare] * NNUE_INPUT_DIM + pieceIdx;
-      size_t blackIdx = kKingBuckets[vertically_flip_square(blackKingSquare)] * NNUE_INPUT_DIM + flip_feature_index(pieceIdx);
-      nnue_model->increment(&whiteAcc, whiteIdx, &blackAcc, blackIdx);
-    }
-    T score;
-    if (pos.turn_ == Color::WHITE) {
-      score = nnue_model->forward(whiteAcc, blackAcc)[0];
-    } else {
-      score = nnue_model->forward(blackAcc, whiteAcc)[0];
-    }
-    if (std::is_same<T, int16_t>::value) {
-      return Evaluation(score);
-    } else {
-      const int64_t v = std::round(score * (1 << SCALE_SHIFT));
-      const int64_t maxVal = (1 << 15) - 1;
-      const int64_t minVal = -(1 << 15);
-      return Evaluation(static_cast<int16_t>(std::max(minVal, std::min(maxVal, v))));
-    }
-  }
-
   Evaluation _evaluate(const Position& pos, const Threats& threats, int plyFromRoot, bool compute_score, Evaluation alpha, Evaluation beta) {
     if (_is_material_draw(pos)) {
       if (compute_score) {
