@@ -123,6 +123,8 @@ inline ChessEngine::Bitboard nnue_feature_to_bitboard(
       return pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_ROOK];
     case NF_WHITE_QUEEN:
       return pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_QUEEN];
+    case NF_WHITE_KING:
+      return pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_KING];
     case NF_WHITE_PASSED_PAWN:
       return whitePawnAnalysis.ourPassedPawns;
     case NF_BLACK_PAWN: {
@@ -144,6 +146,8 @@ inline ChessEngine::Bitboard nnue_feature_to_bitboard(
       return pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_ROOK];
     case NF_BLACK_QUEEN:
       return pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_QUEEN];
+    case NF_BLACK_KING:
+      return pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_KING];
     case NF_BLACK_PASSED_PAWN:
       return whitePawnAnalysis.theirPassedPawns;
     default:

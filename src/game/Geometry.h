@@ -178,6 +178,10 @@ inline Bitboard flip_horizontally(Bitboard x) {
   return x;
 }
 
+inline SafeSquare horizontally_flip_square(SafeSquare sq) {
+  return SafeSquare((sq / 8) * 8 + (7 - sq % 8));
+}
+
 constexpr Bitboard kMainWhiteDiagonal = 0x8040201008040201;
 constexpr Bitboard kMainBlackDiagonal = 0x10204081020408;
 

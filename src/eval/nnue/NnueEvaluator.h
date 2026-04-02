@@ -128,17 +128,30 @@ struct NnueEvaluator : public EvaluatorInterface {
     SafeSquare wk = lsb_i_promise_board_is_not_empty(pos.pieceBitboards_[ColoredPiece::WHITE_KING]);
     SafeSquare bk = vertically_flip_square(lsb_i_promise_board_is_not_empty(pos.pieceBitboards_[ColoredPiece::BLACK_KING]));
 
-    int wk_bucket = kKingBuckets[wk];
-    int bk_bucket = kKingBuckets[bk];
+    currentFrame->whiteKingSquare = wk;
+    currentFrame->blackKingSquare = bk;
     bool whiteKingMoved = (wk != lastFrame->whiteKingSquare);
     bool blackKingMoved = (bk != lastFrame->blackKingSquare);
+
+    // Flip king so it is always on the left half of the board.
+    const bool flipOldWK = (lastFrame->whiteKingSquare % 8 > 3);
+    const bool flipOldBK = (lastFrame->blackKingSquare % 8 > 3);
+    const bool flipWK = (wk % 8 > 3);
+    const bool flipBK = (bk % 8 > 3);
+    if (flipWK) {
+      wk = horizontally_flip_square(wk);
+    }
+    if (flipBK) {
+      bk = horizontally_flip_square(bk);
+    }
+
+    // Index manipulation to convert from 8x8 coordinates to 8x4 coordinates.
+    int wk_bucket = kKingBuckets[wk / 8 * 4 + wk % 8];
+    int bk_bucket = kKingBuckets[bk / 8 * 4 + bk % 8];
 
     // TODO: it seems theoretically possible that currentFrame's king squares
     // could be the same as wk/bk, in which case we should probably not
     // reset the accumulators.
-
-    currentFrame->whiteKingSquare = wk;
-    currentFrame->blackKingSquare = bk;
 
     // Initialize accumulators: recompute from scratch if king moved, otherwise copy from last frame
     if (whiteKingMoved) {
@@ -156,11 +169,19 @@ struct NnueEvaluator : public EvaluatorInterface {
     const ChessEngine::PawnAnalysis<Color::WHITE> pawnAnalysis(pos);
     for (NnueFeatureBitmapType i = static_cast<NnueFeatureBitmapType>(0); i < NF_COUNT; i = static_cast<NnueFeatureBitmapType>(i + 1)) {
       const Bitboard oldBitboard = lastFrame->pieceBitboards[i];
+      // Note: we can use flipWK for "oldBitboard" because either the old board's king position
+      // is the same as the current king position (in which case the old 'flipWk' is the same as
+      // the current 'flipWK'), or the king moved (in which case we ignore the old board's features
+      // and compute the new board's features from scratch).
+      const Bitboard whiteOldboard = flipOldWK ? flip_horizontally(oldBitboard) : oldBitboard;
+      const Bitboard blackOldboard = flipOldBK ? flip_horizontally(oldBitboard) : oldBitboard;
       const Bitboard newBitboard = nnue_feature_to_bitboard(i, pos, threats, pawnAnalysis);
+      const Bitboard whiteNewboard = flipWK ? flip_horizontally(newBitboard) : newBitboard;
+      const Bitboard blackNewboard = flipBK ? flip_horizontally(newBitboard) : newBitboard;
 
       if (whiteKingMoved) {
         // Add all current pieces for white side
-        Bitboard added = newBitboard;
+        Bitboard added = whiteNewboard;
         while (added) {
           const SafeSquare sq = pop_lsb_i_promise_board_is_not_empty(added);
           ++numIncrements;
@@ -168,13 +189,13 @@ struct NnueEvaluator : public EvaluatorInterface {
         }
       } else {
         // Incremental update for white side
-        Bitboard removed = oldBitboard & ~newBitboard;
+        Bitboard removed = whiteOldboard & ~whiteNewboard;
         while (removed) {
           const SafeSquare sq = pop_lsb_i_promise_board_is_not_empty(removed);
           ++numIncrements;
           currentFrame->whiteAcc -= nnue_model->embWeights[wk_bucket * NNUE_INPUT_DIM + feature_index(i, sq)];
         }
-        Bitboard added = newBitboard & ~oldBitboard;
+        Bitboard added = whiteNewboard & ~whiteOldboard;
         while (added) {
           const SafeSquare sq = pop_lsb_i_promise_board_is_not_empty(added);
           ++numIncrements;
@@ -184,19 +205,19 @@ struct NnueEvaluator : public EvaluatorInterface {
 
       if (blackKingMoved) {
         // Add all current pieces for black side
-        Bitboard added = newBitboard;
+        Bitboard added = blackNewboard;
         while (added) {
           const SafeSquare sq = pop_lsb_i_promise_board_is_not_empty(added);
           currentFrame->blackAcc += nnue_model->embWeights[bk_bucket * NNUE_INPUT_DIM + flip_feature_index(feature_index(i, sq))];
         }
       } else {
         // Incremental update for black side
-        Bitboard removed = oldBitboard & ~newBitboard;
+        Bitboard removed = blackOldboard & ~blackNewboard;
         while (removed) {
           const SafeSquare sq = pop_lsb_i_promise_board_is_not_empty(removed);
           currentFrame->blackAcc -= nnue_model->embWeights[bk_bucket * NNUE_INPUT_DIM + flip_feature_index(feature_index(i, sq))];
         }
-        Bitboard added = newBitboard & ~oldBitboard;
+        Bitboard added = blackNewboard & ~blackOldboard;
         while (added) {
           const SafeSquare sq = pop_lsb_i_promise_board_is_not_empty(added);
           currentFrame->blackAcc += nnue_model->embWeights[bk_bucket * NNUE_INPUT_DIM + flip_feature_index(feature_index(i, sq))];

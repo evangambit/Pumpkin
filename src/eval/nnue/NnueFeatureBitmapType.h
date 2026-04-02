@@ -12,12 +12,17 @@ enum NnueFeatureBitmapType {
   NF_WHITE_BISHOP,
   NF_WHITE_ROOK,
   NF_WHITE_QUEEN,
+  // Unlike stockfish, we need a separate feature for the king because we use
+  // <64 king buckets, so the NN doesn't necessarily see the king's exact position
+  // without us explicitly encoding it as a feature.
+  NF_WHITE_KING,
   NF_WHITE_PASSED_PAWN,
   NF_BLACK_PAWN,
   NF_BLACK_KNIGHT,
   NF_BLACK_BISHOP,
   NF_BLACK_ROOK,
   NF_BLACK_QUEEN,
+  NF_BLACK_KING,
   NF_BLACK_PASSED_PAWN,
   NF_COUNT
 };
@@ -29,17 +34,17 @@ constexpr int16_t NNUE_INPUT_DIM = NF_COUNT * 64;
 
 // If you change this, make sure to also change
 // nnue/accumulator.py and re-train the model.
-constexpr int kKingBuckets[64] = {
-  0, 0, 0, 0, 0, 0, 0, 0,
-  0, 0, 0, 0, 0, 0, 0, 0,
-  0, 0, 0, 0, 0, 0, 0, 0,
-  0, 0, 0, 0, 0, 0, 0, 0,
-  0, 0, 0, 0, 0, 0, 0, 0,
-  0, 0, 0, 0, 0, 0, 0, 0,
-  0, 0, 0, 0, 0, 0, 0, 0,
-  3, 3, 0, 0, 1, 0, 2, 2,
+constexpr int kKingBuckets[32] = {
+  0, 0, 0, 0,
+  0, 0, 0, 0,
+  0, 0, 0, 0,
+  0, 0, 0, 0,
+  0, 0, 0, 0,
+  0, 0, 0, 0,
+  0, 0, 0, 0,
+  4, 3, 2, 1,
 };
-constexpr int kNumKingBuckets = 4;
+constexpr int kNumKingBuckets = 5;
 // </end of things that need to be changed if kKingBuckets is changed>
 
 constexpr uint64_t MAX_FEATURE_INDEX = kNumKingBuckets * NNUE_INPUT_DIM;
@@ -84,12 +89,14 @@ inline std::string nnue_feature_to_string(NnueFeatureBitmapType feature) {
     case NF_WHITE_BISHOP: return "White Bishop";
     case NF_WHITE_ROOK: return "White Rook";
     case NF_WHITE_QUEEN: return "White Queen";
+    case NF_WHITE_KING: return "White King";
     case NF_WHITE_PASSED_PAWN: return "White Passed Pawn";
     case NF_BLACK_PAWN: return "Black Pawn";
     case NF_BLACK_KNIGHT: return "Black Knight";
     case NF_BLACK_BISHOP: return "Black Bishop";
     case NF_BLACK_ROOK: return "Black Rook";
     case NF_BLACK_QUEEN: return "Black Queen";
+    case NF_BLACK_KING: return "Black King";
     case NF_BLACK_PASSED_PAWN: return "Black Passed Pawn";
     default:
       std::cerr << "Invalid NnueFeatureBitmapType: " << feature << std::endl;

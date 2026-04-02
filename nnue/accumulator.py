@@ -16,14 +16,14 @@ import torch.nn.functional as F
 # src/eval/nnue/NnueFeatureBitmapType.h and
 # re-train the model.
 kKingBuckets = torch.tensor([
-  0, 0, 0, 0, 0, 0, 0, 0,
-  0, 0, 0, 0, 0, 0, 0, 0,
-  0, 0, 0, 0, 0, 0, 0, 0,
-  0, 0, 0, 0, 0, 0, 0, 0,
-  0, 0, 0, 0, 0, 0, 0, 0,
-  0, 0, 0, 0, 0, 0, 0, 0,
-  0, 0, 0, 0, 0, 0, 0, 0,
-  3, 3, 0, 0, 1, 0, 2, 2,
+  0, 0, 0, 0,
+  0, 0, 0, 0,
+  0, 0, 0, 0,
+  0, 0, 0, 0,
+  0, 0, 0, 0,
+  0, 0, 0, 0,
+  0, 0, 0, 0,
+  4, 3, 2, 1,
 ], dtype=torch.int64)
 kNumKingBuckets = kKingBuckets.max().item() + 1
 # </end of things that need to be changed if kKingBuckets is changed>
@@ -90,11 +90,19 @@ class Emb(nn.Module):
     # kings shape: [batch, 2] where [:,0]=mover king, [:,1]=waiter king
     mover_king = kings[:, 0].to(torch.int64)   # [batch]
     waiter_king = kings[:, 1].to(torch.int64)  # [batch]
+
+    # Flip waiter's king to their perspective before bucket lookup
+    waiter_king = (7 - waiter_king // 8) * 8 + waiter_king % 8
+
+    # Flip kings to left side (if necessary) and conver to 8x4 coordinates for bucket lookup.
+    flip_mover = mover_king % 8 >= 4
+    flip_waiter = waiter_king % 8 >= 4
+    mover_king = mover_king // 8 * 4 + torch.where(flip_mover, 7 - mover_king % 8, mover_king % 8)
+    waiter_king = waiter_king // 8 * 4 + torch.where(flip_waiter, 7 - waiter_king % 8, waiter_king % 8)
+
     buckets = kKingBuckets.to(mover_king.device)
     mover_bucket = buckets[mover_king]  # [batch]
-    # Flip waiter's king to their perspective before bucket lookup
-    waiter_king_flipped = (7 - waiter_king // 8) * 8 + waiter_king % 8
-    waiter_bucket = buckets[waiter_king_flipped]  # [batch]
+    waiter_bucket = buckets[waiter_king]  # [batch]
 
     # Expand king buckets to per-feature level
     lengths_i64 = lengths.to(torch.int64)
@@ -103,12 +111,16 @@ class Emb(nn.Module):
 
     piece_dim = Emb.k * 64  # 640
     values_i64 = values.to(torch.int64)
-    mover_values = mover_bucket_exp * piece_dim + values_i64
+    values_i64_horizontally_flipped = values_i64 // 8 * 8 + (7 - (values_i64 % 8))
+
+    mover_values = mover_bucket_exp * piece_dim + torch.where(flip_mover.repeat_interleave(lengths_i64), values_i64_horizontally_flipped, values_i64)
     # Flip feature values for waiter perspective (swap colors + flip squares)
-    waiter_values = waiter_bucket_exp * piece_dim + Emb.flip_values(values_i64)
+    waiter_values = waiter_bucket_exp * piece_dim + Emb.flip_values(
+      torch.where(flip_waiter.repeat_interleave(lengths_i64), values_i64_horizontally_flipped, values_i64)
+    )
 
     a = F.embedding_bag(mover_values, w, offsets=offsets.to(torch.int64), mode='sum')
     b = F.embedding_bag(waiter_values, w, offsets=offsets.to(torch.int64), mode='sum')
     return a.clip(0, 1), b.clip(0, 1)
 
-Emb.k = 12
+Emb.k = 14

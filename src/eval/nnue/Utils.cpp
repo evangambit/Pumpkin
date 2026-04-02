@@ -43,11 +43,13 @@ NnueFeatureBitmapType cp2nfbt(ChessEngine::ColoredPiece cp) {
     case ChessEngine::ColoredPiece::WHITE_BISHOP: return NF_WHITE_BISHOP;
     case ChessEngine::ColoredPiece::WHITE_ROOK: return NF_WHITE_ROOK;
     case ChessEngine::ColoredPiece::WHITE_QUEEN: return NF_WHITE_QUEEN;
+    case ChessEngine::ColoredPiece::WHITE_KING: return NF_WHITE_KING;
     case ChessEngine::ColoredPiece::BLACK_PAWN: return NF_BLACK_PAWN;
     case ChessEngine::ColoredPiece::BLACK_KNIGHT: return NF_BLACK_KNIGHT;
     case ChessEngine::ColoredPiece::BLACK_BISHOP: return NF_BLACK_BISHOP;
     case ChessEngine::ColoredPiece::BLACK_ROOK: return NF_BLACK_ROOK;
     case ChessEngine::ColoredPiece::BLACK_QUEEN: return NF_BLACK_QUEEN;
+    case ChessEngine::ColoredPiece::BLACK_KING: return NF_BLACK_KING;
     default: {
       throw std::invalid_argument("Invalid ColoredPiece");
     }
