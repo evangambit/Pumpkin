@@ -16,8 +16,19 @@ BATCH_SIZE = 2048
 CHUNK_SIZE = 128
 assert BATCH_SIZE % CHUNK_SIZE == 0
 
-WEIGHT_STAGES_EQUALLY = False
+WEIGHT_STAGES_EQUALLY = True
 LABEL_SCALE = 1 / 2.0
+
+def smooth(x):
+    assert len(x.shape) == 1
+    return nn.functional.conv1d(
+        torch.cat([
+            x[:1],
+            x,
+            x[-1:],
+        ], dim=0).reshape(1, 1, -1),
+        torch.ones((1,1,3), device=x.device) * (1.0 / 3.0),
+    ).reshape(-1)
 
 def save_tensor(tensor: torch.Tensor, name: str, out: io.BufferedWriter):
   tensor = tensor.cpu().detach().numpy()
@@ -164,7 +175,9 @@ if __name__ == "__main__":
             
             if WEIGHT_STAGES_EQUALLY:
                 loss = nn.functional.mse_loss(output_sig, label_sig, reduction='none')
-                loss = loss * nn.functional.softmax(1.0 / earliness_weights[which_bucket.argmax(0)])
+                weights = 1.0 / smooth(earliness_weights)[which_bucket.argmax(0)]
+                weights = weights / weights.sum()
+                loss = loss * weights
                 loss = loss.sum()
             else:
                 loss = nn.functional.mse_loss(output_sig, label_sig, reduction='mean')
