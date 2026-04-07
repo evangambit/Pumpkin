@@ -97,8 +97,7 @@ struct Thread {
   uint64_t nodeCount_{0};
   uint64_t qNodeCount_{0};
   uint64_t nodeLimit_{(uint64_t)-1};
-  Frame buffer[4];  // Empty buffer so that frames_[plyFromRoot - 4] is valid.
-  Frame frames_[kMaxPlyFromRoot];
+  Frame frames_[kMaxPlyFromRoot + 4];  // Root search starts at frames_[4] so frame[-4] lookbacks stay in-bounds.
   int32_t quietHistory_[Piece::NUM_PIECES][64];
   int32_t captureHistory_[Piece::NUM_PIECES][Piece::NUM_PIECES][64];
 
@@ -113,7 +112,6 @@ struct Thread {
     const std::unordered_set<Move>& permittedMoves,
     TranspositionTable* tt
   ) : id_(id), multiPV_(multiPV), position_(pos), permittedMoves_(permittedMoves), tt_(tt) {
-    std::memset(buffer, 0, sizeof(buffer));
     std::memset(frames_, 0, sizeof(frames_));
     std::memset(quietHistory_, 0, sizeof(quietHistory_));
     std::memset(captureHistory_, 0, sizeof(captureHistory_));
@@ -131,11 +129,22 @@ struct Thread {
     qNodeCount_(other.qNodeCount_),
     nodeLimit_(other.nodeLimit_),
     tt_(other.tt_) {
-      std::memcpy(buffer, other.buffer, sizeof(buffer));
       std::memcpy(frames_, other.frames_, sizeof(frames_));
       std::memcpy(quietHistory_, other.quietHistory_, sizeof(quietHistory_));
       std::memcpy(captureHistory_, other.captureHistory_, sizeof(captureHistory_));
     }
+
+  Frame* root_frame() {
+    return &frames_[4];
+  }
+
+  const Frame* root_frame() const {
+    return &frames_[4];
+  }
+
+  ptrdiff_t ply_from_root(const Frame* frame) const {
+    return frame - root_frame();
+  }
 
   // TODO: when we add multi-threading, we should share stopSearchFlag across threads.
   std::atomic<bool> stopSearchFlag{false};
@@ -220,7 +229,7 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
   }
 
   // Prevent stack overflow - return static eval if we've gone too deep
-  if (quiescenceDepth >= kMaxQuiescenceDepth || (frame - thread->frames_) >= kMaxPlyFromRoot - 1) {
+  if (quiescenceDepth >= kMaxQuiescenceDepth || thread->ply_from_root(frame) >= kMaxPlyFromRoot - 1) {
     if (IS_PRINT_QNODE) {
       std::cout << repeat("  ", plyFromRoot) << "Max quiescence depth or ply limit reached, returning static evaluation." << std::endl;
     }
@@ -472,7 +481,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     return NegamaxResult<TURN>(kNullMove, beta);
   }
 
-  if (frame - thread->frames_ >= kMaxPlyFromRoot - 1) {
+  if (thread->ply_from_root(frame) >= kMaxPlyFromRoot - 1) {
     const auto r = qsearch<TURN>(thread, alpha, beta, plyFromRoot, kMaxQuiescenceDepth, frame, stopThinking);
     if (IS_PRINT_NODE) {
       std::cout << repeat("  ", plyFromRoot) << "Max ply from root reached, returning from quiescence search: " << r << std::endl;

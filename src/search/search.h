@@ -106,7 +106,7 @@ SearchResult<TURN> search(Thread* thread, std::atomic<bool> *stopThinking, std::
     /*alpha=*/ColoredEvaluation<TURN>(kMinEval),
     /*beta=*/ColoredEvaluation<TURN>(kMaxEval),
     /*plyFromRoot=*/0,
-    &thread->frames_[0],
+    thread->root_frame(),
     &neverStopThinking  // Guarantee we always search at least depth 1 before stopping.
   );
   if (result.bestMove == kNullMove) {
@@ -137,7 +137,7 @@ SearchResult<TURN> search(Thread* thread, std::atomic<bool> *stopThinking, std::
         /*alpha=*/alpha,
         /*beta=*/beta,
         /*plyFromRoot=*/0,
-        &thread->frames_[0],
+        thread->root_frame(),
         stopThinking
       );
       if (result.evaluation <= alpha) {

@@ -49,7 +49,7 @@ NegamaxResult<COLOR> ez_qsearch(const Position& pos) {
       thread.get(),
       ColoredEvaluation<COLOR>(kMinEval),
       ColoredEvaluation<COLOR>(kMaxEval),
-      0, 0, thread->frames_, &stopThinking);
+      0, 0, thread->root_frame(), &stopThinking);
 }
 
 ColoredEvaluation<WHITE> foo(const Position& pos, bool q) {
