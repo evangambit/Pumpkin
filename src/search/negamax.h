@@ -432,6 +432,10 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
     }
   }
 
+  if (stopThinking->load()) {
+    return bestResult;
+  }
+
   // Store in Transposition Table
   BoundType bound = BoundType::EXACT;
   if (bestResult.evaluation <= originalAlpha) bound = BoundType::UPPER;
