@@ -156,7 +156,7 @@ if __name__ == "__main__":
             values, labels, turns, pst_values, pst_lengths = [x.to(device) for x in batch]
             values = values.to(torch.float32)
 
-            earliness = values[:,0]
+            earliness = values[:,dataset.earliness_index]
 
             if WEIGHT_STAGES_EQUALLY:
                 # 1-hot encoding of which bucket a datapoint falls into.
@@ -165,7 +165,7 @@ if __name__ == "__main__":
                     earliness_weights *= 0.9
                     earliness_weights += which_bucket.sum(1) + 1.0
             
-            earliness = earliness.clip(0, 18) / 18
+            earliness = earliness.clip(0, dataset.max_earliness) / dataset.max_earliness
             
             output = model(values.float(), earliness, pst_values, pst_lengths)
             
@@ -226,7 +226,7 @@ if __name__ == "__main__":
     for batch in dataloader:
         values, labels, turns, pst_values, pst_lengths = [x.to(device) for x in batch]
         values = values.to(torch.float32)
-        earliness = values[:,0].clip(0, 18) / 18
+        earliness = values[:,dataset.earliness_index].clip(0, dataset.max_earliness) / dataset.max_earliness
         output = model(values.float(), earliness, pst_values, pst_lengths)
         output_sig = torch.sigmoid(output)
         label_sig = torch.sigmoid(labels * LABEL_SCALE)

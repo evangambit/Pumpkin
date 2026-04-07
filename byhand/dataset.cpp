@@ -136,4 +136,10 @@ PYBIND11_MODULE(_byhand_dataset, m) {
         }
         return ByHand::to_string(static_cast<ByHand::EF>(index));
     }, "Returns the name of a feature given its index.");
+    m.def("max_earliness", []() -> int {
+        return ChessEngine::ByHand::kMaxEarliness;
+    }, "Returns the maximum earliness value for a given feature index.");
+    m.def("earliness_index", []() -> int {
+        return ChessEngine::ByHand::EF::EARLINESS;
+    }, "Returns the index of the earliness feature.");
 }

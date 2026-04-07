@@ -336,6 +336,7 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
   out[EF::EARLINESS] = 0;
   out[EF::EARLINESS] += std::popcount(ourMinors | ourRooks) + std::popcount(theirMinors | theirRooks);
   out[EF::EARLINESS] += (std::popcount(ourQueens) + std::popcount(theirQueens)) * 3;
+  out[EF::EARLINESS] = std::min<int>(out[EF::EARLINESS], kMaxEarliness);
 
   out[EF::PAWNS] = std::popcount(ourPawns) - std::popcount(theirPawns);
   out[EF::KNIGHTS] = std::popcount(ourKnights) - std::popcount(theirKnights);
