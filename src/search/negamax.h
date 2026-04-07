@@ -307,7 +307,8 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
 
   Threats threats;
   create_threats(thread->position_.pieceBitboards_, thread->position_.colorBitboards_, &threats);
-  NegamaxResult<TURN> bestResult(kNullMove, evaluate<TURN>(thread->position_.evaluator_, thread->position_, threats, plyFromRoot, alpha, beta).clamp_(alpha, beta));
+  ColoredEvaluation<TURN> staticEval = evaluate<TURN>(thread->position_.evaluator_, thread->position_, threats, plyFromRoot, alpha, beta).clamp_(alpha, beta);
+  NegamaxResult<TURN> bestResult(kNullMove, frame->inCheck ? alpha : staticEval);
   if (IS_PRINT_QNODE) {
     std::cout << repeat("  ", plyFromRoot) << "Static evaluation: " << bestResult.evaluation.value << " (hash = " << frame->hash << ")" << std::endl;
   }
@@ -367,7 +368,7 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
   }
 
   for (ExtMove* move = moves; move < end; ++move) {
-    if (move->score <= 0) {
+    if (move->score <= 0 && !frame->inCheck) {
       // Don't consider moves that lose material according to move ordering heuristic.
       continue;
     }
