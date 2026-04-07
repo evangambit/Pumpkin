@@ -1,4 +1,7 @@
 #include "transposition_table.h"
+
+#include <cassert>
+#include <limits>
 #include <cstring>
 
 namespace ChessEngine {
@@ -34,6 +37,7 @@ void TranspositionTable::clear() {
 }
 
 void TranspositionTable::store(uint64_t key, Move bestMove, int depth, int value, BoundType bound) {
+  assert(depth >= std::numeric_limits<int8_t>::min() && depth <= std::numeric_limits<int8_t>::max());
   size_t idx = key % table_.size();
   TTEntry& entry = table_[idx];
   bool replace = false;

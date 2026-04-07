@@ -213,6 +213,10 @@ ColoredEvaluation<opposite_color<TURN>()> to_child_eval(ColoredEvaluation<TURN> 
   return -parentEval;
 }
 
+inline int qsearch_tt_depth(int quiescenceDepth) {
+  return -quiescenceDepth;
+}
+
 template<Color TURN>
 NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, ColoredEvaluation<TURN> beta, int plyFromRoot, int quiescenceDepth, Frame *frame, std::atomic<bool> *stopThinking) {
   frame->hash = thread->position_.currentState_.hash;
@@ -254,16 +258,19 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
   // Transposition Table probe
   TTEntry entry{0, kNullMove, 0, 0, BoundType::EXACT, 0};
   uint64_t key = thread->position_.currentState_.hash;
+  const int ttDepth = qsearch_tt_depth(quiescenceDepth);
   if (thread->tt_->probe(key, entry)) {
     if (IS_PRINT_QNODE) {
       std::cout << repeat("  ", plyFromRoot) << "qTT hit: move=" << entry.bestMove.uci() << " value=" << entry.value << " depth=" << entry.depth << " bound=" << bound_type_to_string(entry.bound) << " hash=" << key << std::endl;
     }
-    if (entry.bound == BoundType::EXACT) {
-      return NegamaxResult<TURN>(entry.bestMove, ColoredEvaluation<TURN>(entry.value).clamp_(alpha, beta));
-    } else if (entry.bound == BoundType::LOWER && entry.value >= beta.value) {
-      return NegamaxResult<TURN>(entry.bestMove, beta);
-    } else if (entry.bound == BoundType::UPPER && entry.value <= alpha.value) {
-      return NegamaxResult<TURN>(entry.bestMove, alpha);
+    if (entry.depth >= ttDepth) {
+      if (entry.bound == BoundType::EXACT) {
+        return NegamaxResult<TURN>(entry.bestMove, ColoredEvaluation<TURN>(entry.value).clamp_(alpha, beta));
+      } else if (entry.bound == BoundType::LOWER && entry.value >= beta.value) {
+        return NegamaxResult<TURN>(entry.bestMove, beta);
+      } else if (entry.bound == BoundType::UPPER && entry.value <= alpha.value) {
+        return NegamaxResult<TURN>(entry.bestMove, alpha);
+      }
     }
   } else {
     entry.bestMove = kNullMove;
@@ -443,7 +450,7 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
   thread->tt_->store(
     thread->position_.currentState_.hash,
     bestResult.bestMove,
-    0,
+    ttDepth,
     bestResult.evaluation.value,
     bound
   );

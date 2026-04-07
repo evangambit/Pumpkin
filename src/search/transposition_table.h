@@ -19,7 +19,7 @@ std::string bound_type_to_string(BoundType bound);
 struct TTEntry {
   uint64_t key;
   Move bestMove;
-  uint8_t depth;
+  int8_t depth;  // Negative values are used for depth into qsearch.
   Evaluation value;
   BoundType bound;
   uint8_t generation;

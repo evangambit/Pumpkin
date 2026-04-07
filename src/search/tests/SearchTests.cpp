@@ -333,6 +333,21 @@ TEST_F(SearchTest, TranspositionTableStoresAndProbes) {
   EXPECT_EQ(result1.evaluation, result2.evaluation);
 }
 
+TEST_F(SearchTest, TranspositionTableStoresSignedDepths) {
+  TranspositionTable tt(1024);
+  Move move = Move::create(SafeSquare::SE2, SafeSquare::SE4);
+
+  tt.store(12345, move, -3, 17, BoundType::EXACT);
+
+  TTEntry entry;
+  bool found = tt.probe(12345, entry);
+  EXPECT_TRUE(found);
+  EXPECT_EQ(entry.depth, -3);
+  EXPECT_EQ(entry.bestMove, move);
+  EXPECT_EQ(entry.value, 17);
+  EXPECT_EQ(entry.bound, BoundType::EXACT);
+}
+
 
 // MultiPV tests
 namespace {
