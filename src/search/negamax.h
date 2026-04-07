@@ -233,12 +233,15 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
     if (IS_PRINT_QNODE) {
       std::cout << repeat("  ", plyFromRoot) << "Max quiescence depth or ply limit reached, returning static evaluation." << std::endl;
     }
+    if (frame->inCheck) {
+      return NegamaxResult<TURN>(kNullMove, alpha);
+    }
     Threats threats;
     create_threats(thread->position_.pieceBitboards_, thread->position_.colorBitboards_, &threats);
     return NegamaxResult<TURN>(kNullMove, evaluate<TURN>(thread->position_.evaluator_, thread->position_, threats, plyFromRoot, alpha, beta).clamp_(alpha, beta));
   }
 
-  constexpr ColoredPiece moverKing = coloredPiece<TURN, Piece::KING>();
+  static constexpr ColoredPiece moverKing = coloredPiece<TURN, Piece::KING>();
 
   // Check if draw by repetition. is_3fold_repetition short-circuits when the
   // last move was a capture or pawn move, so this is near-free in the common
