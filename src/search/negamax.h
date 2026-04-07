@@ -378,21 +378,14 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
     make_move<TURN>(&thread->position_, move->move);
 
     // Move generation can sometimes generate illegal en passant moves.
-    const bool moveGivesCheck = can_enemy_attack<TURN>(
+    static constexpr ColoredPiece enemyKing = coloredPiece<opposite_color<TURN>(), Piece::KING>();
+    const bool moveGivesCheck = can_enemy_attack<opposite_color<TURN>()>(
       thread->position_,
-      lsb_i_promise_board_is_not_empty(thread->position_.pieceBitboards_[moverKing])
+      lsb_i_promise_board_is_not_empty(thread->position_.pieceBitboards_[enemyKing])
     );
-    if (move->move.moveType == MoveType::EN_PASSANT) {
-      if (moveGivesCheck) {
-        if (IS_PRINT_QNODE) {
-          std::cout << repeat("  ", plyFromRoot) << "Illegal en passant move generated: " << move->move.uci() << std::endl;
-        }
-        undo<TURN>(&thread->position_);
-        continue;
-      }
-    }
     (frame + 1)->inCheck = moveGivesCheck;
 
+    static constexpr ColoredPiece moverKing = coloredPiece<TURN, Piece::KING>();
     if (can_enemy_attack<TURN>(
       thread->position_,
       lsb_i_promise_board_is_not_empty(thread->position_.pieceBitboards_[moverKing])
@@ -795,11 +788,10 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   // these are typically different values.
   NegamaxResult<TURN> bestResult(kNullMove, ColoredEvaluation<TURN>(kMinEval));
   for (ExtMove* move = moves; move < end; ++move) {
-    constexpr ColoredPiece enemyKing = coloredPiece<opposite_color<TURN>(), Piece::KING>();
+    static constexpr ColoredPiece enemyKing = coloredPiece<opposite_color<TURN>(), Piece::KING>();
     assert((thread->position_.pieceBitboards_[enemyKing] & bb(move->move.to)) == 0);
     make_move<TURN>(&thread->position_, move->move);
 
-    // TODO: pass this to child frame.
     const bool areWeInCheck = can_enemy_attack<TURN>(
       thread->position_,
       lsb_i_promise_board_is_not_empty(thread->position_.pieceBitboards_[moverKing])
