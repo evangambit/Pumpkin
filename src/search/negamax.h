@@ -239,10 +239,6 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
   }
 
   constexpr ColoredPiece moverKing = coloredPiece<TURN, Piece::KING>();
-  frame->inCheck = can_enemy_attack<TURN>(
-    thread->position_,
-    lsb_i_promise_board_is_not_empty(thread->position_.pieceBitboards_[moverKing])
-  );
 
   // Check if draw by repetition. is_3fold_repetition short-circuits when the
   // last move was a capture or pawn move, so this is near-free in the common
