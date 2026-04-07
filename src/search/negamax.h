@@ -324,7 +324,7 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
 
   // Move ordering: captures that capture higher value pieces first.
   assert(!thread->position_.history_.empty() && "qsearch requires history to have at least one move");
-  const Move lastMove = thread->position_.history_.back().move;
+  const Move lastMove = thread->position_.history_.size() > 0 ? thread->position_.history_.back().move : kNullMove;
   assert(lastMove.from < kNumSquares && lastMove.to < kNumSquares);
   for (ExtMove* move = moves; move < end; ++move) {
     if (move->move == entry.bestMove) {
