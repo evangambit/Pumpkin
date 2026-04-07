@@ -831,13 +831,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     // Also don't reduce depth for safe passed pawn pushes.
     const bool isSafePassedPawnPush = move->piece == Piece::PAWN && (ourPassedPawnMask & ~theirTargets & bb(move->move.to)) > 0;
     const bool isSack = !!(threats.badForOur<TURN>(move->piece) & bb(move->move.to));
-
-    if (IS_PRINT_NODE) {
-      std::cout << repeat("  ", plyFromRoot) << "Recursing with childDepth=" << childDepth << " (hash=" << thread->position_.currentState_.hash << "; move=" << move->move.uci() << "; alpha=" << alpha.value << "; beta=" << beta.value << ")" << std::endl;
-    }
-
     const int index = move - moves;
-
     const bool isQuiet = (
       (move->capture == ColoredPiece::NO_COLORED_PIECE) && (move->move.moveType != MoveType::PROMOTION)
     );
