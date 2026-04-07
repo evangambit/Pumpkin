@@ -27,11 +27,15 @@ class IsReadyTask : public Task {
   }
 };
 
-void wait_for_task(UciEngineState *state) {
+bool wait_for_task(UciEngineState *state) {
   state->taskQueueLock.lock();
   if (state->taskQueue.size() > 0) {
     state->taskQueueLock.unlock();
-    return;
+    return true;
+  }
+  if (state->shuttingDown.load()) {
+    state->taskQueueLock.unlock();
+    return false;
   }
   state->taskQueueLock.unlock();
   while (true) {
@@ -40,7 +44,11 @@ void wait_for_task(UciEngineState *state) {
     state->taskQueueLock.lock();
     if (state->taskQueue.size() > 0) {
       state->taskQueueLock.unlock();
-      return;
+      return true;
+    }
+    if (state->shuttingDown.load()) {
+      state->taskQueueLock.unlock();
+      return false;
     }
     state->taskQueueLock.unlock();
   }
@@ -92,7 +100,9 @@ struct UciEngine {
 
     std::thread eventRunner([state]() {
       while (true) {
-        wait_for_task(state);
+        if (!wait_for_task(state)) {
+          return;
+        }
 
         // Wait until not busy.
         state->taskQueueLock.lock();
@@ -114,12 +124,17 @@ struct UciEngine {
       }
     });
     while (true) {
-      if (std::cin.eof()) {
+      if (cin.eof()) {
         break;
       }
       std::string line;
-      getline(std::cin, line);
+      if (!getline(cin, line)) {
+        break;
+      }
       if (line == "quit") {
+        state->shuttingDown.store(true);
+        std::unique_lock<std::mutex> lock(this->state.mutex);
+        this->state.condVar.notify_all();
         exit(0);
         break;
       }
@@ -135,6 +150,11 @@ struct UciEngine {
       std::unique_lock<std::mutex> lock(this->state.mutex);
       this->state.condVar.notify_one();
     }
+    state->shuttingDown.store(true);
+    {
+      std::unique_lock<std::mutex> lock(this->state.mutex);
+      this->state.condVar.notify_all();
+    }
     eventRunner.join();
   }
   static void handle_uci_command(UciEngineState *state, std::string *command) {
@@ -146,6 +166,10 @@ struct UciEngine {
       if (part.size() > 0) {
         parts.push_back(part);
       }
+    }
+
+    if (parts.empty()) {
+      return;
     }
 
     state->taskQueueLock.lock();
@@ -222,7 +246,9 @@ int main(int argc, char *argv[]) {
   if (commands.size() == 0) {
     while (true) {
       std::string line;
-      getline(std::cin, line);
+      if (!getline(std::cin, line)) {
+        return 0;
+      }
       if (line == "uci") {
         break;
       } else {

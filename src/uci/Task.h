@@ -83,6 +83,8 @@ struct UciEngineState {
 
   std::mutex mutex;
   std::condition_variable condVar;
+  // Signals input and worker loops to stop waiting and exit on shutdown/EOF.
+  std::atomic<bool> shuttingDown = false;
 
   std::deque<std::shared_ptr<Task>> taskQueue;
   SpinLock taskQueueLock;
