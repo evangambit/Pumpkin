@@ -244,7 +244,7 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
   }
 
   // Transposition Table probe
-  TTEntry entry;
+  TTEntry entry{0, kNullMove, 0, 0, BoundType::EXACT, 0};
   uint64_t key = thread->position_.currentState_.hash;
   if (thread->tt_->probe(key, entry)) {
     if (IS_PRINT_QNODE) {
@@ -520,7 +520,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   }
 
   // Transposition Table probe
-  TTEntry entry;
+  TTEntry entry{0, kNullMove, 0, 0, BoundType::EXACT, 0};
   if (thread->tt_->probe(key, entry)) {
     if (entry.depth >= depth) {
       if (SEARCH_TYPE != SearchType::ROOT) {

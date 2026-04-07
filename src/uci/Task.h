@@ -66,12 +66,12 @@ struct UciEngineState {
     // nnue_model->load(f);
     #ifndef DEFAULT_EVALUATOR
     this->position.set_listener(std::make_shared<PieceSquareEvaluator>());
-    #elif DEFAULT_EVALUATOR == "byhand"
+    #elif DEFAULT_EVALUATOR == 'b'
     auto evaluator = std::make_shared<ByHand::ByHandEvaluator>();
     std::istringstream f(std::string(byhand_bin, byhand_bin_len));
     evaluator->load_from_stream(f);
     this->position.set_listener(evaluator);
-    #elif DEFAULT_EVALUATOR == "nnue"
+    #elif DEFAULT_EVALUATOR == 'n'
     auto nnue_model = std::make_shared<NNUE::Nnue>();
     std::istringstream f(std::string(model_bin, model_bin_len));
     nnue_model->load(f);
