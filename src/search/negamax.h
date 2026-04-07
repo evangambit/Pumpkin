@@ -790,6 +790,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   // bestResult.evaluation is the value we will return. When multiPV > 1 and we're in the root,
   // these are typically different values.
   NegamaxResult<TURN> bestResult(kNullMove, ColoredEvaluation<TURN>(kMinEval));
+  int numLegalMoves = 0;
   for (ExtMove* move = moves; move < end; ++move) {
     static constexpr ColoredPiece enemyKing = coloredPiece<opposite_color<TURN>(), Piece::KING>();
     assert((thread->position_.pieceBitboards_[enemyKing] & bb(move->move.to)) == 0);
@@ -808,6 +809,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
       undo<TURN>(&thread->position_);
       continue;
     }
+    ++numLegalMoves;
     const bool moveGivesCheck = can_enemy_attack<opposite_color<TURN>()>(
       thread->position_,
       lsb_i_promise_board_is_not_empty(thread->position_.pieceBitboards_[enemyKing])
@@ -925,6 +927,23 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
         break;
       }
     }
+  }
+
+  if (numLegalMoves == 0) {
+    // It is possible to have no legal moves if the only pseudo-legal moves is
+    // an illegal enpassant. Example:
+    // 5r2/3p4/2rp1p2/3K1Ppr/3p3k/2bb4/8/8 w - - 0 2
+    // This can result in stalemate (above example) or checkmate (though it would
+    // have to be a discovered check -- due to geometric constraints and the way
+    // we successfully prune out most illegal moves, the pawn cannot be giving a
+    // check itself, while also having enpassant be illegal).
+    if (frame->inCheck) {
+      return NegamaxResult<TURN>(kNullMove, ColoredEvaluation<TURN>(kCheckmate).clamp_(originalAlpha, beta));
+    } else {
+      return NegamaxResult<TURN>(kNullMove, ColoredEvaluation<TURN>(kStalemate).clamp_(originalAlpha, beta));
+    }
+    // TODO (low priority): when en passant is illegal, we still consider is "legal" for the purpose of 3-fold repetition detection,
+    // meaning we may believe a position is not drawable when it actually is.
   }
 
   if (stopThinking->load()) {
