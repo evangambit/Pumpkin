@@ -940,7 +940,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     if (frame->inCheck) {
       return NegamaxResult<TURN>(kNullMove, ColoredEvaluation<TURN>(kCheckmate).clamp_(originalAlpha, beta));
     } else {
-      return NegamaxResult<TURN>(kNullMove, ColoredEvaluation<TURN>(kStalemate).clamp_(originalAlpha, beta));
+      return NegamaxResult<TURN>(kNullMove, ColoredEvaluation<TURN>(kDraw).clamp_(originalAlpha, beta));
     }
     // TODO (low priority): when en passant is illegal, we still consider is "legal" for the purpose of 3-fold repetition detection,
     // meaning we may believe a position is not drawable when it actually is.
