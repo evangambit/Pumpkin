@@ -245,13 +245,10 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
     return NegamaxResult<TURN>(kNullMove, beta);
   }
 
-  // Prevent stack overflow - return static eval if we've gone too deep
+  // Prevent overflowing the frame array (and the call stack) - return static eval if we've gone too deep
   if (quiescenceDepth >= kMaxQuiescenceDepth || thread->ply_from_root(frame) >= kMaxPlyFromRoot - 1) {
     if (IS_PRINT_QNODE) {
       std::cout << repeat("  ", plyFromRoot) << "Max quiescence depth or ply limit reached, returning static evaluation." << std::endl;
-    }
-    if (frame->inCheck) {
-      return NegamaxResult<TURN>(kNullMove, alpha);
     }
     Threats threats;
     create_threats(thread->position_.pieceBitboards_, thread->position_.colorBitboards_, &threats);
