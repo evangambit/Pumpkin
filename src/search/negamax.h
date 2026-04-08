@@ -665,7 +665,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     return r;
   }
   // Reverse futility pruning (+29.6 ± 2.7)
-  if (depth == 1 && frame->staticEval > beta.value + kRazoringMargin) {
+  if (depth == 1 && frame->staticEval > beta.value + kRazoringMargin && !frame->inCheck) {
     const auto r = NegamaxResult<TURN>(kNullMove, beta);
     if (IS_PRINT_NODE) {
       std::cout << repeat("  ", plyFromRoot) << "Reverse futility pruning: static eval is much better than beta. Returning beta." << std::endl;
