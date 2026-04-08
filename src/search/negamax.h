@@ -83,6 +83,19 @@ struct Frame {
   Evaluation staticEval;
 };
 
+struct HistoryEntry {
+  int32_t value{0};
+
+  int32_t score() const {
+    return value / 64;
+  }
+
+  void update(int depth) {
+    const int32_t bonus = std::min(depth * depth, 400);
+    value += bonus - value * std::abs(bonus) / 16384;
+  }
+};
+
 /**
   * Thread-specific information. e.g. every thread has its own nodeCount_, position, etc.
   */
@@ -98,8 +111,8 @@ struct Thread {
   uint64_t qNodeCount_{0};
   uint64_t nodeLimit_{(uint64_t)-1};
   Frame frames_[kMaxPlyFromRoot + 4];  // Root search starts at frames_[4] so frame[-4] lookbacks stay in-bounds.
-  int32_t quietHistory_[Piece::NUM_PIECES][64];
-  int32_t captureHistory_[Piece::NUM_PIECES][Piece::NUM_PIECES][64];
+  HistoryEntry quietHistory_[Piece::NUM_PIECES][64];
+  HistoryEntry captureHistory_[Piece::NUM_PIECES][Piece::NUM_PIECES][64];
 
   // This pointer should be considered non-owning. The TranspositionTable should created and
   // managed elsewhere since it should be shared across threads and searches.
@@ -731,9 +744,9 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     move->score += frame->killers.contains(move->move) ? 8000 : 0;
 
     if (move->capture == ColoredPiece::NO_COLORED_PIECE) {
-      move->score += thread->quietHistory_[move->piece][move->move.to] / 64;
+      move->score += thread->quietHistory_[move->piece][move->move.to].score();
     } else {
-      move->score += thread->captureHistory_[move->piece][cp2p(thread->position_.tiles_[move->move.to])][move->move.to] / 64;
+      move->score += thread->captureHistory_[move->piece][cp2p(thread->position_.tiles_[move->move.to])][move->move.to].score();
     }
 
     // Penalize non-capture moves that move to a defended square.
@@ -914,13 +927,9 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
       if (alpha >= beta) {
         // TODO: check if this move is quiet. Probably also check if we've already added it as a killer.
         if (isQuiet) {
-          int32_t bonus = std::min(depth * depth, 400);
-          int32_t& hist = thread->quietHistory_[move->piece][move->move.to];
-          hist += bonus - hist * std::abs(bonus) / 16384;
+          thread->quietHistory_[move->piece][move->move.to].update(depth);
         } else {
-          int32_t bonus = std::min(depth * depth, 400);
-          int32_t& hist = thread->captureHistory_[move->piece][cp2p(move->capture)][move->move.to];
-          hist += bonus - hist * std::abs(bonus) / 16384;
+          thread->captureHistory_[move->piece][cp2p(move->capture)][move->move.to].update(depth);
         }
         frame->killers.add(move->move);
         frame->responseTo[move->piece][lastMove.to] = move->move;
