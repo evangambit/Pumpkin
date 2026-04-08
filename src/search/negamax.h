@@ -682,7 +682,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   //  3 main-slow    :    -4.1    5.5  2364.0    4800    49
   //  4 main-fast    :   -62.3    5.4  1852.0    4800    39
   const int myPieceCount = std::popcount(thread->position_.colorBitboards_[TURN] & ~thread->position_.pieceBitboards_[coloredPiece<TURN, Piece::PAWN>()]);
-  if (SEARCH_TYPE == SearchType::NULL_WINDOW_SEARCH && !frame->inCheck && myPieceCount > 0 && depth > 0) {
+  if (SEARCH_TYPE == SearchType::NULL_WINDOW_SEARCH && !frame->inCheck && myPieceCount > 1 && depth > 0) {
     constexpr int reduction = 4;
     const int reducedDepth = std::max(0, depth - reduction);
     make_nullmove<TURN>(&thread->position_);
