@@ -59,7 +59,7 @@ namespace ChessEngine {
  * it either promotes to primary (if it matches the current secondary) or
  * replaces the secondary.
  */
-struct Killers {
+struct MoveCache {
   Move moves[2];
   void add(Move move) {
     if (moves[1] == move) {
@@ -75,7 +75,7 @@ struct Killers {
 
 /** Ply-specific information. */
 struct Frame {
-  Killers killers;
+  MoveCache killers;
   Move responseTo[Piece::NUM_PIECES][64];
   Move responseFrom[Piece::NUM_PIECES][64];
   uint64_t hash;
