@@ -261,7 +261,11 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
   // last move was a capture or pawn move, so this is near-free in the common
   // qsearch case (captures). It still correctly detects repetitions through
   // check sequences.
-  if (thread->position_.is_3fold_repetition(plyFromRoot)) {
+  const bool isThreefoldDraw = thread->position_.is_3fold_repetition(plyFromRoot);
+  // Check if draw by fifty-move rule. We have to exclude positions where the king is in check
+  // since it may be checkmate.
+  const bool isFiftyMoveDraw = thread->position_.is_fifty_move_rule();
+  if (isThreefoldDraw || (isFiftyMoveDraw && !frame->inCheck)) {
     return NegamaxResult<TURN>(kNullMove, ColoredEvaluation<TURN>(kDraw).clamp_(alpha, beta));
   }
 
@@ -320,6 +324,10 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
       std::cout << repeat("  ", plyFromRoot) << "Checkmate detected in quiescence search." << std::endl;
     }
     return NegamaxResult<TURN>(kNullMove, ColoredEvaluation<TURN>(kCheckmate).clamp_(originalAlpha, beta));
+  }
+  // Now that we know it's not checkmate, we can re-check for fifty-move draw.
+  if (isFiftyMoveDraw) {
+    return NegamaxResult<TURN>(kNullMove, ColoredEvaluation<TURN>(kDraw).clamp_(originalAlpha, beta));
   }
   if (IS_PRINT_QNODE) {
     std::cout << repeat("  ", plyFromRoot) << "Comparing static evaluation to alpha/beta" << std::endl;
@@ -533,8 +541,10 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   }
 
   // Check if draw by repetition or insufficient material.
-  bool isDraw = thread->position_.is_3fold_repetition(plyFromRoot);
-  isDraw |= !frame->inCheck && thread->position_.is_fifty_move_rule();
+  const bool isThreefoldDraw = thread->position_.is_3fold_repetition(plyFromRoot);
+  const bool isFiftyMoveDraw = thread->position_.is_fifty_move_rule();
+  bool isDraw = isThreefoldDraw;
+  isDraw |= isFiftyMoveDraw && !frame->inCheck;
   isDraw |= thread->position_.is_material_draw();
   if (isDraw) {
     if (IS_PRINT_NODE) {
@@ -621,6 +631,11 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
       }
       return NegamaxResult<TURN>(kNullMove, ColoredEvaluation<TURN>(Evaluation(kDraw)).clamp_(originalAlpha, beta));
     }
+  }
+
+  // Now that we know it's not checkmate, we can re-check for fifty-move draw.
+  if (isFiftyMoveDraw) {
+    return NegamaxResult<TURN>(kNullMove, ColoredEvaluation<TURN>(kDraw).clamp_(originalAlpha, beta));
   }
 
   // Internal Iterative Deepening.

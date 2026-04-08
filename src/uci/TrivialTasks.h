@@ -44,6 +44,10 @@ NegamaxResult<COLOR> ez_qsearch(const Position& pos) {
     /*excludedMoves=*/ std::unordered_set<Move>(),
     /*tt=*/ tt.get()
   );
+  thread->root_frame()->inCheck = can_enemy_attack<COLOR>(
+    thread->position_,
+    lsb_i_promise_board_is_not_empty(thread->position_.pieceBitboards_[coloredPiece<COLOR, Piece::KING>()])
+  );
   std::atomic<bool> stopThinking = false;
   return qsearch<COLOR>(
       thread.get(),
