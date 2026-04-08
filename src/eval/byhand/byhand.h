@@ -667,8 +667,23 @@ struct ByHandEvaluator : public PieceSquareEvaluator {
     return _evaluate<Color::BLACK>(pos, threats, alpha, beta);
   }
 
+  inline bool _is_material_draw(const Position& pos) const {
+    if ((pos.pieceBitboards_[ColoredPiece::WHITE_PAWN] | pos.pieceBitboards_[ColoredPiece::BLACK_PAWN]) == kEmptyBitboard) {
+      int whiteMinor = std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_KNIGHT] | pos.pieceBitboards_[ColoredPiece::WHITE_BISHOP]);
+      int blackMinor = std::popcount(pos.pieceBitboards_[ColoredPiece::BLACK_KNIGHT] | pos.pieceBitboards_[ColoredPiece::BLACK_BISHOP]);
+      int whiteMajor = std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_ROOK] | pos.pieceBitboards_[ColoredPiece::WHITE_QUEEN]);
+      int blackMajor = std::popcount(pos.pieceBitboards_[ColoredPiece::BLACK_ROOK] | pos.pieceBitboards_[ColoredPiece::BLACK_QUEEN]);
+      return whiteMajor + blackMajor == 0 && whiteMinor <= 1 && blackMinor <= 1;
+    }
+    return false;
+  }
+
   template<Color US>
   ColoredEvaluation<US> _evaluate(const Position& pos, const Threats& threats, ColoredEvaluation<US> alpha, ColoredEvaluation<US> beta) {
+    if (_is_material_draw(pos)) {
+      return ColoredEvaluation<US>(kDraw);
+    }
+
     pos2features<US>(pos, threats, x.data_ptr());
     int32_t pst_late = US == Color::WHITE ? this->PieceSquareEvaluator::late : -this->PieceSquareEvaluator::late;
     int32_t pst_early = US == Color::WHITE ? this->PieceSquareEvaluator::early : -this->PieceSquareEvaluator::early;
