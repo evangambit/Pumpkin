@@ -22,6 +22,15 @@ namespace ChessEngine {
 
 namespace ByHand {
 
+/* TODO
+  - Rook behind passed pawn
+  - isolated and/or doubled and/or backward pawns *on semiopen files* are worse
+  - double pawns get worse as rooks/queens come off the board
+  - if/when we add pawn majority/minority logic, double pawns in the majority side are worse than normal doubled pawns
+  - distinguish between doubled pawns in a defensive triangle and doubled pawns adjacent to each other?
+  - distinguish between pawn types on different files (e.g. doubled pawn on the edge vs in the center)
+  - num pawns that can safely advance? on each row?
+*/
 enum EF {
   EARLINESS,
 
@@ -667,7 +676,7 @@ struct ByHandEvaluator : public PieceSquareEvaluator {
     return _evaluate<Color::BLACK>(pos, threats, alpha, beta);
   }
 
-  inline bool _is_material_draw(const Position& pos) const {
+  inline static bool _is_material_draw(const Position& pos) {
     if ((pos.pieceBitboards_[ColoredPiece::WHITE_PAWN] | pos.pieceBitboards_[ColoredPiece::BLACK_PAWN]) == kEmptyBitboard) {
       int whiteMinor = std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_KNIGHT] | pos.pieceBitboards_[ColoredPiece::WHITE_BISHOP]);
       int blackMinor = std::popcount(pos.pieceBitboards_[ColoredPiece::BLACK_KNIGHT] | pos.pieceBitboards_[ColoredPiece::BLACK_BISHOP]);

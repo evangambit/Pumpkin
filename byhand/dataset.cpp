@@ -33,6 +33,7 @@ struct ChunkedDataset {
         std::vector<int16_t> pst_values;
         std::vector<int16_t> pst_signs;
         std::vector<int16_t> pst_lengths;
+        std::vector<int8_t> mask;
         
         int lines_read = 0;
         std::string line;
@@ -73,6 +74,7 @@ struct ChunkedDataset {
             }
             all_evals.push_back(eval);
             all_turns.push_back(static_cast<int8_t>(pos.turn_));
+            mask.push_back(ByHand::ByHandEvaluator::_is_material_draw(pos) ? 0 : 1);
 
             const int whiteOffset = pos.turn_ == Color::WHITE ? 0 : 6;
             const int blackOffset = pos.turn_ == Color::BLACK ? 0 : 6;
@@ -120,7 +122,10 @@ struct ChunkedDataset {
         auto pst_lengths_tensor = torch::empty({(long)pst_lengths.size()}, torch::TensorOptions().dtype(torch::kInt16));
         std::memcpy(pst_lengths_tensor.data_ptr<int16_t>(), pst_lengths.data(), pst_lengths.size() * sizeof(int16_t));
 
-        return {values_tensor, evals_tensor, turn_tensor, pst_values_tensor, pst_lengths_tensor};
+        auto mask_tensor = torch::empty({(long)mask.size()}, torch::TensorOptions().dtype(torch::kInt8));
+        std::memcpy(mask_tensor.data_ptr<int8_t>(), mask.data(), mask.size() * sizeof(int8_t));
+        
+        return {values_tensor, evals_tensor, turn_tensor, pst_values_tensor, pst_lengths_tensor, mask_tensor };
     }
 };
 

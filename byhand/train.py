@@ -40,13 +40,14 @@ def save_tensor(tensor: torch.Tensor, name: str, out: io.BufferedWriter):
   out.write(tensor.tobytes())
 
 def collate_fn(rows):
-    values, labels, turns, pst_values, pst_lengths = zip(*rows)
+    values, labels, turns, pst_values, pst_lengths, mask = zip(*rows)
     values = torch.cat(values, dim=0)
     labels = torch.cat(labels, dim=0)
     turns = torch.cat(turns, dim=0)
     pst_values = torch.cat(pst_values, dim=0)
     pst_lengths = torch.cat(pst_lengths, dim=0)
-    return values, labels, turns, pst_values, pst_lengths
+    mask = torch.cat(mask, dim=0)
+    return values, labels, turns, pst_values, pst_lengths, mask
 
 class CosineAnnealingWithWarmup:
     def __init__(self, optimizer, max_lr=3e-3, min_lr=1e-5, warmup_steps=100, total_steps=None):
@@ -115,8 +116,7 @@ if __name__ == "__main__":
     dataloader = tdata.DataLoader(dataset, batch_size=BATCH_SIZE//CHUNK_SIZE, shuffle=False, num_workers=0, pin_memory=True, drop_last=True, collate_fn=collate_fn)
 
     # Fetch one batch to get the number of features
-    first_batch = next(iter(dataloader))
-    values, labels, turns, pst_values, pst_lengths = first_batch
+    values = next(iter(dataloader))[0]
     num_features = values.shape[1]
     print(f"Number of features: {num_features}")
 
@@ -153,7 +153,7 @@ if __name__ == "__main__":
             opt.zero_grad()
             scheduler.step()
             
-            values, labels, turns, pst_values, pst_lengths = [x.to(device) for x in batch]
+            values, labels, turns, pst_values, pst_lengths, mask = [x.to(device) for x in batch]
             values = values.to(torch.float32)
 
             earliness = values[:,dataset.earliness_index]
@@ -172,6 +172,10 @@ if __name__ == "__main__":
             # Use Sigmoid to match eval output
             output_sig = torch.sigmoid(output)
             label_sig = torch.sigmoid(labels * LABEL_SCALE)
+
+            # Ignore positions that are material draws.
+            output_sig = output_sig * mask.to(torch.float32)
+            label_sig = label_sig * mask.to(torch.float32)
             
             if WEIGHT_STAGES_EQUALLY:
                 loss = nn.functional.mse_loss(output_sig, label_sig, reduction='none')
@@ -224,7 +228,7 @@ if __name__ == "__main__":
     dataset = ndata.ByHandDataset(['../data/pos.10m-test.txt'])
     dataloader = tdata.DataLoader(dataset, batch_size=BATCH_SIZE//CHUNK_SIZE, shuffle=False, num_workers=0, pin_memory=True, drop_last=True, collate_fn=collate_fn)
     for batch in dataloader:
-        values, labels, turns, pst_values, pst_lengths = [x.to(device) for x in batch]
+        values, labels, turns, pst_values, pst_lengths, mask = [x.to(device) for x in batch]
         values = values.to(torch.float32)
         earliness = values[:,dataset.earliness_index].clip(0, dataset.max_earliness) / dataset.max_earliness
         output = model(values.float(), earliness, pst_values, pst_lengths)
