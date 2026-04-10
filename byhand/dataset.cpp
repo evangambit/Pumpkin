@@ -11,6 +11,7 @@
 #include "../src/eval/byhand/byhand.h"
 
 using namespace ChessEngine;
+using namespace ByHand;
 
 struct ChunkedDataset {
     std::vector<std::string> paths;
@@ -129,6 +130,10 @@ struct ChunkedDataset {
     }
 };
 
+inline int num_features() {
+    return EF::EF_COUNT;
+}
+
 PYBIND11_MODULE(_byhand_dataset, m) {
     pybind11::class_<ChunkedDataset>(m, "ChunkedDataset")
         .def(pybind11::init<std::vector<std::string>, int>())
@@ -147,4 +152,7 @@ PYBIND11_MODULE(_byhand_dataset, m) {
     m.def("earliness_index", []() -> int {
         return ChessEngine::ByHand::EF::EARLINESS;
     }, "Returns the index of the earliness feature.");
+    m.def("num_features", []() -> int {
+        return ChessEngine::ByHand::EF::EF_COUNT;
+    }, "Returns the total number of features.");
 }

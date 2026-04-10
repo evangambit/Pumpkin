@@ -116,8 +116,7 @@ if __name__ == "__main__":
     dataloader = tdata.DataLoader(dataset, batch_size=BATCH_SIZE//CHUNK_SIZE, shuffle=False, num_workers=0, pin_memory=True, drop_last=True, collate_fn=collate_fn)
 
     # Fetch one batch to get the number of features
-    values = next(iter(dataloader))[0]
-    num_features = values.shape[1]
+    num_features = dataset.num_features
     print(f"Number of features: {num_features}")
 
     model = MyModel(num_features).to(device)
