@@ -557,28 +557,26 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   TTEntry entry{0, kNullMove, 0, 0, BoundType::EXACT, 0};
   if (thread->tt_->probe(key, entry)) {
     if (entry.depth >= depth) {
-      if (SEARCH_TYPE != SearchType::ROOT) {
+      // Only use TT cutoffs in non-PV nodes (NULL_WINDOW_SEARCH).
+      // In PV nodes (NORMAL_SEARCH), we only use the TT for move ordering
+      // to avoid graph history interaction (GHI) bugs where path-dependent
+      // evaluations (e.g. from repetition draws) are incorrectly reused.
+      if (SEARCH_TYPE == SearchType::NULL_WINDOW_SEARCH) {
         if (entry.bound == BoundType::EXACT) {
           if (IS_PRINT_NODE) {
             std::cout << repeat("  ", plyFromRoot) << "Returning (TT Hit: EXACT; eval=" << entry.bestMove << " " << entry.value << ")" << std::endl;
           }
           return NegamaxResult<TURN>(entry.bestMove, ColoredEvaluation<TURN>(entry.value).clamp_(alpha, beta));
-        } else if (entry.bound == BoundType::LOWER) {
-          if (entry.value >= beta.value) {
-            if (IS_PRINT_NODE) {
-              std::cout << repeat("  ", plyFromRoot) << "Returning (TT Hit: LOWER)" << std::endl;
-            }
-            return NegamaxResult<TURN>(entry.bestMove, beta);
+        } else if (entry.bound == BoundType::LOWER && entry.value >= beta.value) {
+          if (IS_PRINT_NODE) {
+            std::cout << repeat("  ", plyFromRoot) << "Returning (TT Hit: LOWER)" << std::endl;
           }
-          alpha = ColoredEvaluation<TURN>(entry.value).clamp_(alpha, beta);
-        } else if (entry.bound == BoundType::UPPER) {
-          if (entry.value <= alpha.value) {
-            if (IS_PRINT_NODE) {
-              std::cout << repeat("  ", plyFromRoot) << "Returning (TT Hit: UPPER)" << std::endl;
-            }
-            return NegamaxResult<TURN>(entry.bestMove, alpha);
+          return NegamaxResult<TURN>(entry.bestMove, beta);
+        } else if (entry.bound == BoundType::UPPER && entry.value <= alpha.value) {
+          if (IS_PRINT_NODE) {
+            std::cout << repeat("  ", plyFromRoot) << "Returning (TT Hit: UPPER)" << std::endl;
           }
-          beta = ColoredEvaluation<TURN>(entry.value).clamp_(alpha, beta);
+          return NegamaxResult<TURN>(entry.bestMove, alpha);
         }
       }
     } else {
