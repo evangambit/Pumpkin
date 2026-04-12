@@ -728,6 +728,11 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
   const SafeSquare theirKingSq = lsb_i_promise_board_is_not_empty(thread->position_.pieceBitboards_[coloredPiece<opposite_color<TURN>(), Piece::KING>()]);
   const CheckMap checkMap = compute_potential_attackers<TURN>(thread->position_, theirKingSq);
 
+  const Bitboard theirTargets = TURN == Color::WHITE ? threats.blackTargets : threats.whiteTargets;
+  const Bitboard theirPawns = thread->position_.pieceBitboards_[coloredPiece<opposite_color<TURN>(), Piece::PAWN>()];
+  const Bitboard theirPieces = TURN == Color::WHITE ? thread->position_.colorBitboards_[Color::BLACK] : thread->position_.colorBitboards_[Color::WHITE];
+  const Bitboard theirUndefendedPieces = (theirPieces & ~theirPawns) & ~theirTargets;
+
   for (ExtMove* move = moves; move < end; ++move) {
     if (move->move == entry.bestMove) {
       move->score = kMaxEval;
@@ -771,9 +776,9 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     , kMoveOrderingPieceValue[move->piece] / 2);
 
     // Prioritize moves that caused a beta cutoff in a similar position, in response to a similar move.
-    move->score += frame->responseTo[move->piece][lastMove.to] == move->move ? 20 : 0;
+    move->score += frame->responseTo[move->piece][lastMove.to] == move->move ? 25 : 0;
     move->score += frame->responseFrom[move->piece][lastMove.from] == move->move ? 20 : 0;
-    move->score += (frame - 2)->responseTo[move->piece][lastMove.to] == move->move ? 10 : 0;
+    move->score += (frame - 2)->responseTo[move->piece][lastMove.to] == move->move ? 15 : 0;
     move->score += (frame - 2)->responseFrom[move->piece][lastMove.from] == move->move ? 10 : 0;
     move->score += (frame - 4)->responseTo[move->piece][lastMove.to] == move->move ? 5 : 0;
     move->score += (frame - 4)->responseFrom[move->piece][lastMove.from] == move->move ? 5 : 0;
@@ -801,10 +806,6 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     thread->primaryVariations_.clear();
   }
 
-  const Bitboard theirTargets = (TURN == Color::WHITE) ? threats.blackTargets : threats.whiteTargets;
-  const Bitboard theirPawns = (TURN == Color::WHITE) ? 
-    thread->position_.pieceBitboards_[coloredPiece<Color::BLACK, Piece::PAWN>()] : 
-    thread->position_.pieceBitboards_[coloredPiece<Color::WHITE, Piece::PAWN>()];
   const Bitboard aheadOfTheirPawns = ((TURN == Color::WHITE) ? 
     southFill(theirPawns) : northFill(theirPawns)) & ~theirPawns;
   const Bitboard ourPassedPawnMask = ~(fatten(aheadOfTheirPawns));
@@ -871,6 +872,7 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
         lateMoveReduction -= isSafePassedPawnPush ? 1 : 0;
         lateMoveReduction += isSack ? 1 : 0;
         lateMoveReduction -= frame->killers.contains(move->move) ? 1 : 0;
+        // TODO: extend attacking trapped pieces?
         const int reducedChildDepth = std::max(childDepth - std::max(0, lateMoveReduction), 0);
       #else
         const int reducedChildDepth = childDepth;

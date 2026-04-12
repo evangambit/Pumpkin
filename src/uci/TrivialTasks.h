@@ -425,6 +425,54 @@ class SetEvaluatorTask : public Task {
   std::deque<std::string> command;
 };
 
+class ByHandEvalDebugTask : public Task {
+ public:
+  ByHandEvalDebugTask(std::deque<std::string> command) : command(command) {}
+  void start(UciEngineState *state) {
+    auto evaluator = std::make_shared<ByHand::ByHandEvaluator>();
+    command.pop_front();
+    if (command.size() > 0) {
+      std::string modelFile = command.at(0);
+      command.pop_front();
+      std::ifstream f(modelFile, std::ios::binary);
+      if (!f) {
+        std::cout << "Error: could not open model file \"" << modelFile << "\"" << std::endl;
+        return;
+      }
+      evaluator->load_from_stream(f);
+    } else {
+      std::istringstream f(std::string(byhand_bin, byhand_bin_len));
+      evaluator->load_from_stream(f);
+    }
+    Position pos = state->position;
+    pos.set_listener(evaluator);
+    Threats threats;
+    create_threats(pos.pieceBitboards_, pos.colorBitboards_, &threats);
+
+    const auto& weights = evaluator->weights;
+
+    int8_t features[ByHand::EF::EF_COUNT];
+    if (pos.turn_ == Color::WHITE) {
+      ByHand::pos2features<WHITE>(pos, threats, features);
+    } else {
+      ByHand::pos2features<BLACK>(pos, threats, features);
+    }
+    std::cout << "Features: ";
+    for (size_t i = 0; i < ByHand::EF::EF_COUNT; ++i) {
+      if (features[i] != 0) {
+        int32_t v = 0;
+        for (size_t j = 0; j < 2; ++j) {
+          v += features[i] * weights(j, i) * (j == 0 ? ByHand::kMaxEarliness - features[ByHand::EF::EARLINESS] : features[ByHand::EF::EARLINESS]) / ByHand::kMaxEarliness;
+        }
+        std::cout << rjust(std::to_string(int(features[i])), 3) << " (" << rjust(std::to_string(v), 5) << ")" << " " << to_string(ByHand::EF(i)) << std::endl;
+      }
+    }
+    std::cout << std::endl;
+  }
+ private:
+  std::deque<std::string> command;
+};
+
 class NnueEvalDebugTask : public Task {
  public:
   NnueEvalDebugTask(std::deque<std::string> command) : command(command) {}
