@@ -376,8 +376,6 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
     move->score += frame->responseFrom[move->piece][lastMove.from] == move->move ? 20 : 0;
     move->score += (frame - 2)->responseTo[move->piece][lastMove.to] == move->move ? 10 : 0;
     move->score += (frame - 2)->responseFrom[move->piece][lastMove.from] == move->move ? 10 : 0;
-    move->score += (frame - 4)->responseTo[move->piece][lastMove.to] == move->move ? 5 : 0;
-    move->score += (frame - 4)->responseFrom[move->piece][lastMove.from] == move->move ? 5 : 0;
   }
   std::sort(
     moves,
@@ -780,8 +778,6 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     move->score += frame->responseFrom[move->piece][lastMove.from] == move->move ? 20 : 0;
     move->score += (frame - 2)->responseTo[move->piece][lastMove.to] == move->move ? 15 : 0;
     move->score += (frame - 2)->responseFrom[move->piece][lastMove.from] == move->move ? 10 : 0;
-    // move->score += (frame - 4)->responseTo[move->piece][lastMove.to] == move->move ? 5 : 0;
-    // move->score += (frame - 4)->responseFrom[move->piece][lastMove.from] == move->move ? 5 : 0;
 
     // Penalize pawn moves.
     move->score -= move->piece == Piece::PAWN;

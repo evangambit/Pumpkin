@@ -4,10 +4,9 @@
 """
 python3 match.py \
   --engine "./old \"evaluator byhand\"" \
-  --engine "./uci \"evaluator byhand byhand/runs/20260316-172658/model.bin\"" \
+  --engine "./uci \"evaluator byhand\"" \
   --engine "./uci \"evaluator nnue nnue/runs/.../model.bin\"" \
-  --option 1:Hash=64 --option 2:Threads=2 \
-  --tc movetime=10 --concurrency=4 --games=10000 --opening 6mvs_+90_+99.epd
+  --tc movetime=10 --concurrency=4 --games=10000 --opening 6mvs_+90_+99.epd --alpha 0.01
 """
 
 import argparse
