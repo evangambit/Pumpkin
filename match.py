@@ -476,6 +476,8 @@ def main():
             help="UCI option for engine N: 'N:key=value' (1-indexed, repeatable)")
   parser.add_argument("--timeout", type=int, default=30,
             help="Per-move timeout in seconds; engines killed if unresponsive (default: 30)")
+  parser.add_argument("--vs-engine0-only", action="store_true", default=False,
+            help="If set, only play matches where one engine is engine 0 (all vs engine 0 mode)")
   args = parser.parse_args()
 
   if len(args.engine) < 2:
@@ -534,11 +536,17 @@ def main():
     random.shuffle(epd_fens)
     opening_label = f"{args.opening} ({len(epd_fens)} positions)"
 
-  # Build matchup list: all pairs (i, j) with i < j
-  matchups = list(itertools.combinations(range(n_engines), 2))
-  n_matchups = len(matchups)
-
-  print(f"\nTournament: {n_engines} engines, {n_matchups} matchups (round-robin)")
+  # Build matchup list
+  if args.vs_engine0_only:
+    # Only play matches where one engine is engine 0 (index 0), i < j and i==0 or j==0
+    matchups = [(0, j) for j in range(1, n_engines)]
+    n_matchups = len(matchups)
+    print(f"\nTournament: {n_engines} engines, {n_matchups} matchups (all vs engine 0)")
+  else:
+    # Full round-robin: all pairs (i, j) with i < j
+    matchups = list(itertools.combinations(range(n_engines), 2))
+    n_matchups = len(matchups)
+    print(f"\nTournament: {n_engines} engines, {n_matchups} matchups (round-robin)")
   print(f"Engines: {', '.join(engine_names)}")
   print(f"Game pairs per matchup: {args.games}, TC: {args.tc}, Opening: {opening_label}")
   print(f"Concurrency: {args.concurrency}")

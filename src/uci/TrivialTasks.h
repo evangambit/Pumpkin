@@ -525,6 +525,29 @@ class NnueEvalDebugTask : public Task {
   std::deque<std::string> command;
 };
 
+class IncrementWeightTask : public Task {
+ public:
+  IncrementWeightTask(std::deque<std::string> command) : command(command) {}
+  void start(UciEngineState *state) {
+    command.pop_front();
+    if (command.size() != 3) {
+      std::cout << "Error: increment_weight command requires exactly 3 arguments: <feature> <is early> <delta>" << std::endl;
+      exit(1);
+    }
+    if (state->position.evaluator_->to_string() != "ByHandEvaluator") {
+      std::cout << "Error: increment_weight command only works with byhand evaluator." << std::endl;
+      exit(1);
+    }
+    auto evaluator = std::dynamic_pointer_cast<ByHand::ByHandEvaluator>(state->position.evaluator_);
+    int featureIndex = std::stoi(command.at(0));
+    bool isEarly = command.at(1) == "1";
+    int delta = std::stoi(command.at(2));
+    evaluator->weights(isEarly ? 1 : 0, featureIndex) += delta;
+  }
+ private:
+  std::deque<std::string> command;
+};
+
 }  // namespace ChessEngine
 
 #endif  // PUMPKIN_UCI_TRIVIALTASKS_H

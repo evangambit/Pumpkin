@@ -47,6 +47,10 @@ struct Matrix {
     return data[y * WIDTH + x];
   }
 
+  T& operator()(size_t y, size_t x) {
+    return data[y * WIDTH + x];
+  }
+
   void setZero() {
     std::fill(data, data + HEIGHT * WIDTH, T(0));
   }
