@@ -844,7 +844,6 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     (frame + 1)->inCheck = moveGivesCheck;
 
     ColoredEvaluation<TURN> eval;
-    int childDepth = depth - 1;
 
     // Don't reduce depth for sensible captures (Elo difference: 254.7 +/- 286.2, LOS: 98.7 %)
     const bool isGoodCapture = move->capture != ColoredPiece::NO_COLORED_PIECE && cp2p(move->capture) > move->piece;
@@ -860,11 +859,12 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     // as they are currently written, can be equal! If you want to remove the "not checkmating" condition, you should test
     // with
     // $ ./uci "position fen r5k1/3Q1p2/2p3pp/4b3/p7/P1P1q3/1rBR2bP/1K1R4 w - - 0 26 moves b1a1 e3c3" "go depth 4" "lazyquit"
+    const int childDepth = depth - 1;
     if (move->move != moves[0].move && (SEARCH_TYPE != SearchType::ROOT || thread->multiPV_ == 1) && alpha.value > kLongestForcedMate && alpha.value < -kLongestForcedMate) {
       #ifndef NO_LMR
         static const auto a = FixedPoint<int32_t, 8>(0.50);
         static const auto b = FixedPoint<int32_t, 8>(0.33);
-        int lateMoveReduction = std::min(0, (a * kLnLookup[childDepth] * kLnLookup[index] + b).floorToInt());
+        int lateMoveReduction = (a * kLnLookup[childDepth] * kLnLookup[index] + b).floorToInt();
         lateMoveReduction -= isGoodCapture ? 1 : 0;
         lateMoveReduction -= isSafePassedPawnPush ? 1 : 0;
         lateMoveReduction += isSack ? 1 : 0;
