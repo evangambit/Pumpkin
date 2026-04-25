@@ -862,8 +862,9 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     // $ ./uci "position fen r5k1/3Q1p2/2p3pp/4b3/p7/P1P1q3/1rBR2bP/1K1R4 w - - 0 26 moves b1a1 e3c3" "go depth 4" "lazyquit"
     if (move->move != moves[0].move && (SEARCH_TYPE != SearchType::ROOT || thread->multiPV_ == 1) && alpha.value > kLongestForcedMate && alpha.value < -kLongestForcedMate) {
       #ifndef NO_LMR
-        int lateMoveReduction = std::min(2, kLnLookup[index].floorToInt());
-        lateMoveReduction -= (lateMoveReduction > 0) && (childDepth < 3);
+        static const auto a = FixedPoint<int32_t, 8>(0.50);
+        static const auto b = FixedPoint<int32_t, 8>(0.33);
+        int lateMoveReduction = std::min(0, (a * kLnLookup[childDepth] * kLnLookup[index] + b).floorToInt());
         lateMoveReduction -= isGoodCapture ? 1 : 0;
         lateMoveReduction -= isSafePassedPawnPush ? 1 : 0;
         lateMoveReduction += isSack ? 1 : 0;

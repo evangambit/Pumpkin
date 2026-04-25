@@ -21,10 +21,10 @@ struct FixedPoint {
   T floorToInt() const {
     return std::floor(value / static_cast<double>(1 << SHIFT));
   }
-  T operator+(const FixedPoint& that) const {
+  FixedPoint operator+(const FixedPoint& that) const {
     return FixedPoint(this->value + that.value);
   }
-  T operator*(const FixedPoint& that) const {
+  FixedPoint operator*(const FixedPoint& that) const {
     return FixedPoint((this->value * that.value) >> SHIFT);
   }
 };
