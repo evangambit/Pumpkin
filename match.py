@@ -19,6 +19,8 @@ import subprocess
 import sys
 import threading
 import time
+import json
+import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 
@@ -191,7 +193,9 @@ def make_go_params(tc, wtime_ms, btime_ms, is_white):
   return f"wtime {wtime_ms} btime {btime_ms} winc {tc['inc']} binc {tc['inc']}"
 
 
-def random_opening(n_plies=4):
+def random_opening(n_plies):
+  if n_plies <= 0:
+    n_plies = 4
   board = chess.Board()
   for _ in range(n_plies):
     moves = list(board.legal_moves)
@@ -465,8 +469,10 @@ def main():
   parser.add_argument("--pgn", default="match.pgn", help="Output PGN file (default: match.pgn)")
   parser.add_argument("--opening", default="startpos",
             help="Opening type: 'startpos', 'random', or path to an EPD file (default: startpos)")
-  parser.add_argument("--concurrency", type=int, default=1,
-            help="Number of game pairs to play in parallel (default: 1)")
+  parser.add_argument("--opening_random_ply", type=int, default=0,
+            help="Number of random moves to play before starting the tournament (default: 4)")
+  parser.add_argument("--concurrency", type=int, default=0,
+            help="Number of game pairs to play in parallel (0 = auto-detect from CPU count)")
   parser.add_argument("--alpha", type=float, default=0.01,
             help="Significance level for per-matchup early stopping (default: 0.01, 0 to disable)")
   parser.add_argument("--min_num_games", type=int, default=20,
@@ -477,7 +483,18 @@ def main():
             help="Per-move timeout in seconds; engines killed if unresponsive (default: 30)")
   parser.add_argument("--vs-engine0-only", action="store_true", default=False,
             help="If set, only play matches where one engine is engine 0 (all vs engine 0 mode)")
+  parser.add_argument("--resume", action="store_true", default=False,
+            help="If set, resume the tournament from the existing state file and append to the PGN")
   args = parser.parse_args()
+
+  if args.concurrency <= 0:
+    cpus = os.cpu_count() or 2
+    tc = parse_time_control(args.tc)
+    if tc["type"] in ("movetime", "clock"):
+      # Use "cpus - 1" for time controls where contention can cause competition.
+      args.concurrency = max(1, (cpus - 1) // 2)
+    else:
+      args.concurrency = max(1, cpus // 2)
 
   if len(args.engine) < 2:
     parser.error("at least 2 --engine flags are required")
@@ -562,7 +579,7 @@ def main():
       if epd_fens:
         fens.append(epd_fens[g % len(epd_fens)])
       elif args.opening == "random":
-        fens.append(random_opening())
+        fens.append(random_opening(ply=args.opening_random_ply))
       else:
         fens.append(chess.STARTING_FEN)
     matchup_fens[key] = fens
@@ -580,8 +597,28 @@ def main():
   # Cross-table: score_matrix[i][j] = points scored by engine i vs engine j
   score_matrix = [[0.0] * n_engines for _ in range(n_engines)]
   games_matrix = [[0] * n_engines for _ in range(n_engines)]
+  
+  state_file = args.pgn + ".state.json"
+  if args.resume and os.path.exists(state_file):
+    print(f"\nResuming from state file: {state_file}")
+    with open(state_file, "r") as f:
+      state_data = json.load(f)
+      
+      # Restore matrices
+      score_matrix = state_data["score_matrix"]
+      games_matrix = state_data["games_matrix"]
+      
+      # Restore matchup states. JSON keys are strings, convert back to tuple (int, int)
+      for k_str, st in state_data["matchup_state"].items():
+        # Parse "i,j" back to (i, j)
+        parts = k_str.split(",")
+        i, j = int(parts[0]), int(parts[1])
+        matchup_state[(i, j)] = st
+        
+    print(f"Resumed successfully. Continuing games...")
 
-  with open(args.pgn, "w") as pgn_file, \
+  pgn_mode = "a" if args.resume else "w"
+  with open(args.pgn, pgn_mode) as pgn_file, \
        ThreadPoolExecutor(max_workers=args.concurrency) as pool:
     futures = {}
 
@@ -651,6 +688,17 @@ def main():
         games_matrix[j][i] += 1
         print(pgn_game, file=pgn_file, end="\n\n")
       pgn_file.flush()
+      
+      # Write state atomically
+      temp_state = state_file + ".tmp"
+      with open(temp_state, "w") as f:
+        json.dump({
+          "score_matrix": score_matrix,
+          "games_matrix": games_matrix,
+          # Convert tuple keys to strings for JSON
+          "matchup_state": {f"{k[0]},{k[1]}": v for k, v in matchup_state.items()}
+        }, f)
+      os.rename(temp_state, state_file)
 
       r1, r2 = games[0][0], games[1][0]
       w, d, l = st["wins"], st["draws"], st["losses"]
