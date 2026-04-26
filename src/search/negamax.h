@@ -49,6 +49,22 @@
 #define EVAL_AGNOSTIC 0
 #endif
 
+#ifndef LMR_PV_A
+#define LMR_PV_A 0.4
+#endif
+
+#ifndef LMR_PV_B
+#define LMR_PV_B 0.3
+#endif
+
+#ifndef LMR_NULL_A
+#define LMR_NULL_A 0.6
+#endif
+
+#ifndef LMR_NULL_B
+#define LMR_NULL_B 0.4
+#endif
+
 namespace ChessEngine {
 
 /**
@@ -862,8 +878,8 @@ NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> a
     const int childDepth = depth - 1;
     if (move->move != moves[0].move && (SEARCH_TYPE != SearchType::ROOT || thread->multiPV_ == 1) && alpha.value > kLongestForcedMate && alpha.value < -kLongestForcedMate) {
       #ifndef NO_LMR
-        static const auto a = FixedPoint<int32_t, 8>(SEARCH_TYPE == NULL_WINDOW_SEARCH ? 0.60 : 0.40);
-        static const auto b = FixedPoint<int32_t, 8>(SEARCH_TYPE == NULL_WINDOW_SEARCH ? 0.40 : 0.30);
+        static const auto a = FixedPoint<int32_t, 8>(SEARCH_TYPE == NULL_WINDOW_SEARCH ? LMR_NULL_A : LMR_PV_A);
+        static const auto b = FixedPoint<int32_t, 8>(SEARCH_TYPE == NULL_WINDOW_SEARCH ? LMR_NULL_B : LMR_PV_B);
         int lateMoveReduction = (a * kLnLookup[childDepth] * kLnLookup[index] + b).floorToInt();
         lateMoveReduction -= isGoodCapture ? 1 : 0;
         lateMoveReduction -= isSafePassedPawnPush ? 1 : 0;
