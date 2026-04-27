@@ -57,8 +57,17 @@
 #define LMR_PV_B 0.3
 #endif
 
+// Expected point advantage to Elo conversion.
+// 0.01 ->  6.95 Elo
+// 0.02 -> 13.90 Elo
+// 0.03 -> 20.87 Elo
+// 0.04 -> 27.85 Elo
+// 0.05 -> 34.86 Elo
+
+// 0.7 vs 0.5: 0.022±0.008
+// 0.8 vs 0.6: 0.024±0.009
 #ifndef LMR_NULL_A
-#define LMR_NULL_A 0.6
+#define LMR_NULL_A 0.8
 #endif
 
 #ifndef LMR_NULL_B
