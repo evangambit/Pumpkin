@@ -66,8 +66,9 @@
 
 // 0.7 vs 0.5: 0.022±0.008
 // 0.8 vs 0.6: 0.024±0.009
+// 0.8 vs 1.0: 0.007±0.006
 #ifndef LMR_NULL_A
-#define LMR_NULL_A 0.8
+#define LMR_NULL_A 0.9
 #endif
 
 #ifndef LMR_NULL_B
