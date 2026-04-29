@@ -538,7 +538,7 @@ def main(concurrency, args):
     print(f"\nTournament: {n_engines} engines, {n_matchups} matchups (round-robin)")
   print(f"Engines: {', '.join(engine_names)}")
   print(f"Game pairs per matchup: {args.games}, TC: {args.tc}, Opening: {opening_label}")
-  print(f"Concurrency: {args.concurrency}")
+  print(f"Concurrency: {concurrency}")
   if args.alpha > 0:
     print(f"Early stopping: alpha={args.alpha}, min_num_games={args.min_num_games}")
   print(f"PGN output: {args.pgn}")
@@ -592,15 +592,15 @@ def main(concurrency, args):
 
   pgn_mode = "a" if args.resume else "w"
   with open(args.pgn, pgn_mode) as pgn_file, \
-       ThreadPoolExecutor(max_workers=args.concurrency) as pool:
+       ThreadPoolExecutor(max_workers=concurrency) as pool:
     futures = {}
 
     def submit_work():
       """Submit pairs round-robin across matchups, up to concurrency limit."""
-      while len(futures) < args.concurrency:
+      while len(futures) < concurrency:
         submitted = False
         for key in matchups:
-          if len(futures) >= args.concurrency:
+          if len(futures) >= concurrency:
             break
           st = matchup_state[key]
           if st["stopped_early"] or st["next_pair"] >= args.games:
