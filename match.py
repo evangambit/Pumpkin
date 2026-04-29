@@ -458,43 +458,16 @@ def significance_test(pair_scores):
   return p_value, avg, stderr
 
 
-def main():
-  parser = argparse.ArgumentParser(description="Round-robin tournament between N UCI chess engines")
-  parser.add_argument("--engine", action="append", default=[],
-            help="Engine command (repeatable, at least 2 required)")
-  parser.add_argument("--games", type=int, default=10,
-            help="Number of game pairs per matchup (default: 10, so 20 games per pair)")
-  parser.add_argument("--tc", default="nodes=10000",
-            help="Time control: nodes=N, depth=N, movetime=N (ms), or S+I (seconds+increment)")
-  parser.add_argument("--pgn", default="match.pgn", help="Output PGN file (default: match.pgn)")
-  parser.add_argument("--opening", default="startpos",
-            help="Opening type: 'startpos', 'random', or path to an EPD file (default: startpos)")
-  parser.add_argument("--opening_random_ply", type=int, default=0,
-            help="Number of random moves to play before starting the tournament (default: 4)")
-  parser.add_argument("--concurrency", type=int, default=0,
-            help="Number of game pairs to play in parallel (0 = auto-detect from CPU count)")
-  parser.add_argument("--alpha", type=float, default=0.01,
-            help="Significance level for per-matchup early stopping (default: 0.01, 0 to disable)")
-  parser.add_argument("--min_num_games", type=int, default=20,
-            help="Minimum game pairs per matchup before early stopping can occur (default: 100)")
-  parser.add_argument("--option", action="append", default=[],
-            help="UCI option for engine N: 'N:key=value' (1-indexed, repeatable)")
-  parser.add_argument("--timeout", type=int, default=30,
-            help="Per-move timeout in seconds; engines killed if unresponsive (default: 30)")
-  parser.add_argument("--vs-engine0-only", action="store_true", default=False,
-            help="If set, only play matches where one engine is engine 0 (all vs engine 0 mode)")
-  parser.add_argument("--resume", action="store_true", default=False,
-            help="If set, resume the tournament from the existing state file and append to the PGN")
-  args = parser.parse_args()
+def main(concurrency, args):
 
-  if args.concurrency <= 0:
+  if concurrency <= 0:
     cpus = os.cpu_count() or 2
     tc = parse_time_control(args.tc)
     if tc["type"] in ("movetime", "clock"):
       # Use "cpus - 1" for time controls where contention can cause competition.
-      args.concurrency = max(1, (cpus - 1) // 2)
+      concurrency = max(1, (cpus - 1) // 2)
     else:
-      args.concurrency = max(1, cpus // 2)
+      concurrency = max(1, cpus // 2)
 
   if len(args.engine) < 2:
     parser.error("at least 2 --engine flags are required")
@@ -812,8 +785,35 @@ def main():
 
 
 if __name__ == "__main__":
+  parser = argparse.ArgumentParser(description="Round-robin tournament between N UCI chess engines")
+  parser.add_argument("--engine", action="append", default=[],
+            help="Engine command (repeatable, at least 2 required)")
+  parser.add_argument("--games", type=int, default=10,
+            help="Number of game pairs per matchup (default: 10, so 20 games per pair)")
+  parser.add_argument("--tc", default="nodes=10000",
+            help="Time control: nodes=N, depth=N, movetime=N (ms), or S+I (seconds+increment)")
+  parser.add_argument("--pgn", default="match.pgn", help="Output PGN file (default: match.pgn)")
+  parser.add_argument("--opening", default="startpos",
+            help="Opening type: 'startpos', 'random', or path to an EPD file (default: startpos)")
+  parser.add_argument("--opening_random_ply", type=int, default=0,
+            help="Number of random moves to play before starting the tournament (default: 4)")
+  parser.add_argument("--concurrency", type=int, default=0,
+            help="Number of game pairs to play in parallel (0 = auto-detect from CPU count)")
+  parser.add_argument("--alpha", type=float, default=0.01,
+            help="Significance level for per-matchup early stopping (default: 0.01, 0 to disable)")
+  parser.add_argument("--min_num_games", type=int, default=20,
+            help="Minimum game pairs per matchup before early stopping can occur (default: 100)")
+  parser.add_argument("--option", action="append", default=[],
+            help="UCI option for engine N: 'N:key=value' (1-indexed, repeatable)")
+  parser.add_argument("--timeout", type=int, default=30,
+            help="Per-move timeout in seconds; engines killed if unresponsive (default: 30)")
+  parser.add_argument("--vs-engine0-only", action="store_true", default=False,
+            help="If set, only play matches where one engine is engine 0 (all vs engine 0 mode)")
+  parser.add_argument("--resume", action="store_true", default=False,
+            help="If set, resume the tournament from the existing state file and append to the PGN")
+  args = parser.parse_args()
   try:
-    main()
+    main(concurrency=args.concurrency, args=args)
   except KeyboardInterrupt:
     _kill_all_engines()
     print("\n  Interrupted.")

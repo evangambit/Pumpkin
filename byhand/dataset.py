@@ -47,3 +47,13 @@ class ByHandDataset(IterableDataset):
             return iter([])
             
         return iter(ChunkedDataset(assigned_files, self.chunk_size))
+
+def collate_fn(rows):
+    values, labels, turns, pst_values, pst_lengths, mask = zip(*rows)
+    values = torch.cat(values, dim=0)
+    labels = torch.cat(labels, dim=0)
+    turns = torch.cat(turns, dim=0)
+    pst_values = torch.cat(pst_values, dim=0)
+    pst_lengths = torch.cat(pst_lengths, dim=0)
+    mask = torch.cat(mask, dim=0)
+    return values, labels, turns, pst_values, pst_lengths, mask

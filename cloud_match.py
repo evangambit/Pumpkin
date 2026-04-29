@@ -13,6 +13,17 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Tuple, Dict
 
+
+"""
+./cloud_match.py --engine commit=HEAD "arg=increment 1 1 10" \
+                 --engine commit=HEAD "arg=increment 1 1 -10" \
+                 --min_num_games=50 --opening_random_ply 4 --tc nodes=200000
+
+./cloud_match.py --engine commit=HEAD flag=-DLMR_NULL_A=0.8 \
+                 --engine commit=HEAD flag=-DLMR_NULL_A=1.0 \
+                 --min_num_games=50 --opening_random_ply 4 --tc nodes=200000
+"""
+
 #   # Teardown only:
 #   ./cloud_match.sh --teardown
 
@@ -65,11 +76,14 @@ def resolve_engines(engine_specs: List[List[str]]) -> List[Dict]:
     for idx, spec in enumerate(engine_specs):
         commit_ref = "HEAD"
         flags = []
+        engine_args = []
         for arg in spec:
             if arg.startswith("commit="):
                 commit_ref = arg.split("=", 1)[1]
             elif arg.startswith("flag="):
                 flags.append(arg.split("=", 1)[1])
+            elif arg.startswith("arg"):
+                engine_args.append(f'"{arg.split('=', 1)[1]}"')
             else:
                 print(f"Error: Unknown engine argument '{arg}'")
                 sys.exit(1)
@@ -80,13 +94,12 @@ def resolve_engines(engine_specs: List[List[str]]) -> List[Dict]:
             full_msg = run_cmd(["git", "log", "--format=%s", "-1", hash_val], capture_output=True).stdout.strip()
             
             flags_str = " ".join(flags)
-            if flags_str:
-                flag_hash = hashlib.md5(flags_str.encode()).hexdigest()[:6]
-                name = f"uci-{hash_val}-{flag_hash}"
-                label = f"{short_msg} (flags: {flags_str})"
-            else:
-                name = f"uci-{hash_val}"
-                label = short_msg
+            engine_args_str = " ".join(engine_args)
+            flag_hash = hashlib.md5(flags_str.encode()).hexdigest()[:6]
+            arg_hash = hashlib.md5(engine_args_str.encode()).hexdigest()[:6]
+            # Binary name only depends on build parameters (commit and flags)
+            name = f"uci-{hash_val}-{flag_hash}-{arg_hash}"
+            label = f"{short_msg} (flags: {flags_str}) (args: {engine_args_str})"
                 
             resolved_engines.append({
                 "commit_ref": commit_ref,
@@ -95,9 +108,11 @@ def resolve_engines(engine_specs: List[List[str]]) -> List[Dict]:
                 "flags_str": flags_str,
                 "name": name,
                 "label": label,
-                "full_msg": full_msg
+                "full_msg": full_msg,
+                "engine_args": engine_args,
+                "engine_args_str": engine_args_str,
             })
-            print(f"  engine {idx} ({commit_ref}) → {hash_val} with flags: '{flags_str}'")
+            print(f"  engine {idx} ({commit_ref}) → {hash_val} with flags: '{flags_str}' and args: '{engine_args_str}'")
         except subprocess.CalledProcessError:
             print(f"Error: cannot resolve git ref '{commit_ref}'")
             sys.exit(1)
@@ -106,16 +121,14 @@ def resolve_engines(engine_specs: List[List[str]]) -> List[Dict]:
     unique_engines = []
     seen = set()
     for eng in resolved_engines:
-        key = (eng["hash"], eng["flags_str"])
+        key = (eng["hash"], eng["flags_str"], eng["engine_args_str"])
+        print('KEY', key)
         if key not in seen:
             seen.add(key)
             unique_engines.append(eng)
             
-    if len(unique_engines) < 2:
-        print("Error: all engines resolved to the same commit and flags. Need at least 2 distinct versions.")
-        sys.exit(1)
-        
-    return unique_engines
+
+    return unique_engines, resolved_engines
 
 
 def main():
@@ -177,7 +190,7 @@ Usage examples:
         parser.print_help()
         sys.exit(1)
 
-    unique_engines = resolve_engines(args.engine)
+    unique_engines, resolved_engines = resolve_engines(args.engine)
 
     # ---------- Step 1: Create VM ----------
     if args.reuse:
@@ -288,19 +301,25 @@ pip3 install python-chess --break-system-packages
 
     # ---------- Step 6: Build engine flags for match.py ----------
     engine_flags = ""
-    for eng in unique_engines:
+    for eng in resolved_engines:
+        base_cmd = f"./{eng['name']}"
         if args.evaluator == "byhand":
-            engine_flags += f" --engine './{eng['name']} \"evaluator byhand\"'"
+            base_cmd += " \"evaluator byhand\""
         elif args.evaluator == "nnue":
-            engine_flags += f" --engine './{eng['name']} \"evaluator nnue\"'"
-        else:
-            engine_flags += f" --engine './{eng['name']}'"
+            base_cmd += " \"evaluator nnue\""
+            
+        if eng.get("engine_args_str"):
+            base_cmd += f" {eng['engine_args_str']}"
+            
+        engine_flags += f" --engine {shlex.quote(base_cmd)}"
 
     # ---------- Step 7: Run tournament ----------
     reuse_flag = "--resume" if args.reuse else ""
     
     print("\n🏆 Starting tournament...")
-    print(f"   Engines: {', '.join(e['name'] for e in unique_engines)}")
+    print(f"   Engines:")
+    for engine in resolved_engines:
+        print(f"     {engine['label']}")
     print(f"   TC: {args.tc}, Games: {args.games}, Concurrency: {args.concurrency}")
     print()
 
@@ -317,6 +336,8 @@ pip3 install python-chess --break-system-packages
         f"{reuse_flag} "
         f"--pgn match_results.pgn"
     )
+
+    print(match_cmd)
 
     start_tournament_cmd = f"""
         which tmux &>/dev/null || sudo apt-get install -y tmux
@@ -385,10 +406,11 @@ EOF
         f.write(f"Evaluator: {args.evaluator}\n")
         f.write(f"Opening: {args.opening}\n\n")
         f.write("Engine details:\n")
-        for eng in unique_engines:
+        for eng in resolved_engines:
             f.write(f"  {eng['name']}: {eng['full_msg']}\n")
             f.write(f"    Commit: {eng['commit_ref']} ({eng['hash']})\n")
             f.write(f"    Flags: {eng['flags_str']}\n")
+            f.write(f"    Args: {eng['engine_args_str']}\n")
             
     print(f"\n📁 Results saved to {results_dir}/")
 

@@ -39,16 +39,6 @@ def save_tensor(tensor: torch.Tensor, name: str, out: io.BufferedWriter):
   out.write(np.array(tensor.shape, dtype=np.int32).tobytes())
   out.write(tensor.tobytes())
 
-def collate_fn(rows):
-    values, labels, turns, pst_values, pst_lengths, mask = zip(*rows)
-    values = torch.cat(values, dim=0)
-    labels = torch.cat(labels, dim=0)
-    turns = torch.cat(turns, dim=0)
-    pst_values = torch.cat(pst_values, dim=0)
-    pst_lengths = torch.cat(pst_lengths, dim=0)
-    mask = torch.cat(mask, dim=0)
-    return values, labels, turns, pst_values, pst_lengths, mask
-
 class CosineAnnealingWithWarmup:
     def __init__(self, optimizer, max_lr=3e-3, min_lr=1e-5, warmup_steps=100, total_steps=None):
         self.optimizer = optimizer
@@ -113,7 +103,7 @@ if __name__ == "__main__":
     
     print(f'Dataset chunk size: {CHUNK_SIZE}. Total length calculated dynamically.')
 
-    dataloader = tdata.DataLoader(dataset, batch_size=BATCH_SIZE//CHUNK_SIZE, shuffle=False, num_workers=0, pin_memory=True, drop_last=True, collate_fn=collate_fn)
+    dataloader = tdata.DataLoader(dataset, batch_size=BATCH_SIZE//CHUNK_SIZE, shuffle=False, num_workers=0, pin_memory=True, drop_last=True, collate_fn=ndata.collate_fn)
 
     # Fetch one batch to get the number of features
     num_features = dataset.num_features

@@ -459,13 +459,13 @@ class ByHandEvalDebugTask : public Task {
     }
     std::cout << "Features: ";
     for (size_t i = 0; i < ByHand::EF::EF_COUNT; ++i) {
-      if (features[i] != 0) {
+      // if (features[i] != 0) {
         int32_t v = 0;
         for (size_t j = 0; j < 2; ++j) {
           v += features[i] * weights(j, i) * (j == 0 ? ByHand::kMaxEarliness - features[ByHand::EF::EARLINESS] : features[ByHand::EF::EARLINESS]) / ByHand::kMaxEarliness;
         }
-        std::cout << rjust(std::to_string(int(features[i])), 3) << " (" << rjust(std::to_string(v), 5) << ")" << " " << to_string(ByHand::EF(i)) << std::endl;
-      }
+        std::cout << rjust(std::to_string(int(features[i])), 3) << " (" << rjust(std::to_string(v), 5) << ")" << " " << to_string(ByHand::EF(i)) << " " << i << " " << " weights: (" << weights(0, i) << ", " << weights(1, i) << ")" << std::endl;
+      // }
     }
     std::cout << std::endl;
   }
@@ -530,8 +530,8 @@ class IncrementWeightTask : public Task {
   IncrementWeightTask(std::deque<std::string> command) : command(command) {}
   void start(UciEngineState *state) {
     command.pop_front();
-    if (command.size() != 3) {
-      std::cout << "Error: increment_weight command requires exactly 3 arguments: <feature> <is early> <delta>" << std::endl;
+    if (command.size() != 4) {
+      std::cout << "Error: increment_weight command requires exactly 4 arguments: <feature> [+*] <is early> <delta>" << std::endl;
       exit(1);
     }
     if (state->position.evaluator_->to_string() != "ByHandEvaluator") {
@@ -540,9 +540,19 @@ class IncrementWeightTask : public Task {
     }
     auto evaluator = std::dynamic_pointer_cast<ByHand::ByHandEvaluator>(state->position.evaluator_);
     int featureIndex = std::stoi(command.at(0));
-    bool isEarly = command.at(1) == "1";
-    int delta = std::stoi(command.at(2));
-    evaluator->weights(isEarly ? 1 : 0, featureIndex) += delta;
+    char op = command.at(1)[0];
+    if (op != '+' && op != '*') {
+      std::cout << "Error: increment_weight command requires op to be '+' or '*'" << std::endl;
+      exit(1);
+    }
+    bool isEarly = command.at(2) == "1";
+    int delta = std::stoi(command.at(3));
+    if (op == '+') {
+      evaluator->weights(isEarly ? 1 : 0, featureIndex) += delta;
+    } else {
+      int value = evaluator->weights(isEarly ? 1 : 0, featureIndex);
+      evaluator->weights(isEarly ? 1 : 0, featureIndex) = (value * delta) / 100;
+    }
   }
  private:
   std::deque<std::string> command;
