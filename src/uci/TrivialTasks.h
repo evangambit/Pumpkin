@@ -558,6 +558,93 @@ class IncrementWeightTask : public Task {
   std::deque<std::string> command;
 };
 
+class DumpWeightsTask : public Task {
+ public:
+  DumpWeightsTask(std::deque<std::string> command) : command(command) {}
+  void start(UciEngineState *state) {
+    if (state->position.evaluator_->to_string() != "ByHandEvaluator") {
+      std::cout << "Error: dumpweights only works with byhand evaluator." << std::endl;
+      return;
+    }
+    command.pop_front();
+    if (command.size() < 1) {
+      std::cout << "Error: dumpweights requires a filename argument." << std::endl;
+      return;
+    }
+    std::string filename = command.at(0);
+    auto evaluator = std::dynamic_pointer_cast<ByHand::ByHandEvaluator>(state->position.evaluator_);
+
+    std::ofstream out(filename, std::ios::binary);
+    if (!out) {
+      std::cout << "Error: could not open file \"" << filename << "\" for writing." << std::endl;
+      return;
+    }
+
+    const float scale = static_cast<float>(1 << NNUE::SCALE_SHIFT);
+
+    // Write weights matrix (2 x EF_COUNT)
+    write_matrix(out, "weights", 2, ByHand::EF::EF_COUNT, [&](size_t i, size_t j) {
+      return static_cast<float>(evaluator->weights(i, j)) / scale;
+    });
+
+    // Write bias vector (2)
+    write_vector(out, "bias", 2, [&](size_t i) {
+      return static_cast<float>(evaluator->bias[i]) / scale;
+    });
+
+    // Write pst_late matrix (6 x 64)
+    write_matrix(out, "pst_late", 6, 64, [&](size_t piece, size_t sq) {
+      return static_cast<float>(evaluator->pstWeights[piece * 64 + sq + 8 * 64]) / scale;
+    });
+
+    // Write pst_early matrix (6 x 64)
+    write_matrix(out, "pst_early", 6, 64, [&](size_t piece, size_t sq) {
+      return static_cast<float>(evaluator->pstWeights[piece * 64 + sq + 64]) / scale;
+    });
+
+    out.close();
+    std::cout << "Weights dumped to " << filename << std::endl;
+  }
+ private:
+  std::deque<std::string> command;
+
+  static void write_padded_name(std::ofstream& out, const std::string& name) {
+    char buf[16];
+    std::memset(buf, ' ', 16);
+    std::memcpy(buf, name.c_str(), std::min(name.size(), size_t(16)));
+    out.write(buf, 16);
+  }
+
+  template<typename Func>
+  static void write_matrix(std::ofstream& out, const std::string& name,
+                           uint32_t rows, uint32_t cols, Func getValue) {
+    write_padded_name(out, name);
+    uint32_t degree = 2;
+    out.write(reinterpret_cast<const char*>(&degree), sizeof(uint32_t));
+    out.write(reinterpret_cast<const char*>(&rows), sizeof(uint32_t));
+    out.write(reinterpret_cast<const char*>(&cols), sizeof(uint32_t));
+    for (uint32_t i = 0; i < rows; ++i) {
+      for (uint32_t j = 0; j < cols; ++j) {
+        float val = getValue(i, j);
+        out.write(reinterpret_cast<const char*>(&val), sizeof(float));
+      }
+    }
+  }
+
+  template<typename Func>
+  static void write_vector(std::ofstream& out, const std::string& name,
+                           uint32_t size, Func getValue) {
+    write_padded_name(out, name);
+    uint32_t degree = 1;
+    out.write(reinterpret_cast<const char*>(&degree), sizeof(uint32_t));
+    out.write(reinterpret_cast<const char*>(&size), sizeof(uint32_t));
+    for (uint32_t i = 0; i < size; ++i) {
+      float val = getValue(i);
+      out.write(reinterpret_cast<const char*>(&val), sizeof(float));
+    }
+  }
+};
+
 }  // namespace ChessEngine
 
 #endif  // PUMPKIN_UCI_TRIVIALTASKS_H

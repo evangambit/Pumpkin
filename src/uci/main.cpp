@@ -227,6 +227,8 @@ struct UciEngine {
       state->taskQueue.push_back(std::make_shared<ByHandEvalDebugTask>(parts));
     } else if (parts[0] == "increment") {
       state->taskQueue.push_back(std::make_shared<IncrementWeightTask>(parts));
+    } else if (parts[0] == "dumpweights") {
+      state->taskQueue.push_back(std::make_shared<DumpWeightsTask>(parts));
     } else {
       state->taskQueue.push_back(std::make_shared<UnrecognizedCommandTask>(parts));
     }
