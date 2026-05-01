@@ -19,8 +19,12 @@ import matplotlib.pyplot as plt
 
 import dataset as ndata
 
+cat = np.concatenate
+
 s = 5
-x = np.array([-s * 4, -s * 2, -s, 0, s, s * 2, s * 4])
+x = np.array([-s * 8, -s * 4, -s * 2, -s, 0, s, s * 2, s * 4, s * 8])
+kBaselineIndex = 3
+
 
 class UCIEngine:
     def __init__(self, engine_path: str):
@@ -43,7 +47,7 @@ class UCIEngine:
             if self.process and self.process.stdout:
                 self.process.stdout.close()
 
-    def start(self) -> bool:
+    def start(self, multipv) -> bool:
         """Starts engine and initializes UCI state."""
         try:
             # We use 'evaluator nnue' as per your original subprocess call
@@ -62,6 +66,7 @@ class UCIEngine:
             self.wait_for_response("uciok", timeout=5)
             self.send_command("isready")
             self.wait_for_response("readyok", timeout=5)
+            self.send_command(f"setoption name MultiPV value {multipv}")
             return True
         except Exception as e:
             print(f"Failed to start {self.engine_path}: {e}")
@@ -92,7 +97,8 @@ class UCIEngine:
                 continue
         return lines
 
-    def evaluate_position(self, fen: str, nodes: int, timeout: float) -> Tuple[Optional[int], List[str]]:
+    def evaluate_position(self, fen: str, nodes: int, timeout: float) -> List[str]:
+        """Returns list of best moves (one per PV line at the final depth)."""
         self.send_command(f"position fen {fen}")
         self.send_command("isready")
         self.wait_for_response("readyok", timeout=5)
@@ -100,7 +106,6 @@ class UCIEngine:
         self.send_command(f"go nodes {nodes}")
         
         output_lines = []
-        nodes = None
         start = time.time()
         
         while True:
@@ -110,17 +115,28 @@ class UCIEngine:
                 line = self.output_queue.get(timeout=0.1)
                 output_lines.append(line)
                 
-                # Extract nodes using regex
-                if "nodes" in line:
-                    match = re.search(r'nodes (\d+)', line)
-                    if match:
-                        nodes = int(match.group(1))
-                
                 if line.startswith("bestmove"):
                     break
             except queue.Empty:
                 continue
-        return output_lines
+
+        # Extract best moves from the final depth's multipv lines.
+        # Walk backwards to find the last multipv 1 and multipv 2 info lines.
+        pv_moves = {}
+        for line in reversed(output_lines):
+            if line.startswith("bestmove"):
+                continue
+            if 'multipv' not in line:
+                continue
+            parts = line.split()
+            mpv_idx = int(parts[parts.index('multipv') + 1])
+            if mpv_idx not in pv_moves:
+                pv_moves[mpv_idx] = parts[parts.index('pv') + 1]
+            if len(pv_moves) >= 2:
+                break
+
+        # Return moves ordered by PV index
+        return [pv_moves[k] for k in sorted(pv_moves.keys())]
 
     def quit(self):
         """Cleanly stop or forcefully kill the engine process."""
@@ -178,24 +194,31 @@ def worker_func(worker_id: int, feature_index: int, fen_queue: queue.Queue, resu
             # Recovery/Lazy Start
             for e in engines:
                 if not e.process:
-                    e.start()
+                    e.start(args.multipv)
 
+            # Each engine returns [pv1_move, pv2_move]
             engine_scores = []
             for e in engines:
-                out = e.evaluate_position(fen, args.nodes, args.timeout)[-2].split(' ')
-                best_move = out[out.index('pv') + 1]
-                engine_scores.append(scores[-1] if best_move not in moves else scores[moves.index(best_move)])
+                engine_scores.append([])
+                pv_moves = e.evaluate_position(fen, args.nodes, args.timeout)
+                # PV1 move
+                for m in pv_moves:
+                    engine_scores[-1].append(scores[-1] if m not in moves else scores[moves.index(m)])
             
             # Thread-safe printing
-            if index < 10 or index % 10 == 0:
+            if index < 10 or index % 100 == 0:
                 with print_lock:
                     print(f"Position {index}/{total_fens} (Thread {worker_id})")
-
-            results_list.append({
-                'fen': fen,
-                'scores': engine_scores,
-                'best': scores[0],
-            })
+            
+            if sum(len(arr) == len(engine_scores[0]) for arr in engine_scores) == len(engine_scores):
+                engine_scores = [sum(arr) / len(arr) for arr in engine_scores]
+                results_list.append({
+                    'fen': fen,
+                    'scores': engine_scores,
+                })
+            else:
+                with print_lock:
+                    print("WTF")
             fen_queue.task_done()
 
         except Exception as e:
@@ -212,13 +235,13 @@ def worker_func(worker_id: int, feature_index: int, fen_queue: queue.Queue, resu
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Compare UCI Engines with Timeout Recovery")
     parser.add_argument("--engine", "-e", required=True)
-    parser.add_argument("--fens", "-f", required=True)
+    parser.add_argument("--fens", "-f", required=True)  # Create with generate.py
     parser.add_argument("--nodes", "-n", type=int, default=1000)
     parser.add_argument("--timeout", type=int, default=30, help="Seconds before killing hung engine")
     parser.add_argument("--concurrency", "-j", type=int, default=4)
     parser.add_argument("--limit", "-l", type=int, default=40_000)
+    parser.add_argument("--multipv", "-m", type=int, default=2)
     parser.add_argument("--out", "-o", help="Output directory", default='results')
-    parser.add_argument("--verbose", "-v", action="store_true")
     args = parser.parse_args()
 
     lines = load_fens_from_file(args.fens, args.limit)
@@ -226,7 +249,7 @@ if __name__ == "__main__":
 
     os.makedirs(args.out, exist_ok=True)
 
-    for feature_index in range(1, 10):
+    for feature_index in range(0, 10):
         feature_name = ndata.feature_name(feature_index)
         fen_queue = queue.Queue()
         for i, fen in enumerate(lines, 1):
@@ -246,19 +269,13 @@ if __name__ == "__main__":
             t.join()
             
         # --- Analysis Section ---
-        valid = [r for r in results if r['scores'] is not None and r['best'] is not None]
+        valid = [r for r in results if r['scores'] is not None]
         if not valid:
             print("\nNo valid results collected (all positions failed or timed out).")
             exit(1)
 
-        scores = np.array([r['scores'] for r in valid], dtype=float)
-        best = np.array([r['best'] for r in valid], dtype=float)
-
-        losses = np.abs(scores - best.reshape(-1, 1))
-
-        
-        baseline_index = (x == 0).argmax()
-        baseline = losses[:,baseline_index:baseline_index+1]
+        losses = np.array([r['scores'] for r in valid], dtype=float)
+        baseline = losses[:,kBaselineIndex:kBaselineIndex+1]
         losses = losses - baseline
 
         avg = losses.mean(0)
@@ -279,18 +296,30 @@ if __name__ == "__main__":
         print(w)
 
         plt.figure()
-        plt.title(f'{feature_name}')
+        plt.title(f'{feature_name} {feature_index}')
         plt.plot(x, avg, c='b')
-        plt.plot(x, avg + stderr, c='b')
-        plt.plot(x, avg - stderr, c='b')
+        # plt.plot(x, avg + stderr, c='b')
+        # plt.plot(x, avg - stderr, c='b')
+        plt.fill(
+            cat([x, x[::-1]]),
+            cat([avg + stderr, (avg - stderr)[::-1]]),
+            c='b',
+            alpha=0.2
+        )
+        plt.fill(
+            cat([x, x[::-1]]),
+            cat([avg + stderr * 2.0, (avg - stderr * 2.0)[::-1]]),
+            c='b',
+            alpha=0.2
+        )
         plt.scatter(x, avg)
 
-        px = np.linspace(x.min(), x.max(), 30)
-        plt.plot(px, w[0] + w[1] * px + w[2] * px * px, c='r')
-        for _ in range(10):
-            u = np.random.multivariate_normal(w, cov)
-            plt.plot(px, u[0] + u[1] * px + u[2] * px * px, c='r', alpha=0.3, ls='--')
+        # px = np.linspace(x.min(), x.max(), 30)
+        # plt.plot(px, w[0] + w[1] * px + w[2] * px * px, c='r')
+        # for _ in range(10):
+        #     u = np.random.multivariate_normal(w, cov)
+        #     plt.plot(px, u[0] + u[1] * px + u[2] * px * px, c='r', alpha=0.3, ls='--')
 
         plt.grid()
-        plt.savefig(f'{args.out}/{feature_name}.png')
+        plt.savefig(f'{args.out}/{feature_index}-{feature_name}.png')
 
