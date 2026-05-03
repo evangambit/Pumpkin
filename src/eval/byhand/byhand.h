@@ -146,6 +146,8 @@ enum EF {
   PAWN_AHEAD_OF_KING_2,
   PAWN_EAST_OF_KING_2,
 
+  SCARIEST_PROMOTABLE_PAWN_IF_KVK,
+
   EF_COUNT
 };
 
@@ -238,6 +240,7 @@ inline std::string to_string(EF e) {
     case PAWN_WEST_OF_KING_2: return "PAWN_WEST_OF_KING_2";
     case PAWN_AHEAD_OF_KING_2: return "PAWN_AHEAD_OF_KING_2";
     case PAWN_EAST_OF_KING_2: return "PAWN_EAST_OF_KING_2";
+    case SCARIEST_PROMOTABLE_PAWN_IF_KVK: return "SCARIEST_PROMOTABLE_PAWN_IF_KVK";
     default: return "UNKNOWN";
   }
 }
@@ -663,6 +666,19 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
   out[EF::PAWN_EAST_OF_KING_2] = std::popcount(
     ourPawns & shift<FORWARD>(shift<FORWARD_EAST>(ourKings))) * (!canWeCastle) - std::popcount(
       theirPawns & shift<BACKWARD>(shift<BACKWARD_EAST>(theirKings))) * (!canTheyCastle);
+
+  Bitboard ourPromotablePawns = pawnAnalysis.ourPassedPawns & kSquareRuleYourTurn[US][theirKingSq];
+  Bitboard theirPromotablePawns = pawnAnalysis.theirPassedPawns & kSquareRuleTheirTurn[THEM][ourKingSq];
+  if (US == Color::WHITE) {
+    theirPromotablePawns = flip_vertically(theirPromotablePawns);
+  } else {
+    ourPromotablePawns = flip_vertically(ourPromotablePawns);
+  }
+  UnsafeSquare ourClosestPromotablePassedPawnSq = lsb_or_none(shift<Direction::NORTH>(ourPromotablePawns));  // Bonus since it is our turn.
+  UnsafeSquare theirClosestPromotablePassedPawnSq = lsb_or_none(theirPromotablePawns);
+  out[EF::SCARIEST_PROMOTABLE_PAWN_IF_KVK] = std::clamp(int8_t(theirClosestPromotablePassedPawnSq) / 8 - int8_t(ourClosestPromotablePassedPawnSq) / 8, -1, 1);
+  out[EF::SCARIEST_PROMOTABLE_PAWN_IF_KVK] *= kMaxEarliness - out[EF::EARLINESS];
+  
 }
 
 struct ByHandEvaluator : public PieceSquareEvaluator {

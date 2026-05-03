@@ -55,7 +55,7 @@ struct Matrix {
     std::fill(data, data + HEIGHT * WIDTH, T(0));
   }
 
-  void load_from_stream(std::istream& in, std::string expectedName = "") {
+  void load_from_stream(std::istream& in, std::string expectedName = "", bool pad_with_zeroes_if_missing_columns = false) {
     char name[16];
     in.read(name, 16);
     if (expectedName.size() > 0) {
@@ -77,21 +77,25 @@ struct Matrix {
     uint32_t rows, cols;
     in.read(reinterpret_cast<char*>(&rows), sizeof(uint32_t));
     in.read(reinterpret_cast<char*>(&cols), sizeof(uint32_t));
-    if (rows != HEIGHT || cols != WIDTH) {
+    if (rows != HEIGHT || (cols != WIDTH && !pad_with_zeroes_if_missing_columns)) {
       throw std::runtime_error("Matrix size mismatch; expected " + std::to_string(HEIGHT) + "x" + std::to_string(WIDTH) + ", got " + std::to_string(rows) + "x" + std::to_string(cols));
     }
     float *buffer = new float[rows * cols];
     in.read(reinterpret_cast<char*>(buffer), sizeof(float) * rows * cols);
     for (size_t i = 0; i < HEIGHT; ++i) {
       for (size_t j = 0; j < WIDTH; ++j) {
+        if (j >= cols && pad_with_zeroes_if_missing_columns) {
+          data[i * WIDTH + j] = T(0);
+          continue;
+        }
         if (std::is_same<T, float>::value) {
-          data[i * WIDTH + j] = buffer[i * WIDTH + j];
+          data[i * WIDTH + j] = buffer[i * cols + j];
         } else if (std::is_same<T, int16_t>::value) {
-          data[i * WIDTH + j] = static_cast<T>(buffer[i * WIDTH + j] * (1 << SCALE_SHIFT));
+          data[i * WIDTH + j] = static_cast<T>(buffer[i * cols + j] * (1 << SCALE_SHIFT));
         } else if (std::is_same<T, int8_t>::value) {
           // Quantize weights down to fit perfectly inside an int8_t
           // SCALE_SHIFT is 8, meaning we scale floats by 256. We need to scale by 64 instead (SCALE_SHIFT - 2)
-          data[i * WIDTH + j] = static_cast<T>(buffer[i * WIDTH + j] * (1 << (SCALE_SHIFT - 2)));
+          data[i * WIDTH + j] = static_cast<T>(buffer[i * cols + j] * (1 << (SCALE_SHIFT - 2)));
         }
       }
     }
