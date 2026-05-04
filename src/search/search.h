@@ -98,6 +98,7 @@ SearchResult<TURN> negamax_result_to_search_result(const NegamaxResult<TURN>& re
 template<Color TURN>
 SearchResult<TURN> search(Thread* thread, std::atomic<bool> *stopThinking, std::function<void(int, SearchResult<TURN>)> onDepthCompleted, bool timeSensitive) {
   thread->tt_->new_search();
+  auto startTime = std::chrono::high_resolution_clock::now();
   assert(thread->position_.turn_ == TURN);
   std::atomic<bool> neverStopThinking{false};
   NegamaxResult<TURN> result = negamax<TURN, SearchType::ROOT>(
@@ -118,7 +119,8 @@ SearchResult<TURN> search(Thread* thread, std::atomic<bool> *stopThinking, std::
   if (onDepthCompleted != nullptr) {
     onDepthCompleted(1, searchResult);
   }
-  for (unsigned i = 2; i <= std::min(thread->depth_, kMaxSearchDepth); ++i) {
+  bool quitEarly = false;
+  for (unsigned i = 2; i <= std::min(thread->depth_, kMaxSearchDepth) && !quitEarly; ++i) {
     if (stopThinking->load()) {
       break;
     }
@@ -131,6 +133,18 @@ SearchResult<TURN> search(Thread* thread, std::atomic<bool> *stopThinking, std::
     ColoredEvaluation<TURN> alpha = (thread->multiPV_ == 1) ? lastResult.evaluation - kWindowSize : ColoredEvaluation<TURN>(kMinEval);
     ColoredEvaluation<TURN> beta = (thread->multiPV_ == 1) ? lastResult.evaluation + kWindowSize : ColoredEvaluation<TURN>(kMaxEval);
     while (true) {
+      // If we're unlikely to complete this search window in time, return early. This gives
+      // us more time on subsequent moves.
+      if (timeSensitive) {
+        auto endTime = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> elapsedTimeDuringLastSearch = endTime - startTime;
+        std::chrono::duration<double> timeRemaining = thread->stopTime_ - endTime;
+        if (elapsedTimeDuringLastSearch * 2 > timeRemaining) {
+          quitEarly = true;
+          break;
+        }
+        startTime = endTime;
+      }
       result = negamax<TURN, SearchType::ROOT>(
         thread,
         i,
@@ -150,10 +164,8 @@ SearchResult<TURN> search(Thread* thread, std::atomic<bool> *stopThinking, std::
     }
     searchResult = negamax_result_to_search_result<TURN>(result, thread);
     // TODO: why do we need "searchResult.bestMove == kNullMove" in the condition?
-    if (stopThinking->load() || searchResult.bestMove == kNullMove) {
-      // Primary variations may be incomplete or invalid if the search was stopped.
-      // Fallback to the last completed search result, which is guaranteed to be valid.
-      searchResult = lastResult;
+    if (stopThinking->load() || quitEarly || searchResult.bestMove == kNullMove) {
+      return lastResult;
     }
     if (searchResult.bestMove == kNullMove) {
       std::cout << "Error (2): Search did not find a move." << searchResult << " (" << thread->position_.currentState_.hash << ")" << std::endl;
