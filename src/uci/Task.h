@@ -57,7 +57,7 @@ class Task {
 struct UciEngineState {
   UciEngineState()
     : tt_(std::make_shared<TranspositionTable>(/* megabytes= */100)),
-      moveOverheadMs(50),
+      moveOverheadMs(0),
       numThreads(1),
       multiPV(1) {
     this->position = Position("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");

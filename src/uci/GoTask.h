@@ -135,21 +135,20 @@ class GoTask : public Task {
       uint64_t timeForMoveMs;
       if (state->position.turn_ == Color::WHITE) {
         if (goCommand.movesUntilTimeControl != (uint64_t)-1) {
-          timeForMoveMs = goCommand.wtimeMs / goCommand.movesUntilTimeControl;
+          timeForMoveMs = std::max<int64_t>(0, (int64_t(goCommand.wtimeMs) - int64_t(state->moveOverheadMs)) / goCommand.movesUntilTimeControl);
         } else {
-          timeForMoveMs = goCommand.wtimeMs / 30;  // Assume 30 moves remaining if not specified.
+          timeForMoveMs = std::max<int64_t>(0, (int64_t(goCommand.wtimeMs) - int64_t(state->moveOverheadMs)) / 30);
         }
         timeForMoveMs += goCommand.wIncrementMs;
       } else {
         if (goCommand.movesUntilTimeControl != (uint64_t)-1) {
-          timeForMoveMs = goCommand.btimeMs / goCommand.movesUntilTimeControl;
+          timeForMoveMs = std::max<int64_t>(0, (int64_t(goCommand.btimeMs) - int64_t(state->moveOverheadMs)) / goCommand.movesUntilTimeControl);
         } else {
-          timeForMoveMs = goCommand.btimeMs / 30;  // Assume 30 moves remaining if not specified.
+          timeForMoveMs = std::max<int64_t>(0, (int64_t(goCommand.btimeMs) - int64_t(state->moveOverheadMs)) / 30);
         }
         timeForMoveMs += goCommand.bIncrementMs;
       }
-      // Use 95% of the calculated time to leave some buffer.
-      goCommand.timeLimitMs = timeForMoveMs * 95 / 100;
+      goCommand.timeLimitMs = timeForMoveMs;
     }
 
     this->baseThreadState = std::make_shared<Thread>(
