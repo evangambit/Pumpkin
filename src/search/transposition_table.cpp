@@ -19,8 +19,9 @@ std::string bound_type_to_string(BoundType bound) {
   }
 }
 
-TranspositionTable::TranspositionTable(size_t kilobytes) {
-  resize(kilobytes);
+TranspositionTable::TranspositionTable(size_t megabytes) {
+  table_.resize(1024 * 1024 * megabytes);
+  spinLocks_.resize(kNumSpinLocks);
 }
 
 void TranspositionTable::new_search() {
@@ -39,6 +40,7 @@ void TranspositionTable::clear() {
 void TranspositionTable::store(uint64_t key, Move bestMove, int depth, int value, BoundType bound) {
   assert(depth >= std::numeric_limits<int8_t>::min() && depth <= std::numeric_limits<int8_t>::max());
   size_t idx = key % table_.size();
+  spinLocks_[key % kNumSpinLocks].lock();
   TTEntry& entry = table_[idx];
   bool replace = false;
   if (entry.generation != generation_) {
@@ -61,9 +63,23 @@ void TranspositionTable::store(uint64_t key, Move bestMove, int depth, int value
     entry.bound = bound;
     entry.generation = generation_;
   }
+  spinLocks_[key % kNumSpinLocks].unlock();
 }
 
-bool TranspositionTable::probe(uint64_t key, TTEntry& entry) const {
+bool TranspositionTable::probe(uint64_t key, TTEntry& entry) {
+  size_t idx = key % table_.size();
+  spinLocks_[key % kNumSpinLocks].lock();
+  const TTEntry& found = table_[idx];
+  if (found.key == key) {
+    entry = found;
+    spinLocks_[key % kNumSpinLocks].unlock();
+    return true;
+  }
+  spinLocks_[key % kNumSpinLocks].unlock();
+  return false;
+}
+
+bool TranspositionTable::unsafe_probe(uint64_t key, TTEntry& entry) const {
   size_t idx = key % table_.size();
   const TTEntry& found = table_[idx];
   if (found.key == key) {

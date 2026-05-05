@@ -6,6 +6,7 @@
 #include "../eval/byhand/byhand.h"
 #include "../search/transposition_table.h"
 #include "../search/negamax.h"
+#include "../SpinLock.h"
 
 #include <atomic>
 #include <condition_variable>
@@ -31,12 +32,6 @@ void invalid(const std::string& command) {
 void invalid(const std::string& command, const std::string& message) {
   std::cout << "Invalid use of " << repr(command) << " command (" << message << ")" << std::endl;
 }
-
-struct SpinLock {
-  std::atomic<bool> lock_ = {false};
-  void lock() { while(lock_.exchange(true)); }
-  void unlock() { lock_.store(false); }
-};
 
 struct UciEngineState;
 
