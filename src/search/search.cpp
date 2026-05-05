@@ -1,4 +1,5 @@
 #include "search.h"
+#include "negamax.h"
 
 namespace ChessEngine {
 
@@ -28,8 +29,9 @@ SearchResult<Color::WHITE> colorless_search(
 // Convenience function to search programmatically without needing to specify color or create a thread.
 SearchResult<Color::WHITE> search(Position pos, std::shared_ptr<EvaluatorInterface> evaluator, int depth, int multiPV, TranspositionTable* tt) {
   pos.set_listener(evaluator);
-  SearchThread thread(0, pos, multiPV, std::unordered_set<Move>(), tt);
-  thread.depth_ = depth;
+  GoCommand command;
+  command.depthLimit = depth;
+  SearchThread thread(0, pos, multiPV, std::make_shared<SharedSearchThreadState>(tt), command);
   std::atomic<bool> stopThinking {false};
 
   if (pos.turn_ == Color::WHITE) {

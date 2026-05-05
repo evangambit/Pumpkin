@@ -5,11 +5,13 @@
 #include "../game/Position.h"
 #include "../game/movegen/movegen.h"
 #include "../game/Utils.h"
+#include "GoTask.h"
 #include "Task.h"
 
 #include <atomic>
 #include <condition_variable>
 #include <iostream>
+#include <memory>
 #include <mutex>
 #include <thread>
 #include <unordered_map>
@@ -97,16 +99,18 @@ class SelfPlayTask : public Task {
       }
 
       // Create thread state for search
+      GoCommand command;
+      command.depthLimit = kMaxSearchDepth;
+      command.nodeLimit = nodeLimit;
+      command.timeLimitMs = uint64_t(-1);
+      auto shared = std::make_shared<SharedSearchThreadState>(state->tt_.get());
       SearchThread searchThread(
         /* thread id=*/ 0,
         state->position,
         /* multiPV=*/ 1,
-        std::unordered_set<Move>(),
-        state->tt_.get()
+        shared,
+        command
       );
-      searchThread.depth_ = kMaxSearchDepth;
-      searchThread.nodeLimit_ = nodeLimit;
-      searchThread.stopTime_ = std::chrono::high_resolution_clock::time_point::max();
 
       // Search
       std::atomic<bool> neverStop{false};

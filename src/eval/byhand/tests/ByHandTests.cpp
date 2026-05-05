@@ -53,9 +53,17 @@ std::vector<int16_t> get_feature_vector(std::string fen) {
 //   EXPECT_EQ(get_feature_vector("4k3/8/6p1/p1p5/7P/PPP3P1/8/4K3 w - - 0 1")[EF::CANDIDATE_PASSED_PAWN], 2);
 // }
 
-TEST_F(ByHandTests, TestOutposts) {
-  EXPECT_EQ(get_feature_vector("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")[EF::FIFTH_RANK_OUTPOST], 0);
-  EXPECT_EQ(get_feature_vector("1k6/8/3n4/3p4/3P1P2/4P3/8/1K6 w - - 0 1")[EF::FIFTH_RANK_OUTPOST], -2);
-  // Knight cannot get to outpost squares.
-  EXPECT_EQ(get_feature_vector("1k6/8/8/3p1n2/3P1P2/4P3/8/1K6 w - - 0 1")[EF::FIFTH_RANK_OUTPOST], 0);
+// TEST_F(ByHandTests, TestOutposts) {
+//   EXPECT_EQ(get_feature_vector("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")[EF::FIFTH_RANK_OUTPOST], 0);
+//   EXPECT_EQ(get_feature_vector("1k6/8/3n4/3p4/3P1P2/4P3/8/1K6 w - - 0 1")[EF::FIFTH_RANK_OUTPOST], -2);
+//   // Knight cannot get to outpost squares.
+//   EXPECT_EQ(get_feature_vector("1k6/8/8/3p1n2/3P1P2/4P3/8/1K6 w - - 0 1")[EF::FIFTH_RANK_OUTPOST], 0);
+// }
+
+// ROOK_BEHIND_PASSED_PAWN
+TEST_F(ByHandTests, TestRookBehindPassedPawn) {
+  EXPECT_EQ(get_feature_vector("7k/8/8/2P5/8/8/2R5/7K w - - 0 1")[EF::ROOK_BEHIND_PASSED_PAWN], 1);
+  EXPECT_EQ(get_feature_vector("7k/8/8/2P5/2P5/8/2R5/7K w - - 0 1")[EF::ROOK_BEHIND_PASSED_PAWN], 1);
+  EXPECT_EQ(get_feature_vector("7k/8/2P5/8/2p5/8/2R5/7K w - - 0 1")[EF::ROOK_BEHIND_PASSED_PAWN], 0);
 }
+

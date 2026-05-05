@@ -42,8 +42,8 @@ TEST_F(GeometryTest, Shift) {
   // Full board tests.
   EXPECT_BB_EQ(shift_ew<Direction::EAST>(kUniverse, 1), kUniverse & ~kFiles[FILE_A]);
   EXPECT_BB_EQ(shift_ew<Direction::WEST>(kUniverse, 1), kUniverse & ~kFiles[FILE_H]);
-  EXPECT_BB_EQ(shift<Direction::NORTH>(kUniverse), kUniverse & ~kRanks[7]);
-  EXPECT_BB_EQ(shift<Direction::SOUTH>(kUniverse), kUniverse & ~kRanks[0]);
+  EXPECT_BB_EQ(shift<Direction::NORTH>(kUniverse), kUniverse & ~kRanks[RANK_1]);
+  EXPECT_BB_EQ(shift<Direction::SOUTH>(kUniverse), kUniverse & ~kRanks[RANK_8]);
 }
 
 TEST_F(GeometryTest, Shift_EW) {
@@ -66,6 +66,12 @@ TEST_F(GeometryTest, FlipVertically) {
 
 TEST_F(GeometryTest, FlipHorizontally) {
   EXPECT_BB_EQ(flip_horizontally(bb(SA2) | bb(SB3)), bb(SH2) | bb(SG3));
+}
+
+TEST_F(GeometryTest, ObstacledNorthFill) {
+  EXPECT_BB_EQ(northFill(bb(SafeSquare::SA1), ~bb(SafeSquare::SA2)), bb(SafeSquare::SA1));
+  EXPECT_BB_EQ(northFill(bb(SafeSquare::SA1), ~bb(SafeSquare::SA3)), bb(SafeSquare::SA1) | bb(SafeSquare::SA2));
+  EXPECT_BB_EQ(northFill(bb(SafeSquare::SA1), ~bb(SafeSquare::SA4)), bb(SafeSquare::SA1) | bb(SafeSquare::SA2) | bb(SafeSquare::SA3));
 }
 
 }  // namespace ChessEngine

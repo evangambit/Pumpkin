@@ -82,7 +82,7 @@ SearchResult<TURN> negamax_result_to_search_result(const NegamaxResult<TURN>& re
   std::vector<Variation<TURN>> convertedPVs;
   for (const auto& pv : thread->primaryVariations_) {
     std::vector<Move> moves;
-      extract_variation_from_tt(thread->position_, thread->tt_, &moves, pv.first);
+      extract_variation_from_tt(thread->position_, thread->shared_->tt, &moves, pv.first);
     convertedPVs.push_back(Variation<TURN>(moves, ColoredEvaluation<TURN>(pv.second)));
   }
   return SearchResult<TURN>(
@@ -97,7 +97,7 @@ SearchResult<TURN> negamax_result_to_search_result(const NegamaxResult<TURN>& re
 // Color-templated search function to be used by the UCI interface.
 template<Color TURN>
 SearchResult<TURN> search(SearchThread* thread, std::atomic<bool> *stopThinking, std::function<void(int, SearchResult<TURN>)> onDepthCompleted, bool timeSensitive) {
-  thread->tt_->new_search();
+  thread->shared_->tt->new_search();
   auto startTime = std::chrono::high_resolution_clock::now();
   assert(thread->position_.turn_ == TURN);
   std::atomic<bool> neverStopThinking{false};

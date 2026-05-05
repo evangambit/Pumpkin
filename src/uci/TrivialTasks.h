@@ -37,12 +37,13 @@ NegamaxResult<COLOR> ez_qsearch(const Position& pos) {
   // qsearch(thread, alpha, beta, plyFromRoot, 0, frame, stopThinking)
   const unsigned int multiPV = 1;
   auto tt = std::make_shared<TranspositionTable>(/* megabytes= */1);
+  GoCommand command;
   auto thread = std::make_shared<SearchThread>(
     /*id=*/ 0,
     /*position=*/ pos,
     /*multiPV=*/ multiPV,
-    /*excludedMoves=*/ std::unordered_set<Move>(),
-    /*tt=*/ tt.get()
+    /*shared=*/ std::make_shared<SharedSearchThreadState>(tt.get()),
+    /*command=*/ command
   );
   thread->root_frame()->inCheck = can_enemy_attack<COLOR>(
     thread->position_,

@@ -2,6 +2,7 @@
 #define SRC_UCI_GOTASK_H
 
 #include "../search/search.h"
+#include "../search/negamax.h"
 #include "../game/Position.h"
 #include "../game/movegen/movegen.h"
 #include "../game/Utils.h"
@@ -22,28 +23,6 @@
 #include <unordered_set>
 
 namespace ChessEngine {
-
-struct GoCommand {
-  GoCommand()
-  : depthLimit(kMaxSearchDepth), nodeLimit(-1), timeLimitMs(-1),
-  wtimeMs(0), btimeMs(0), wIncrementMs(0), bIncrementMs(0), movesUntilTimeControl(-1), makeBestMove(false) {}
-
-  Position pos;
-
-  size_t depthLimit;
-  uint64_t nodeLimit;
-  uint64_t timeLimitMs;
-  std::unordered_set<Move> moves;
-
-  uint64_t wtimeMs;
-  uint64_t btimeMs;
-  uint64_t wIncrementMs;
-  uint64_t bIncrementMs;
-  uint64_t movesUntilTimeControl;
-
-  // If true, the best (found) move is made after the command finishes.
-  bool makeBestMove;
-};
 
 GoCommand make_go_command(std::deque<std::string> *command, Position *pos) {
   GoCommand goCommand;
@@ -155,11 +134,9 @@ class GoTask : public Task {
       /* thread id=*/ 0,
       state->position,
       state->multiPV,
-      std::unordered_set<Move>(),
-      state->tt_.get()
+      std::make_shared<SharedSearchThreadState>(state->tt_.get()),
+      goCommand
     );
-    this->baseThreadState->depth_ = goCommand.depthLimit;
-    this->baseThreadState->nodeLimit_ = goCommand.nodeLimit;
     state->stopThinking = std::make_shared<std::atomic<bool>>(false);
     auto currentStopThinking = state->stopThinking;
     if (goCommand.timeLimitMs != (uint64_t)-1) {

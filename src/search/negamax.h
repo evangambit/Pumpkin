@@ -53,6 +53,7 @@
 // 0.5 vs 0.4: -0.003±0.006  (p=0.546; +1192-1221=1935)
 // 0.6 vs 0.4:  0.014±0.005  (p=0.009; +1155-1039=1870)
 // 0.7 vs 0.4: -0.007±0.004  (p=0.045; +2451-2587=4370)
+// 0.9 vs 0.4: -0.048±0.017  (p=0.005; +97-135=168)
 #ifndef LMR_PV_A
 #define LMR_PV_A 0.4
 #endif
@@ -126,35 +127,71 @@ struct HistoryEntry {
   }
 };
 
+
+/**
+ * State for a single search which is shared across the 1+ threads performing that search.
+ */
+struct SharedSearchThreadState {
+  SharedSearchThreadState(TranspositionTable* tt) : tt(tt) {}
+
+  // This pointer should be considered non-owning. The TranspositionTable should created and
+  // managed elsewhere since it should be shared across threads and searches.
+  TranspositionTable* tt;
+};
+
+
+struct GoCommand {
+  GoCommand()
+  : depthLimit(kMaxSearchDepth), nodeLimit(-1), timeLimitMs(-1),
+  wtimeMs(0), btimeMs(0), wIncrementMs(0), bIncrementMs(0), movesUntilTimeControl(-1), makeBestMove(false) {}
+
+  Position pos;
+
+  size_t depthLimit;
+  uint64_t nodeLimit;
+  uint64_t timeLimitMs;
+  std::unordered_set<Move> moves;
+
+  uint64_t wtimeMs;
+  uint64_t btimeMs;
+  uint64_t wIncrementMs;
+  uint64_t bIncrementMs;
+  uint64_t movesUntilTimeControl;
+
+  // If true, the best (found) move is made after the command finishes.
+  bool makeBestMove;
+};
+
+
+
 /**
   * Thread-specific information. e.g. every thread has its own nodeCount_, position, etc.
   */
 struct SearchThread {
-  uint64_t id_;
-  uint64_t multiPV_;
-  unsigned depth_{1};
+  const uint64_t id_;
+  const uint64_t multiPV_;
+  const unsigned depth_{1};
   std::chrono::high_resolution_clock::time_point stopTime_;
   Position position_;  // Note: position contains a pointer to the evaluator.
-  std::unordered_set<Move> permittedMoves_;
+  const std::unordered_set<Move> permittedMoves_;
   std::vector<std::pair<Move, Evaluation>> primaryVariations_;  // Contains multiPV number of best moves.
   uint64_t nodeCount_{0};
   uint64_t qNodeCount_{0};
-  uint64_t nodeLimit_{(uint64_t)-1};
+  const uint64_t nodeLimit_{(uint64_t)-1};
   Frame frames_[kMaxPlyFromRoot + 4];  // Root search starts at frames_[4] so frame[-4] lookbacks stay in-bounds.
   HistoryEntry quietHistory_[Piece::NUM_PIECES][64];
   HistoryEntry captureHistory_[Piece::NUM_PIECES][Piece::NUM_PIECES][64];
 
-  // This pointer should be considered non-owning. The TranspositionTable should created and
-  // managed elsewhere since it should be shared across threads and searches.
-  TranspositionTable* tt_;
+  std::shared_ptr<SharedSearchThreadState> shared_;
 
   SearchThread(
     uint64_t id,
     const Position& pos,
     uint64_t multiPV,
-    const std::unordered_set<Move>& permittedMoves,
-    TranspositionTable* tt
-  ) : id_(id), multiPV_(multiPV), position_(pos), permittedMoves_(permittedMoves), tt_(tt) {
+    // const std::unordered_set<Move>& permittedMoves,
+    std::shared_ptr<SharedSearchThreadState> shared,
+    const GoCommand& command
+  ) : id_(id), multiPV_(multiPV), position_(pos), permittedMoves_(command.moves), shared_(shared), nodeLimit_(command.nodeLimit), depth_(command.depthLimit) {
     std::memset(frames_, 0, sizeof(frames_));
     std::memset(quietHistory_, 0, sizeof(quietHistory_));
     std::memset(captureHistory_, 0, sizeof(captureHistory_));
@@ -171,7 +208,7 @@ struct SearchThread {
     nodeCount_(other.nodeCount_),
     qNodeCount_(other.qNodeCount_),
     nodeLimit_(other.nodeLimit_),
-    tt_(other.tt_) {
+    shared_(other.shared_) {
       std::memcpy(frames_, other.frames_, sizeof(frames_));
       std::memcpy(quietHistory_, other.quietHistory_, sizeof(quietHistory_));
       std::memcpy(captureHistory_, other.captureHistory_, sizeof(captureHistory_));
@@ -303,7 +340,7 @@ NegamaxResult<TURN> qsearch(SearchThread* thread, ColoredEvaluation<TURN> alpha,
   TTEntry entry{0, kNullMove, 0, 0, BoundType::EXACT, 0};
   uint64_t key = thread->position_.currentState_.hash;
   const int ttDepth = qsearch_tt_depth(quiescenceDepth);
-  if (thread->tt_->probe(key, entry)) {
+  if (thread->shared_->tt->probe(key, entry)) {
     if (IS_PRINT_QNODE) {
       std::cout << repeat("  ", plyFromRoot) << "qTT hit: move=" << entry.bestMove.uci() << " value=" << entry.value << " depth=" << entry.depth << " bound=" << bound_type_to_string(entry.bound) << " hash=" << key << std::endl;
     }
@@ -493,7 +530,7 @@ NegamaxResult<TURN> qsearch(SearchThread* thread, ColoredEvaluation<TURN> alpha,
   if (IS_PRINT_QNODE) {
     std::cout << repeat("  ", plyFromRoot) << "Storing in qTT: move=" << bestResult.bestMove.uci() << " eval=" << bestResult.evaluation.value << " bound=" << bound_type_to_string(bound) << " hash=" << thread->position_.currentState_.hash << " fen=" << thread->position_.fen() << std::endl;
   }
-  thread->tt_->store(
+  thread->shared_->tt->store(
     thread->position_.currentState_.hash,
     bestResult.bestMove,
     ttDepth,
@@ -583,7 +620,7 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
 
   // Transposition Table probe
   TTEntry entry{0, kNullMove, 0, 0, BoundType::EXACT, 0};
-  if (thread->tt_->probe(key, entry)) {
+  if (thread->shared_->tt->probe(key, entry)) {
     if (entry.depth >= depth) {
       // Only use TT cutoffs in non-PV nodes (NULL_WINDOW_SEARCH).
       // In PV nodes (NORMAL_SEARCH), we only use the TT for move ordering
@@ -1015,7 +1052,7 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
   if (IS_PRINT_NODE) {
     std::cout << repeat("  ", plyFromRoot) << "Storing in TT: depth=" << depth << " move=" << bestResult.bestMove.uci() << " eval=" << bestResult.evaluation.value << " bound=" << bound_type_to_string(bound) << " hash=" << thread->position_.currentState_.hash << " fen=" << thread->position_.fen() << std::endl;
   }
-  thread->tt_->store(
+  thread->shared_->tt->store(
     thread->position_.currentState_.hash,
     bestResult.bestMove,
     depth,
