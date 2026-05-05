@@ -7,6 +7,8 @@
 
 # Run one test
     sh build.sh test_runner src/eval/nnue/tests/NnueTests.cpp -lgtest -lgtest_main && ./test_runner
+    sh build.sh test_runner src/eval/byhand/tests/ByHandTests.cpp -lgtest -lgtest_main && ./test_runner
+    sh build.sh test_runner src/game/tests/GeometryTests.cpp -lgtest -lgtest_main && ./test_runner
     sh build.sh test_runner src/search/tests/SearchTests.cpp -lgtest -lgtest_main && ./test_runner
 
 # Update NNUE object file from a binary file

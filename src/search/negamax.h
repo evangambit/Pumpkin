@@ -128,18 +128,6 @@ struct HistoryEntry {
 };
 
 
-/**
- * State for a single search which is shared across the 1+ threads performing that search.
- */
-struct SharedSearchThreadState {
-  SharedSearchThreadState(TranspositionTable* tt) : tt(tt) {}
-
-  // This pointer should be considered non-owning. The TranspositionTable should created and
-  // managed elsewhere since it should be shared across threads and searches.
-  TranspositionTable* tt;
-};
-
-
 struct GoCommand {
   GoCommand()
   : depthLimit(kMaxSearchDepth), nodeLimit(-1), timeLimitMs(-1),
@@ -163,6 +151,20 @@ struct GoCommand {
 };
 
 
+/**
+ * State for a single search which is shared across the 1+ threads performing that search.
+ */
+struct SharedSearchThreadState {
+  SharedSearchThreadState(const GoCommand& command, TranspositionTable* tt) : tt(tt), permittedMoves(command.moves) {}
+
+  // This pointer should be considered non-owning. The TranspositionTable should created and
+  // managed elsewhere since it should be shared across threads and searches.
+  TranspositionTable* tt;
+
+  std::unordered_set<Move> permittedMoves;
+};
+
+
 
 /**
   * Thread-specific information. e.g. every thread has its own nodeCount_, position, etc.
@@ -173,7 +175,6 @@ struct SearchThread {
   const unsigned depth_{1};
   std::chrono::high_resolution_clock::time_point stopTime_;
   Position position_;  // Note: position contains a pointer to the evaluator.
-  const std::unordered_set<Move> permittedMoves_;
   std::vector<std::pair<Move, Evaluation>> primaryVariations_;  // Contains multiPV number of best moves.
   uint64_t nodeCount_{0};
   uint64_t qNodeCount_{0};
@@ -191,7 +192,7 @@ struct SearchThread {
     // const std::unordered_set<Move>& permittedMoves,
     std::shared_ptr<SharedSearchThreadState> shared,
     const GoCommand& command
-  ) : id_(id), multiPV_(multiPV), position_(pos), permittedMoves_(command.moves), shared_(shared), nodeLimit_(command.nodeLimit), depth_(command.depthLimit) {
+  ) : id_(id), multiPV_(multiPV), position_(pos), shared_(shared), nodeLimit_(command.nodeLimit), depth_(command.depthLimit) {
     std::memset(frames_, 0, sizeof(frames_));
     std::memset(quietHistory_, 0, sizeof(quietHistory_));
     std::memset(captureHistory_, 0, sizeof(captureHistory_));
@@ -203,7 +204,6 @@ struct SearchThread {
     depth_(other.depth_),
     stopTime_(other.stopTime_),
     position_(other.position_),
-    permittedMoves_(other.permittedMoves_),
     primaryVariations_(other.primaryVariations_),
     nodeCount_(other.nodeCount_),
     qNodeCount_(other.qNodeCount_),
@@ -671,10 +671,10 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
 
   if (SEARCH_TYPE == SearchType::ROOT) {
     // If there are permitted moves, filter the move list to only include those moves.
-    if (!thread->permittedMoves_.empty()) {
+    if (!thread->shared_->permittedMoves.empty()) {
       ExtMove* writePtr = moves;
       for (ExtMove* move = moves; move < end; ++move) {
-        if (thread->permittedMoves_.count(move->move) > 0) {
+        if (thread->shared_->permittedMoves.count(move->move) > 0) {
           *writePtr++ = *move;
         }
       }

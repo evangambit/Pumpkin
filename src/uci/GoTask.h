@@ -134,7 +134,7 @@ class GoTask : public Task {
       /* thread id=*/ 0,
       state->position,
       state->multiPV,
-      std::make_shared<SharedSearchThreadState>(state->tt_.get()),
+      std::make_shared<SharedSearchThreadState>(goCommand, state->tt_.get()),
       goCommand
     );
     state->stopThinking = std::make_shared<std::atomic<bool>>(false);

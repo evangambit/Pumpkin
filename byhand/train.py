@@ -64,8 +64,8 @@ class MyModel(nn.Module):
     def __init__(self, num_features):
         super(MyModel, self).__init__()
         self.linear = nn.Linear(num_features, 2)
-        nn.init.normal_(self.linear.weight, 0, 0.01)
-        nn.init.constant_(self.linear.bias, 0.0)
+        nn.init.zeros_(self.linear.weight)
+        nn.init.zeros_(self.linear.bias)
         self._pst = nn.Parameter(torch.zeros(6 * 64, 2), requires_grad=True)
     
     @property
