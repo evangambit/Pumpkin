@@ -226,6 +226,10 @@ struct SearchThread {
     return frame - root_frame();
   }
 
+  bool should_stop() const {
+    return std::chrono::high_resolution_clock::now() >= shared_->stopTime || nodeCount_ >= shared_->nodeLimit;
+  }
+
   // TODO: when we add multi-threading, we should share stopSearchFlag across threads.
   std::atomic<bool> stopSearchFlag{false};
 };
@@ -363,7 +367,7 @@ NegamaxResult<TURN> qsearch(SearchThread* thread, ColoredEvaluation<TURN> alpha,
   thread->qNodeCount_++;
 
   if ((thread->nodeCount_ & 1023) == 0) {
-    if (std::chrono::high_resolution_clock::now() >= thread->shared_->stopTime || thread->nodeCount_ >= thread->shared_->nodeLimit) {
+    if (thread->should_stop()) {
       stopThinking->store(true);
     }
   }
@@ -653,7 +657,7 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
 
   thread->nodeCount_++;
   if ((thread->nodeCount_ & 1023) == 0) {
-    if (std::chrono::high_resolution_clock::now() >= thread->shared_->stopTime || thread->nodeCount_ >= thread->shared_->nodeLimit) {
+    if (thread->should_stop()) {
       stopThinking->store(true);
     }
   } else if (thread->nodeCount_ >= thread->shared_->nodeLimit) {
