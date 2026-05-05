@@ -155,13 +155,14 @@ struct GoCommand {
  * State for a single search which is shared across the 1+ threads performing that search.
  */
 struct SharedSearchThreadState {
-  SharedSearchThreadState(const GoCommand& command, TranspositionTable* tt) : tt(tt), permittedMoves(command.moves), nodeLimit(command.nodeLimit), depthLimit(command.depthLimit) {}
+  SharedSearchThreadState(const GoCommand& command, std::chrono::high_resolution_clock::time_point stopTime, TranspositionTable* tt) : tt(tt), stopTime(stopTime), permittedMoves(command.moves), nodeLimit(command.nodeLimit), depthLimit(command.depthLimit) {}
 
   // This pointer should be considered non-owning. The TranspositionTable should created and
   // managed elsewhere since it should be shared across threads and searches.
   TranspositionTable* tt;
 
-  std::unordered_set<Move> permittedMoves;
+  const std::chrono::high_resolution_clock::time_point stopTime;
+  const std::unordered_set<Move> permittedMoves;
   const unsigned depthLimit{1};
   const uint64_t nodeLimit;
 };
@@ -174,7 +175,6 @@ struct SharedSearchThreadState {
 struct SearchThread {
   const uint64_t id_;
   const uint64_t multiPV_;
-  std::chrono::high_resolution_clock::time_point stopTime_;
   Position position_;  // Note: position contains a pointer to the evaluator.
   std::vector<std::pair<Move, Evaluation>> primaryVariations_;  // Contains multiPV number of best moves.
   uint64_t nodeCount_{0};
@@ -201,7 +201,6 @@ struct SearchThread {
   SearchThread(const SearchThread& other)
   : id_(other.id_),
     multiPV_(other.multiPV_),
-    stopTime_(other.stopTime_),
     position_(other.position_),
     primaryVariations_(other.primaryVariations_),
     nodeCount_(other.nodeCount_),
@@ -361,7 +360,7 @@ NegamaxResult<TURN> qsearch(SearchThread* thread, ColoredEvaluation<TURN> alpha,
   thread->qNodeCount_++;
 
   if ((thread->nodeCount_ & 1023) == 0) {
-    if (std::chrono::high_resolution_clock::now() >= thread->stopTime_ || thread->nodeCount_ >= thread->shared_->nodeLimit) {
+    if (std::chrono::high_resolution_clock::now() >= thread->shared_->stopTime || thread->nodeCount_ >= thread->shared_->nodeLimit) {
       stopThinking->store(true);
     }
   }
@@ -651,7 +650,7 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
 
   thread->nodeCount_++;
   if ((thread->nodeCount_ & 1023) == 0) {
-    if (std::chrono::high_resolution_clock::now() >= thread->stopTime_ || thread->nodeCount_ >= thread->shared_->nodeLimit) {
+    if (std::chrono::high_resolution_clock::now() >= thread->shared_->stopTime || thread->nodeCount_ >= thread->shared_->nodeLimit) {
       stopThinking->store(true);
     }
   } else if (thread->nodeCount_ >= thread->shared_->nodeLimit) {

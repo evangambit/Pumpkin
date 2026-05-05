@@ -42,7 +42,7 @@ NegamaxResult<COLOR> ez_qsearch(const Position& pos) {
     /*id=*/ 0,
     /*position=*/ pos,
     /*multiPV=*/ multiPV,
-    /*shared=*/ std::make_shared<SharedSearchThreadState>(command, tt.get()),
+    /*shared=*/ std::make_shared<SharedSearchThreadState>(command, std::chrono::high_resolution_clock::time_point::max(), tt.get()),
     /*command=*/ command
   );
   thread->root_frame()->inCheck = can_enemy_attack<COLOR>(

@@ -130,20 +130,20 @@ class GoTask : public Task {
       goCommand.timeLimitMs = timeForMoveMs;
     }
 
+    auto stopTime = std::chrono::high_resolution_clock::time_point::max();
+    if (goCommand.timeLimitMs != (uint64_t)-1) {
+      stopTime = std::chrono::high_resolution_clock::now() + std::chrono::milliseconds(goCommand.timeLimitMs);
+    } 
+    this->baseSharedThreadState = std::make_shared<SharedSearchThreadState>(goCommand, stopTime, state->tt_.get());
     this->baseThreadState = std::make_shared<SearchThread>(
       /* thread id=*/ 0,
       state->position,
       state->multiPV,
-      std::make_shared<SharedSearchThreadState>(goCommand, state->tt_.get()),
+      this->baseSharedThreadState,
       goCommand
     );
     state->stopThinking = std::make_shared<std::atomic<bool>>(false);
     auto currentStopThinking = state->stopThinking;
-    if (goCommand.timeLimitMs != (uint64_t)-1) {
-      this->baseThreadState->stopTime_ = std::chrono::high_resolution_clock::now() + std::chrono::milliseconds(goCommand.timeLimitMs);
-    } else {
-      this->baseThreadState->stopTime_ = std::chrono::high_resolution_clock::time_point::max();
-    }
     this->thread = new std::thread(GoTask::_threaded_think, this->baseThreadState.get(), state, currentStopThinking, &isRunning, isTimeSensitive);
   }
 
@@ -221,10 +221,11 @@ class GoTask : public Task {
   }
   std::deque<std::string> command;
   std::thread *thread;
+  std::shared_ptr<SharedSearchThreadState> baseSharedThreadState;
   std::shared_ptr<SearchThread> baseThreadState;
   bool isRunning;
 };
 
-}  // namespace Nnue
+}  // namespace ChessEngine
 
 #endif  // SRC_UCI_GOTASK_H

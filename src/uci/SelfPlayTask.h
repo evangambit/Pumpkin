@@ -103,7 +103,7 @@ class SelfPlayTask : public Task {
       command.depthLimit = kMaxSearchDepth;
       command.nodeLimit = nodeLimit;
       command.timeLimitMs = uint64_t(-1);
-      auto shared = std::make_shared<SharedSearchThreadState>(command, state->tt_.get());
+      auto shared = std::make_shared<SharedSearchThreadState>(command, std::chrono::high_resolution_clock::time_point::max(), state->tt_.get());
       SearchThread searchThread(
         /* thread id=*/ 0,
         state->position,

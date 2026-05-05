@@ -31,7 +31,7 @@ SearchResult<Color::WHITE> search(Position pos, std::shared_ptr<EvaluatorInterfa
   pos.set_listener(evaluator);
   GoCommand command;
   command.depthLimit = depth;
-  SearchThread thread(0, pos, multiPV, std::make_shared<SharedSearchThreadState>(command, tt), command);
+  SearchThread thread(0, pos, multiPV, std::make_shared<SharedSearchThreadState>(command, std::chrono::high_resolution_clock::time_point::max(), tt), command);
   std::atomic<bool> stopThinking {false};
 
   if (pos.turn_ == Color::WHITE) {

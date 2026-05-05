@@ -138,7 +138,7 @@ SearchResult<TURN> search(SearchThread* thread, std::atomic<bool> *stopThinking,
       if (timeSensitive) {
         auto endTime = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> elapsedTimeDuringLastSearch = endTime - startTime;
-        std::chrono::duration<double> timeRemaining = thread->stopTime_ - endTime;
+        std::chrono::duration<double> timeRemaining = thread->shared_->stopTime - endTime;
         if (elapsedTimeDuringLastSearch * 2 > timeRemaining) {
           quitEarly = true;
           break;
