@@ -155,13 +155,15 @@ struct GoCommand {
  * State for a single search which is shared across the 1+ threads performing that search.
  */
 struct SharedSearchThreadState {
-  SharedSearchThreadState(const GoCommand& command, TranspositionTable* tt) : tt(tt), permittedMoves(command.moves) {}
+  SharedSearchThreadState(const GoCommand& command, TranspositionTable* tt) : tt(tt), permittedMoves(command.moves), nodeLimit(command.nodeLimit), depthLimit(command.depthLimit) {}
 
   // This pointer should be considered non-owning. The TranspositionTable should created and
   // managed elsewhere since it should be shared across threads and searches.
   TranspositionTable* tt;
 
   std::unordered_set<Move> permittedMoves;
+  const unsigned depthLimit{1};
+  const uint64_t nodeLimit;
 };
 
 
@@ -172,13 +174,11 @@ struct SharedSearchThreadState {
 struct SearchThread {
   const uint64_t id_;
   const uint64_t multiPV_;
-  const unsigned depth_{1};
   std::chrono::high_resolution_clock::time_point stopTime_;
   Position position_;  // Note: position contains a pointer to the evaluator.
   std::vector<std::pair<Move, Evaluation>> primaryVariations_;  // Contains multiPV number of best moves.
   uint64_t nodeCount_{0};
   uint64_t qNodeCount_{0};
-  const uint64_t nodeLimit_{(uint64_t)-1};
   Frame frames_[kMaxPlyFromRoot + 4];  // Root search starts at frames_[4] so frame[-4] lookbacks stay in-bounds.
   HistoryEntry quietHistory_[Piece::NUM_PIECES][64];
   HistoryEntry captureHistory_[Piece::NUM_PIECES][Piece::NUM_PIECES][64];
@@ -192,7 +192,7 @@ struct SearchThread {
     // const std::unordered_set<Move>& permittedMoves,
     std::shared_ptr<SharedSearchThreadState> shared,
     const GoCommand& command
-  ) : id_(id), multiPV_(multiPV), position_(pos), shared_(shared), nodeLimit_(command.nodeLimit), depth_(command.depthLimit) {
+  ) : id_(id), multiPV_(multiPV), position_(pos), shared_(shared) {
     std::memset(frames_, 0, sizeof(frames_));
     std::memset(quietHistory_, 0, sizeof(quietHistory_));
     std::memset(captureHistory_, 0, sizeof(captureHistory_));
@@ -201,13 +201,11 @@ struct SearchThread {
   SearchThread(const SearchThread& other)
   : id_(other.id_),
     multiPV_(other.multiPV_),
-    depth_(other.depth_),
     stopTime_(other.stopTime_),
     position_(other.position_),
     primaryVariations_(other.primaryVariations_),
     nodeCount_(other.nodeCount_),
     qNodeCount_(other.qNodeCount_),
-    nodeLimit_(other.nodeLimit_),
     shared_(other.shared_) {
       std::memcpy(frames_, other.frames_, sizeof(frames_));
       std::memcpy(quietHistory_, other.quietHistory_, sizeof(quietHistory_));
@@ -363,7 +361,7 @@ NegamaxResult<TURN> qsearch(SearchThread* thread, ColoredEvaluation<TURN> alpha,
   thread->qNodeCount_++;
 
   if ((thread->nodeCount_ & 1023) == 0) {
-    if (std::chrono::high_resolution_clock::now() >= thread->stopTime_ || thread->nodeCount_ >= thread->nodeLimit_) {
+    if (std::chrono::high_resolution_clock::now() >= thread->stopTime_ || thread->nodeCount_ >= thread->shared_->nodeLimit) {
       stopThinking->store(true);
     }
   }
@@ -653,10 +651,10 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
 
   thread->nodeCount_++;
   if ((thread->nodeCount_ & 1023) == 0) {
-    if (std::chrono::high_resolution_clock::now() >= thread->stopTime_ || thread->nodeCount_ >= thread->nodeLimit_) {
+    if (std::chrono::high_resolution_clock::now() >= thread->stopTime_ || thread->nodeCount_ >= thread->shared_->nodeLimit) {
       stopThinking->store(true);
     }
-  } else if (thread->nodeCount_ >= thread->nodeLimit_) {
+  } else if (thread->nodeCount_ >= thread->shared_->nodeLimit) {
     stopThinking->store(true);
   }
 

@@ -120,7 +120,7 @@ SearchResult<TURN> search(SearchThread* thread, std::atomic<bool> *stopThinking,
     onDepthCompleted(1, searchResult);
   }
   bool quitEarly = false;
-  for (unsigned i = 2; i <= std::min(thread->depth_, kMaxSearchDepth) && !quitEarly; ++i) {
+  for (unsigned i = 2; i <= std::min(thread->shared_->depthLimit, kMaxSearchDepth) && !quitEarly; ++i) {
     if (stopThinking->load()) {
       break;
     }
