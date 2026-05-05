@@ -155,14 +155,19 @@ struct GoCommand {
  * State for a single search which is shared across the 1+ threads performing that search.
  */
 struct SharedSearchThreadState {
-  SharedSearchThreadState(const GoCommand& command, unsigned multiPV, std::chrono::high_resolution_clock::time_point stopTime, TranspositionTable* tt)
-  : tt(tt), stopTime(stopTime), permittedMoves(command.moves), multiPV(multiPV), nodeLimit(command.nodeLimit), depthLimit(command.depthLimit) {}
+  SharedSearchThreadState(const GoCommand& command, unsigned multiPV, bool isTimeSensitive, std::chrono::high_resolution_clock::time_point stopTime, TranspositionTable* tt)
+  : tt(tt), stopTime(stopTime), permittedMoves(command.moves), multiPV(multiPV), isTimeSensitive(isTimeSensitive), nodeLimit(command.nodeLimit), depthLimit(command.depthLimit) {}
 
   // This pointer should be considered non-owning. The TranspositionTable should created and
   // managed elsewhere since it should be shared across threads and searches.
   TranspositionTable* tt;
 
   const unsigned multiPV;
+
+  // Set to true if we're playing with time controls so that (e.g.) stopping early may be advantageous.
+  // Is *not* set to true for "go movetime 1000", since there is no advantage to returning early.
+  const bool isTimeSensitive;
+
   const std::chrono::high_resolution_clock::time_point stopTime;
   const std::unordered_set<Move> permittedMoves;
   const unsigned depthLimit{1};

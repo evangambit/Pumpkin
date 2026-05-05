@@ -6,11 +6,10 @@ namespace ChessEngine {
 SearchResult<Color::WHITE> colorless_search(
   SearchThread* thread,
   std::atomic<bool> *stopThinking,
-  std::function<void(int, SearchResult<Color::WHITE>)> onDepthCompleted,
-  bool timeSensitive
+  std::function<void(int, SearchResult<Color::WHITE>)> onDepthCompleted
 ) {
   if (thread->position_.turn_ == Color::WHITE) {
-    return search<Color::WHITE>(thread, stopThinking, onDepthCompleted, timeSensitive);
+    return search<Color::WHITE>(thread, stopThinking, onDepthCompleted);
   } else {
     if (onDepthCompleted != nullptr) {
       std::function<void(int, SearchResult<Color::BLACK>)> wrappedOnDepthCompleted =
@@ -18,10 +17,10 @@ SearchResult<Color::WHITE> colorless_search(
           SearchResult<Color::WHITE> resultWhite = -resultBlack;
           onDepthCompleted(depth, resultWhite);
         };
-      return -search<Color::BLACK>(thread, stopThinking, wrappedOnDepthCompleted, timeSensitive);
+      return -search<Color::BLACK>(thread, stopThinking, wrappedOnDepthCompleted);
     }
     else {
-      return -search<Color::BLACK>(thread, stopThinking, nullptr, timeSensitive);
+      return -search<Color::BLACK>(thread, stopThinking, nullptr);
     }
   }
 }
@@ -31,13 +30,14 @@ SearchResult<Color::WHITE> search(Position pos, std::shared_ptr<EvaluatorInterfa
   pos.set_listener(evaluator);
   GoCommand command;
   command.depthLimit = depth;
-  SearchThread thread(0, pos, std::make_shared<SharedSearchThreadState>(command, multiPV, std::chrono::high_resolution_clock::time_point::max(), tt), command);
+  const bool isTimeSensitive = false;
+  SearchThread thread(0, pos, std::make_shared<SharedSearchThreadState>(command, multiPV, isTimeSensitive, std::chrono::high_resolution_clock::time_point::max(), tt), command);
   std::atomic<bool> stopThinking {false};
 
   if (pos.turn_ == Color::WHITE) {
-    return search<Color::WHITE>(&thread, &stopThinking, nullptr, /*timeSensitive=*/false);
+    return search<Color::WHITE>(&thread, &stopThinking, nullptr);
   } else {
-    SearchResult<Color::BLACK> result = search<Color::BLACK>(&thread, &stopThinking, nullptr, /*timeSensitive=*/false);
+    SearchResult<Color::BLACK> result = search<Color::BLACK>(&thread, &stopThinking, nullptr);
     return -result;
   }
 }

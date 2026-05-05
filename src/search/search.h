@@ -96,7 +96,7 @@ SearchResult<TURN> negamax_result_to_search_result(const NegamaxResult<TURN>& re
 
 // Color-templated search function to be used by the UCI interface.
 template<Color TURN>
-SearchResult<TURN> search(SearchThread* thread, std::atomic<bool> *stopThinking, std::function<void(int, SearchResult<TURN>)> onDepthCompleted, bool timeSensitive) {
+SearchResult<TURN> search(SearchThread* thread, std::atomic<bool> *stopThinking, std::function<void(int, SearchResult<TURN>)> onDepthCompleted) {
   thread->shared_->tt->new_search();
   auto startTime = std::chrono::high_resolution_clock::now();
   assert(thread->position_.turn_ == TURN);
@@ -135,7 +135,7 @@ SearchResult<TURN> search(SearchThread* thread, std::atomic<bool> *stopThinking,
     while (true) {
       // If we're unlikely to complete this search window in time, return early. This gives
       // us more time on subsequent moves.
-      if (timeSensitive) {
+      if (thread->shared_->isTimeSensitive) {
         auto endTime = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> elapsedTimeDuringLastSearch = endTime - startTime;
         std::chrono::duration<double> timeRemaining = thread->shared_->stopTime - endTime;
@@ -175,7 +175,7 @@ SearchResult<TURN> search(SearchThread* thread, std::atomic<bool> *stopThinking,
     if (onDepthCompleted != nullptr) {
       onDepthCompleted(i, searchResult);
     }
-    if (timeSensitive && (result.evaluation.value <= kLongestForcedMate || result.evaluation.value >= -kLongestForcedMate)) {
+    if (thread->shared_->isTimeSensitive && (result.evaluation.value <= kLongestForcedMate || result.evaluation.value >= -kLongestForcedMate)) {
       // If we're in an actual game, stop searching deeper once we find a forced mate.
       break;
     }
@@ -187,8 +187,7 @@ SearchResult<TURN> search(SearchThread* thread, std::atomic<bool> *stopThinking,
 SearchResult<Color::WHITE> colorless_search(
   SearchThread* thread,
   std::atomic<bool> *stopThinking,
-  std::function<void(int, SearchResult<Color::WHITE>)> onDepthCompleted,
-  bool timeSensitive
+  std::function<void(int, SearchResult<Color::WHITE>)> onDepthCompleted
 );
 
 // Convenience function to search programmatically without needing to specify color or create a thread.

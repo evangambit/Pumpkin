@@ -134,7 +134,7 @@ class GoTask : public Task {
     if (goCommand.timeLimitMs != (uint64_t)-1) {
       stopTime = std::chrono::high_resolution_clock::now() + std::chrono::milliseconds(goCommand.timeLimitMs);
     } 
-    this->baseSharedThreadState = std::make_shared<SharedSearchThreadState>(goCommand, state->multiPV, stopTime, state->tt_.get());
+    this->baseSharedThreadState = std::make_shared<SharedSearchThreadState>(goCommand, state->multiPV, isTimeSensitive, stopTime, state->tt_.get());
     this->baseThreadState = std::make_shared<SearchThread>(
       /* thread id=*/ 0,
       state->position,
@@ -143,7 +143,7 @@ class GoTask : public Task {
     );
     state->stopThinking = std::make_shared<std::atomic<bool>>(false);
     auto currentStopThinking = state->stopThinking;
-    this->thread = new std::thread(GoTask::_threaded_think, this->baseThreadState.get(), state, currentStopThinking, &isRunning, isTimeSensitive);
+    this->thread = new std::thread(GoTask::_threaded_think, this->baseThreadState.get(), state, currentStopThinking, &isRunning);
   }
 
   bool is_running() override {
@@ -157,7 +157,7 @@ class GoTask : public Task {
     delete this->thread;
   }
 
-  static void _threaded_think(SearchThread* baseThread, UciEngineState* state, std::shared_ptr<std::atomic<bool>> stopThinking, bool* isRunning, bool timeSensitive) {
+  static void _threaded_think(SearchThread* baseThread, UciEngineState* state, std::shared_ptr<std::atomic<bool>> stopThinking, bool* isRunning) {
 
     // TODO: support more than one thread.
     SearchThread thread0 = *baseThread;
@@ -168,7 +168,7 @@ class GoTask : public Task {
       auto now = std::chrono::high_resolution_clock::now();
       double secs = std::chrono::duration<double>(now - startTime).count();
       GoTask::_print_variations(depth, secs, result, state, &thread0);
-    }, /*timeSensitive=*/timeSensitive);
+    });
 
     std::cout << "bestmove " << result.bestMove.uci() << std::endl;
 

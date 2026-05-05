@@ -103,7 +103,7 @@ class SelfPlayTask : public Task {
       command.depthLimit = kMaxSearchDepth;
       command.nodeLimit = nodeLimit;
       command.timeLimitMs = uint64_t(-1);
-      auto shared = std::make_shared<SharedSearchThreadState>(command, /* multiPV=*/ 1, std::chrono::high_resolution_clock::time_point::max(), state->tt_.get());
+      auto shared = std::make_shared<SharedSearchThreadState>(command, /* multiPV=*/ 1, /*timeSensitive=*/false, std::chrono::high_resolution_clock::time_point::max(), state->tt_.get());
       SearchThread searchThread(
         /* thread id=*/ 0,
         state->position,
@@ -118,8 +118,7 @@ class SelfPlayTask : public Task {
         &neverStop,
         [](int depth, SearchResult<Color::WHITE> result) {
           std::cout << "info depth " << depth << " score cp " << result.evaluation.value << " move " << result.bestMove.uci() << std::endl;
-        },
-        /*timeSensitive=*/false
+        }
       );
 
       if (result.bestMove == kNullMove) {
