@@ -5,11 +5,13 @@
 #include "../eval/pst/PieceSquareEvaluator.h"
 #include "../eval/byhand/byhand.h"
 #include "../search/transposition_table.h"
+#include "../search/negamax.h"
 
 #include <atomic>
 #include <condition_variable>
 #include <deque>
 #include <iostream>
+#include <memory>
 #include <mutex>
 #include <sstream>
 #include <unordered_set>
@@ -92,6 +94,7 @@ struct UciEngineState {
   std::shared_ptr<std::atomic<bool>> stopThinking = std::make_shared<std::atomic<bool>>(false);
 
   std::shared_ptr<TranspositionTable> tt_;
+  std::shared_ptr<SharedSearchThreadState> sharedSearchThreadState;
 
   unsigned moveOverheadMs;
   unsigned numThreads;

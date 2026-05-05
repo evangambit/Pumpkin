@@ -25,23 +25,6 @@ SearchResult<Color::WHITE> colorless_search(
   }
 }
 
-// Convenience function to search programmatically without needing to specify color or create a thread.
-SearchResult<Color::WHITE> search(Position pos, std::shared_ptr<EvaluatorInterface> evaluator, int depth, int multiPV, TranspositionTable* tt) {
-  pos.set_listener(evaluator);
-  GoCommand command;
-  command.depthLimit = depth;
-  const bool isTimeSensitive = false;
-  SearchThread thread(0, pos, std::make_shared<SharedSearchThreadState>(command, multiPV, isTimeSensitive, std::chrono::high_resolution_clock::time_point::max(), tt), command);
-  std::atomic<bool> stopThinking {false};
-
-  if (pos.turn_ == Color::WHITE) {
-    return search<Color::WHITE>(&thread, &stopThinking, nullptr);
-  } else {
-    SearchResult<Color::BLACK> result = search<Color::BLACK>(&thread, &stopThinking, nullptr);
-    return -result;
-  }
-}
-
 void extract_variation_from_tt(const Position& pos, TranspositionTable* tt, std::vector<Move>* movesOut, Move startMove) {
   Position position = pos;
   Move move = startMove;

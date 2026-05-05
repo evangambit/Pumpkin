@@ -133,12 +133,16 @@ class GoTask : public Task {
     auto stopTime = std::chrono::high_resolution_clock::time_point::max();
     if (goCommand.timeLimitMs != (uint64_t)-1) {
       stopTime = std::chrono::high_resolution_clock::now() + std::chrono::milliseconds(goCommand.timeLimitMs);
-    } 
-    this->baseSharedThreadState = std::make_shared<SharedSearchThreadState>(goCommand, state->multiPV, isTimeSensitive, stopTime, state->tt_.get());
+    }
+    if (state->sharedSearchThreadState.get() != nullptr) {
+      std::cerr << "Error: Already running a search!" << std::endl;
+      exit(1);
+    }
+    state->sharedSearchThreadState = std::make_shared<SharedSearchThreadState>(goCommand, state->multiPV, isTimeSensitive, stopTime, state->tt_.get());
     this->baseThreadState = std::make_shared<SearchThread>(
       /* thread id=*/ 0,
       state->position,
-      this->baseSharedThreadState,
+      state->sharedSearchThreadState,
       goCommand
     );
     state->stopThinking = std::make_shared<std::atomic<bool>>(false);
@@ -173,6 +177,7 @@ class GoTask : public Task {
     std::cout << "bestmove " << result.bestMove.uci() << std::endl;
 
     *isRunning = false;
+    state->sharedSearchThreadState = nullptr;
     // Notify run-loop that it can start running a new command.
     std::unique_lock<std::mutex> lock(state->mutex);
     state->condVar.notify_one();
@@ -220,7 +225,6 @@ class GoTask : public Task {
   }
   std::deque<std::string> command;
   std::thread *thread;
-  std::shared_ptr<SharedSearchThreadState> baseSharedThreadState;
   std::shared_ptr<SearchThread> baseThreadState;
   bool isRunning;
 };
