@@ -130,8 +130,8 @@ SearchResult<TURN> search(SearchThread* thread, std::atomic<bool> *stopThinking,
     //  3 Win100    :    -1.1    3.7  1195.0    2400    50
     //  4 Old       :    -6.0    3.7  1173.5    2400    49
     constexpr Evaluation kWindowSize = 50;
-    ColoredEvaluation<TURN> alpha = (thread->multiPV_ == 1) ? lastResult.evaluation - kWindowSize : ColoredEvaluation<TURN>(kMinEval);
-    ColoredEvaluation<TURN> beta = (thread->multiPV_ == 1) ? lastResult.evaluation + kWindowSize : ColoredEvaluation<TURN>(kMaxEval);
+    ColoredEvaluation<TURN> alpha = (thread->shared_->multiPV == 1) ? lastResult.evaluation - kWindowSize : ColoredEvaluation<TURN>(kMinEval);
+    ColoredEvaluation<TURN> beta = (thread->shared_->multiPV == 1) ? lastResult.evaluation + kWindowSize : ColoredEvaluation<TURN>(kMaxEval);
     while (true) {
       // If we're unlikely to complete this search window in time, return early. This gives
       // us more time on subsequent moves.

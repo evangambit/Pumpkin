@@ -155,12 +155,14 @@ struct GoCommand {
  * State for a single search which is shared across the 1+ threads performing that search.
  */
 struct SharedSearchThreadState {
-  SharedSearchThreadState(const GoCommand& command, std::chrono::high_resolution_clock::time_point stopTime, TranspositionTable* tt) : tt(tt), stopTime(stopTime), permittedMoves(command.moves), nodeLimit(command.nodeLimit), depthLimit(command.depthLimit) {}
+  SharedSearchThreadState(const GoCommand& command, unsigned multiPV, std::chrono::high_resolution_clock::time_point stopTime, TranspositionTable* tt)
+  : tt(tt), stopTime(stopTime), permittedMoves(command.moves), multiPV(multiPV), nodeLimit(command.nodeLimit), depthLimit(command.depthLimit) {}
 
   // This pointer should be considered non-owning. The TranspositionTable should created and
   // managed elsewhere since it should be shared across threads and searches.
   TranspositionTable* tt;
 
+  const unsigned multiPV;
   const std::chrono::high_resolution_clock::time_point stopTime;
   const std::unordered_set<Move> permittedMoves;
   const unsigned depthLimit{1};
@@ -174,7 +176,6 @@ struct SharedSearchThreadState {
   */
 struct SearchThread {
   const uint64_t id_;
-  const uint64_t multiPV_;
   Position position_;  // Note: position contains a pointer to the evaluator.
   std::vector<std::pair<Move, Evaluation>> primaryVariations_;  // Contains multiPV number of best moves.
   uint64_t nodeCount_{0};
@@ -188,11 +189,9 @@ struct SearchThread {
   SearchThread(
     uint64_t id,
     const Position& pos,
-    uint64_t multiPV,
-    // const std::unordered_set<Move>& permittedMoves,
     std::shared_ptr<SharedSearchThreadState> shared,
     const GoCommand& command
-  ) : id_(id), multiPV_(multiPV), position_(pos), shared_(shared) {
+  ) : id_(id), position_(pos), shared_(shared) {
     std::memset(frames_, 0, sizeof(frames_));
     std::memset(quietHistory_, 0, sizeof(quietHistory_));
     std::memset(captureHistory_, 0, sizeof(captureHistory_));
@@ -200,7 +199,6 @@ struct SearchThread {
   
   SearchThread(const SearchThread& other)
   : id_(other.id_),
-    multiPV_(other.multiPV_),
     position_(other.position_),
     primaryVariations_(other.primaryVariations_),
     nodeCount_(other.nodeCount_),
@@ -924,7 +922,7 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
     // with
     // $ ./uci "position fen r5k1/3Q1p2/2p3pp/4b3/p7/P1P1q3/1rBR2bP/1K1R4 w - - 0 26 moves b1a1 e3c3" "go depth 4" "lazyquit"
     const int childDepth = depth - 1;
-    if (move->move != moves[0].move && (SEARCH_TYPE != SearchType::ROOT || thread->multiPV_ == 1) && alpha.value > kLongestForcedMate && alpha.value < -kLongestForcedMate) {
+    if (move->move != moves[0].move && (SEARCH_TYPE != SearchType::ROOT || thread->shared_->multiPV == 1) && alpha.value > kLongestForcedMate && alpha.value < -kLongestForcedMate) {
       #ifndef NO_LMR
         static const auto a = FixedPoint<int32_t, 8>(SEARCH_TYPE == NULL_WINDOW_SEARCH ? LMR_NULL_A : LMR_PV_A);
         static const auto b = FixedPoint<int32_t, 8>(SEARCH_TYPE == NULL_WINDOW_SEARCH ? LMR_NULL_B : LMR_PV_B);
@@ -987,9 +985,9 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
             return a.second > b.second;
           }
         );
-        if (thread->primaryVariations_.size() >= thread->multiPV_) {
-          alpha = ColoredEvaluation<TURN>(thread->primaryVariations_[thread->multiPV_ - 1].second);
-          if (thread->primaryVariations_.size() > thread->multiPV_) {
+        if (thread->primaryVariations_.size() >= thread->shared_->multiPV) {
+          alpha = ColoredEvaluation<TURN>(thread->primaryVariations_[thread->shared_->multiPV - 1].second);
+          if (thread->primaryVariations_.size() > thread->shared_->multiPV) {
             thread->primaryVariations_.pop_back();
           }
         }

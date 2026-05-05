@@ -134,11 +134,10 @@ class GoTask : public Task {
     if (goCommand.timeLimitMs != (uint64_t)-1) {
       stopTime = std::chrono::high_resolution_clock::now() + std::chrono::milliseconds(goCommand.timeLimitMs);
     } 
-    this->baseSharedThreadState = std::make_shared<SharedSearchThreadState>(goCommand, stopTime, state->tt_.get());
+    this->baseSharedThreadState = std::make_shared<SharedSearchThreadState>(goCommand, state->multiPV, stopTime, state->tt_.get());
     this->baseThreadState = std::make_shared<SearchThread>(
       /* thread id=*/ 0,
       state->position,
-      state->multiPV,
       this->baseSharedThreadState,
       goCommand
     );
