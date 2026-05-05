@@ -78,7 +78,7 @@ void extract_variation_from_tt(
   const Position& pos, TranspositionTable* tt, std::vector<Move>* movesOut, Move startMove);
 
 template<Color TURN>
-SearchResult<TURN> negamax_result_to_search_result(const NegamaxResult<TURN>& result, Thread* thread) {
+SearchResult<TURN> negamax_result_to_search_result(const NegamaxResult<TURN>& result, SearchThread* thread) {
   std::vector<Variation<TURN>> convertedPVs;
   for (const auto& pv : thread->primaryVariations_) {
     std::vector<Move> moves;
@@ -96,7 +96,7 @@ SearchResult<TURN> negamax_result_to_search_result(const NegamaxResult<TURN>& re
 
 // Color-templated search function to be used by the UCI interface.
 template<Color TURN>
-SearchResult<TURN> search(Thread* thread, std::atomic<bool> *stopThinking, std::function<void(int, SearchResult<TURN>)> onDepthCompleted, bool timeSensitive) {
+SearchResult<TURN> search(SearchThread* thread, std::atomic<bool> *stopThinking, std::function<void(int, SearchResult<TURN>)> onDepthCompleted, bool timeSensitive) {
   thread->tt_->new_search();
   auto startTime = std::chrono::high_resolution_clock::now();
   assert(thread->position_.turn_ == TURN);
@@ -185,7 +185,7 @@ SearchResult<TURN> search(Thread* thread, std::atomic<bool> *stopThinking, std::
 
 // Non-color-templated search function to be used by the UCI interface.
 SearchResult<Color::WHITE> colorless_search(
-  Thread* thread,
+  SearchThread* thread,
   std::atomic<bool> *stopThinking,
   std::function<void(int, SearchResult<Color::WHITE>)> onDepthCompleted,
   bool timeSensitive

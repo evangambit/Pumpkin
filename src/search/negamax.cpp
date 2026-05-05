@@ -13,7 +13,7 @@ double logit(double p) {
   return std::log(p / (1.0 - p));
 }
 
-void collect_move_order_statistics(Thread* thread) {
+void collect_move_order_statistics(SearchThread* thread) {
   moveOrderStatistics_ += thread->moveOrderStatistics_;
 }
 

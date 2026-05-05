@@ -49,6 +49,10 @@
 #define EVAL_AGNOSTIC 0
 #endif
 
+// 0.2 vs 0.4: -0.039±0.015  (p=0.009; +131-174=249)
+// 0.5 vs 0.4: -0.003±0.006  (p=0.546; +1192-1221=1935)
+// 0.6 vs 0.4:  0.014±0.005  (p=0.009; +1155-1039=1870)
+// 0.7 vs 0.4: -0.007±0.004  (p=0.045; +2451-2587=4370)
 #ifndef LMR_PV_A
 #define LMR_PV_A 0.4
 #endif
@@ -125,7 +129,7 @@ struct HistoryEntry {
 /**
   * Thread-specific information. e.g. every thread has its own nodeCount_, position, etc.
   */
-struct Thread {
+struct SearchThread {
   uint64_t id_;
   uint64_t multiPV_;
   unsigned depth_{1};
@@ -144,7 +148,7 @@ struct Thread {
   // managed elsewhere since it should be shared across threads and searches.
   TranspositionTable* tt_;
 
-  Thread(
+  SearchThread(
     uint64_t id,
     const Position& pos,
     uint64_t multiPV,
@@ -156,7 +160,7 @@ struct Thread {
     std::memset(captureHistory_, 0, sizeof(captureHistory_));
   }
   
-  Thread(const Thread& other)
+  SearchThread(const SearchThread& other)
   : id_(other.id_),
     multiPV_(other.multiPV_),
     depth_(other.depth_),
@@ -257,7 +261,7 @@ inline int qsearch_tt_depth(int quiescenceDepth) {
 }
 
 template<Color TURN>
-NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, ColoredEvaluation<TURN> beta, int plyFromRoot, int quiescenceDepth, Frame *frame, std::atomic<bool> *stopThinking) {
+NegamaxResult<TURN> qsearch(SearchThread* thread, ColoredEvaluation<TURN> alpha, ColoredEvaluation<TURN> beta, int plyFromRoot, int quiescenceDepth, Frame *frame, std::atomic<bool> *stopThinking) {
   frame->hash = thread->position_.currentState_.hash;
   if (IS_PRINT_QNODE) {
     std::cout << repeat("  ", plyFromRoot) << "Quiescence search called: alpha=" << alpha.value << " beta=" << beta.value << " plyFromRoot=" << plyFromRoot << " quiescenceDepth=" << quiescenceDepth << " history" << thread->position_.history_ << std::endl;
@@ -509,7 +513,7 @@ NegamaxResult<TURN> qsearch(Thread* thread, ColoredEvaluation<TURN> alpha, Color
  * In practice, you will likely want to re-search with depth=1 and stopThinking=false to get a valid move.
  */
 template<Color TURN, SearchType SEARCH_TYPE>
-NegamaxResult<TURN> negamax(Thread* thread, int depth, ColoredEvaluation<TURN> alpha, ColoredEvaluation<TURN> beta, int plyFromRoot, Frame *frame, std::atomic<bool> *stopThinking) {
+NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<TURN> alpha, ColoredEvaluation<TURN> beta, int plyFromRoot, Frame *frame, std::atomic<bool> *stopThinking) {
   assert(thread->position_.turn_ == TURN);
   const uint64_t key = thread->position_.currentState_.hash;
   frame->hash = key;

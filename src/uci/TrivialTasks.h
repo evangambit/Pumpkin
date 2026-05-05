@@ -37,7 +37,7 @@ NegamaxResult<COLOR> ez_qsearch(const Position& pos) {
   // qsearch(thread, alpha, beta, plyFromRoot, 0, frame, stopThinking)
   const unsigned int multiPV = 1;
   auto tt = std::make_shared<TranspositionTable>(/* megabytes= */1);
-  auto thread = std::make_shared<Thread>(
+  auto thread = std::make_shared<SearchThread>(
     /*id=*/ 0,
     /*position=*/ pos,
     /*multiPV=*/ multiPV,

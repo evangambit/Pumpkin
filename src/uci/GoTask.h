@@ -151,7 +151,7 @@ class GoTask : public Task {
       goCommand.timeLimitMs = timeForMoveMs;
     }
 
-    this->baseThreadState = std::make_shared<Thread>(
+    this->baseThreadState = std::make_shared<SearchThread>(
       /* thread id=*/ 0,
       state->position,
       state->multiPV,
@@ -181,10 +181,10 @@ class GoTask : public Task {
     delete this->thread;
   }
 
-  static void _threaded_think(Thread* baseThread, UciEngineState* state, std::shared_ptr<std::atomic<bool>> stopThinking, bool* isRunning, bool timeSensitive) {
+  static void _threaded_think(SearchThread* baseThread, UciEngineState* state, std::shared_ptr<std::atomic<bool>> stopThinking, bool* isRunning, bool timeSensitive) {
 
     // TODO: support more than one thread.
-    Thread thread0 = *baseThread;
+    SearchThread thread0 = *baseThread;
 
     auto startTime = std::chrono::high_resolution_clock::now();
 
@@ -202,7 +202,7 @@ class GoTask : public Task {
     state->condVar.notify_one();
   }
  private:
-  static void _print_variations(int depth, double secs, SearchResult<Color::WHITE> result, UciEngineState* state, Thread* thread) {
+  static void _print_variations(int depth, double secs, SearchResult<Color::WHITE> result, UciEngineState* state, SearchThread* thread) {
     const size_t multiPV = state->multiPV;
     const uint64_t timeMs = secs * 1000;
     if (result.primaryVariations.size() == 0) {
@@ -244,7 +244,7 @@ class GoTask : public Task {
   }
   std::deque<std::string> command;
   std::thread *thread;
-  std::shared_ptr<Thread> baseThreadState;
+  std::shared_ptr<SearchThread> baseThreadState;
   bool isRunning;
 };
 

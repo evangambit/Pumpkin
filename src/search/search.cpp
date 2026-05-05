@@ -3,7 +3,7 @@
 namespace ChessEngine {
 
 SearchResult<Color::WHITE> colorless_search(
-  Thread* thread,
+  SearchThread* thread,
   std::atomic<bool> *stopThinking,
   std::function<void(int, SearchResult<Color::WHITE>)> onDepthCompleted,
   bool timeSensitive
@@ -28,7 +28,7 @@ SearchResult<Color::WHITE> colorless_search(
 // Convenience function to search programmatically without needing to specify color or create a thread.
 SearchResult<Color::WHITE> search(Position pos, std::shared_ptr<EvaluatorInterface> evaluator, int depth, int multiPV, TranspositionTable* tt) {
   pos.set_listener(evaluator);
-  Thread thread(0, pos, multiPV, std::unordered_set<Move>(), tt);
+  SearchThread thread(0, pos, multiPV, std::unordered_set<Move>(), tt);
   thread.depth_ = depth;
   std::atomic<bool> stopThinking {false};
 

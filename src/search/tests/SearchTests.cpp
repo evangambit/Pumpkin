@@ -15,7 +15,7 @@ template<Color TURN>
 std::pair<NegamaxResult<TURN>, std::vector<std::pair<Move, Evaluation>>> search(Position pos, std::unordered_set<Move> permittedMoves, int depth = 2, int multiPV = 1) {
   std::shared_ptr<TranspositionTable> tt = std::make_shared<TranspositionTable>(10'000);
   std::atomic<bool> stopFlag(false);
-  Thread thread(0, pos, multiPV, permittedMoves, tt.get());
+  SearchThread thread(0, pos, multiPV, permittedMoves, tt.get());
 
   std::array<Frame, 20> frames;
   NegamaxResult<TURN> result = negamax<TURN, SearchType::ROOT>(
@@ -113,14 +113,14 @@ TEST_F(SearchTest, SimpleEvaluatorPieceValues) {
   EXPECT_EQ(SimpleEvaluator::kPieceValues[ColoredPiece::BLACK_QUEEN], ColoredEvaluation<Color::WHITE>(-900));
 }
 
-// Test Thread constructor
-TEST_F(SearchTest, ThreadConstructor) {
+// Test SearchThread constructor
+TEST_F(SearchTest, SearchThreadConstructor) {
   Position pos = Position::init();
   auto evaluator = std::make_shared<SimpleEvaluator>();
   std::unordered_set<Move> permittedMoves;
   
   std::shared_ptr<TranspositionTable> tt = std::make_shared<TranspositionTable>(10'000);
-  Thread thread(1, pos, 1, permittedMoves, tt.get());
+  SearchThread thread(1, pos, 1, permittedMoves, tt.get());
   
   EXPECT_EQ(thread.id_, 1);
   EXPECT_EQ(thread.nodeCount_, 0);

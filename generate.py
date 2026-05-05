@@ -102,7 +102,7 @@ if __name__ == '__main__':
   parser.add_argument('--num_workers', type=int, default=4, help='Number of worker threads')
   parser.add_argument('--pdrop', type=float, default=0.9, help='Probability of dropping a move')
   parser.add_argument('--min_ply', type=int, default=10)
-  parser.add_argument('--node_limit', type=int, default=10_000)
+  parser.add_argument('--node_limit', type=int, default=5_000)
   parser.add_argument('--out_file', type=str, default='out.txt')
   parser.add_argument('--only_quiet', type=int, default=0)
   parser.add_argument('--min_score_diff', type=float, default=0.1, help='Minimum score difference between best and worst moves; helps exclude positions where all moves are essentially equal.')

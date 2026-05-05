@@ -65,7 +65,7 @@ inline Move select_move_puct(Position& pos, uint64_t parentVisits = 1) {
     return bestMove;
 }
 
-inline void mcts(Thread *thread, size_t iterations) {
+inline void mcts(SearchThread *thread, size_t iterations) {
     for (size_t i = 0; i < iterations; ++i) {
         Position &pos = thread->position_;
         std::vector<MCTSNode*> path;

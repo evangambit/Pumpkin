@@ -21,9 +21,9 @@ import dataset as ndata
 
 cat = np.concatenate
 
-s = 5
+s = 1
 x = np.array([-s * 8, -s * 4, -s * 2, -s, 0, s, s * 2, s * 4, s * 8])
-kBaselineIndex = 3
+kBaselineIndex = (x == 0).argmax()
 
 
 class UCIEngine:
@@ -170,7 +170,7 @@ def worker_func(worker_id: int, feature_index: int, fen_queue: queue.Queue, resu
                 args: argparse.Namespace, print_lock: threading.Lock, total_fens: int):
     """Worker thread that handles engine instances and FEN processing."""
     engines = [
-        UCIEngine(args.engine + f'|increment {feature_index} + 1 {val}') for val in x
+        UCIEngine(args.engine + f'|increment {feature_index} + {args.is_early} {val}') for val in x
     ]
     
     while True:
@@ -242,14 +242,17 @@ if __name__ == "__main__":
     parser.add_argument("--limit", "-l", type=int, default=40_000)
     parser.add_argument("--multipv", "-m", type=int, default=2)
     parser.add_argument("--out", "-o", help="Output directory", default='results')
+    parser.add_argument("--is_early", type=int, default=1)
     args = parser.parse_args()
+
+    assert args.is_early in [0, 1]
 
     lines = load_fens_from_file(args.fens, args.limit)
     print(f"Starting analysis of {len(lines)} positions...")
 
     os.makedirs(args.out, exist_ok=True)
 
-    for feature_index in range(0, 10):
+    for feature_index in range(ndata.num_features() - 1, ndata.num_features()):
         feature_name = ndata.feature_name(feature_index)
         fen_queue = queue.Queue()
         for i, fen in enumerate(lines, 1):
@@ -285,15 +288,15 @@ if __name__ == "__main__":
         print('      Z-scores', avg / stderr)
         print(' Disagreements', (losses != 0).sum(0))
 
-        X = np.stack([
-            np.ones(len(x)),
-            x,
-            x**2
-        ], 1)
+        # X = np.stack([
+        #     np.ones(len(x)),
+        #     x,
+        #     x**2
+        # ], 1)
 
-        cov = np.linalg.inv(X.T @ np.diag(1/stderr**2) @ X)
-        w = cov @ X.T @ np.diag(1 / stderr**2) @ avg
-        print(w)
+        # cov = np.linalg.inv(X.T @ np.diag(1/stderr**2) @ X)
+        # w = cov @ X.T @ np.diag(1 / stderr**2) @ avg
+        # print(w)
 
         plt.figure()
         plt.title(f'{feature_name} {feature_index}')

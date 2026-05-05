@@ -97,7 +97,7 @@ class SelfPlayTask : public Task {
       }
 
       // Create thread state for search
-      Thread searchThread(
+      SearchThread searchThread(
         /* thread id=*/ 0,
         state->position,
         /* multiPV=*/ 1,
