@@ -20,7 +20,7 @@ std::string bound_type_to_string(BoundType bound) {
 }
 
 TranspositionTable::TranspositionTable(size_t megabytes) {
-  table_.resize(1024 * 1024 * megabytes);
+  this->resize(megabytes);
   spinLocks_.resize(kNumSpinLocks);
 }
 
