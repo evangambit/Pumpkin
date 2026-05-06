@@ -207,7 +207,9 @@ struct UciEngine {
       // It is convenient to pretend this is successful so we can set stuff up before cutechess-cli does its thing.
       print_preamble(state);
     } else if (parts[0] == "ponderhit") {
-      // Ignore. (TODO: handle pondering better).
+      if (state->sharedSearchThreadState) {
+        state->sharedSearchThreadState->ponderHit();
+      }
     } else if (parts[0] == "probe") {
       // For probing the TT from UCI.
       state->taskQueue.push_back(std::make_shared<ProbeTask>(parts));

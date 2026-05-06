@@ -131,7 +131,7 @@ struct HistoryEntry {
 struct GoCommand {
   GoCommand()
   : depthLimit(kMaxSearchDepth), nodeLimit(-1), timeLimitMs(-1),
-  wtimeMs(0), btimeMs(0), wIncrementMs(0), bIncrementMs(0), movesUntilTimeControl(-1), makeBestMove(false) {}
+  wtimeMs(0), btimeMs(0), wIncrementMs(0), bIncrementMs(0), movesUntilTimeControl(-1), makeBestMove(false), isPondering(false) {}
 
   Position pos;
 
@@ -148,6 +148,7 @@ struct GoCommand {
 
   // If true, the best (found) move is made after the command finishes.
   bool makeBestMove;
+  bool isPondering;
 };
 
 
@@ -156,7 +157,7 @@ struct GoCommand {
  */
 struct SharedSearchThreadState {
   SharedSearchThreadState(const GoCommand& command, unsigned multiPV, bool isTimeSensitive, std::chrono::high_resolution_clock::time_point stopTime, TranspositionTable* tt)
-  : tt(tt), stopTime(stopTime), permittedMoves(command.moves), multiPV(multiPV), isTimeSensitive(isTimeSensitive), nodeLimit(command.nodeLimit), depthLimit(command.depthLimit) {}
+  : tt(tt), stopTime(stopTime), permittedMoves(command.moves), multiPV(multiPV), isTimeSensitive(isTimeSensitive), nodeLimit(command.nodeLimit), depthLimit(command.depthLimit), timeLimitMs(command.timeLimitMs), isPondering(command.isPondering) {}
 
   // This pointer should be considered non-owning. The TranspositionTable should created and
   // managed elsewhere since it should be shared across threads and searches.
@@ -168,10 +169,21 @@ struct SharedSearchThreadState {
   // Is *not* set to true for "go movetime 1000", since there is no advantage to returning early.
   const bool isTimeSensitive;
 
-  const std::chrono::high_resolution_clock::time_point stopTime;
+  std::chrono::high_resolution_clock::time_point stopTime;
   const std::unordered_set<Move> permittedMoves;
   const unsigned depthLimit{1};
   const uint64_t nodeLimit;
+  const uint64_t timeLimitMs;
+  std::atomic<bool> isPondering;
+
+  void ponderHit() {
+    isPondering.store(false);
+    if (isTimeSensitive) {
+      stopTime = std::chrono::high_resolution_clock::now() + std::chrono::milliseconds(timeLimitMs);
+    } else if (timeLimitMs != (uint64_t)-1) {
+      stopTime = std::chrono::high_resolution_clock::now() + std::chrono::milliseconds(timeLimitMs);
+    }
+  }
 };
 
 
@@ -227,6 +239,9 @@ struct SearchThread {
   }
 
   bool should_stop() const {
+    if (shared_->isPondering.load()) {
+      return nodeCount_ >= shared_->nodeLimit;
+    }
     return std::chrono::high_resolution_clock::now() >= shared_->stopTime || nodeCount_ >= shared_->nodeLimit;
   }
 

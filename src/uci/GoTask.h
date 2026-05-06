@@ -48,6 +48,8 @@ GoCommand make_go_command(std::deque<std::string> *command, Position *pos) {
       lastCommand = part;
     } else if (part == "mm") {
       goCommand.makeBestMove = true;
+    } else if (part == "ponder") {
+      goCommand.isPondering = true;
     } else if (lastCommand == "depth") {
       goCommand.depthLimit = std::min(stoull(part), (unsigned long long)kMaxSearchDepth);
     } else if (lastCommand == "nodes") {
@@ -174,7 +176,11 @@ class GoTask : public Task {
       GoTask::_print_variations(depth, secs, result, state, &thread0);
     });
 
-    std::cout << "bestmove " << result.bestMove.uci() << std::endl;
+    std::cout << "bestmove " << result.bestMove.uci();
+    if (result.primaryVariations.size() > 0 && result.primaryVariations[0].moves.size() > 1) {
+      std::cout << " ponder " << result.primaryVariations[0].moves[1].uci();
+    }
+    std::cout << std::endl;
 
     *isRunning = false;
     state->sharedSearchThreadState = nullptr;

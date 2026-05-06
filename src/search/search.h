@@ -135,7 +135,7 @@ SearchResult<TURN> search(SearchThread* thread, std::atomic<bool> *stopThinking,
     while (true) {
       // If we're unlikely to complete this search window in time, return early. This gives
       // us more time on subsequent moves.
-      if (thread->shared_->isTimeSensitive) {
+      if (thread->shared_->isTimeSensitive && !thread->shared_->isPondering.load()) {
         auto endTime = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> elapsedTimeDuringLastSearch = endTime - startTime;
         std::chrono::duration<double> timeRemaining = thread->shared_->stopTime - endTime;
