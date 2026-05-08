@@ -17,6 +17,7 @@
 #include <chrono>
 #include <deque>
 #include <iostream>
+#include <memory>
 #include <mutex>
 #include <sstream>
 #include <thread>
@@ -166,14 +167,14 @@ class GoTask : public Task {
   static void _threaded_think(SearchThread* baseThread, UciEngineState* state, std::shared_ptr<std::atomic<bool>> stopThinking, bool* isRunning) {
 
     // TODO: support more than one thread.
-    SearchThread thread0 = *baseThread;
+    std::shared_ptr<SearchThread> thread0 = std::make_shared<SearchThread>(*baseThread);
 
     auto startTime = std::chrono::high_resolution_clock::now();
 
-    SearchResult<Color::WHITE> result = colorless_search(&thread0, stopThinking.get(), [state, &thread0, &startTime](int depth, SearchResult<Color::WHITE> result) {
+    SearchResult<Color::WHITE> result = colorless_search(thread0.get(), stopThinking.get(), [state, &thread0, &startTime](int depth, SearchResult<Color::WHITE> result) {
       auto now = std::chrono::high_resolution_clock::now();
       double secs = std::chrono::duration<double>(now - startTime).count();
-      GoTask::_print_variations(depth, secs, result, state, &thread0);
+      GoTask::_print_variations(depth, secs, result, state, thread0.get());
     });
 
     std::cout << "bestmove " << result.bestMove.uci();

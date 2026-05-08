@@ -860,6 +860,8 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
     , kMoveOrderingPieceValue[move->piece] / 2);
 
     // Prioritize moves that caused a beta cutoff in a similar position, in response to a similar move.
+    // NOTE: this is different than conventional response-move heuristic since we use move->piece, not lastMove's piece.
+    // Curiously, switching to the standard response-move heuristic doesn't seem to help at all (-0.004±0.006).
     move->score += frame->responseTo[move->piece][lastMove.to] == move->move ? 25 : 0;
     move->score += frame->responseFrom[move->piece][lastMove.from] == move->move ? 20 : 0;
     move->score += (frame - 2)->responseTo[move->piece][lastMove.to] == move->move ? 15 : 0;
