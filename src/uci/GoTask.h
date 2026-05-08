@@ -15,6 +15,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <chrono>
+#include <cstdint>
 #include <deque>
 #include <iostream>
 #include <memory>
@@ -165,16 +166,12 @@ class GoTask : public Task {
   }
 
   static void _threaded_think(SearchThread* baseThread, UciEngineState* state, std::shared_ptr<std::atomic<bool>> stopThinking, bool* isRunning) {
-
-    // TODO: support more than one thread.
-    std::shared_ptr<SearchThread> thread0 = std::make_shared<SearchThread>(*baseThread);
-
     auto startTime = std::chrono::high_resolution_clock::now();
 
-    SearchResult<Color::WHITE> result = colorless_search(thread0.get(), stopThinking.get(), [state, &thread0, &startTime](int depth, SearchResult<Color::WHITE> result) {
+    SearchResult<Color::WHITE> result = colorless_search(baseThread, stopThinking.get(), [state, &startTime](int depth, SearchResult<Color::WHITE> result, uint64_t nodeCount, uint64_t qNodeCount) {
       auto now = std::chrono::high_resolution_clock::now();
       double secs = std::chrono::duration<double>(now - startTime).count();
-      GoTask::_print_variations(depth, secs, result, state, thread0.get());
+      GoTask::_print_variations(depth, secs, result, state, nodeCount, qNodeCount);
     });
 
     std::cout << "bestmove " << result.bestMove.uci();
@@ -190,7 +187,7 @@ class GoTask : public Task {
     state->condVar.notify_one();
   }
  private:
-  static void _print_variations(int depth, double secs, SearchResult<Color::WHITE> result, UciEngineState* state, SearchThread* thread) {
+  static void _print_variations(int depth, double secs, SearchResult<Color::WHITE> result, UciEngineState* state, uint64_t nodeCount, uint64_t qNodeCount) {
     const size_t multiPV = state->multiPV;
     const uint64_t timeMs = secs * 1000;
     if (result.primaryVariations.size() == 0) {
@@ -219,9 +216,9 @@ class GoTask : public Task {
       } else {
         std::cout << " score cp " << eval;
       }
-      std::cout << " nodes " << thread->nodeCount_;
-      std::cout << " qnodes " << thread->qNodeCount_;
-      std::cout << " nps " << uint64_t(double(thread->nodeCount_) / secs);
+      std::cout << " nodes " << nodeCount;
+      std::cout << " qnodes " << qNodeCount;
+      std::cout << " nps " << uint64_t(double(nodeCount) / secs);
       std::cout << " time " << timeMs;
       std::cout << " pv";
       for (const auto& move : variation.moves) {

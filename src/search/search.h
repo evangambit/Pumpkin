@@ -96,7 +96,7 @@ SearchResult<TURN> negamax_result_to_search_result(const NegamaxResult<TURN>& re
 
 // Color-templated search function to be used by the UCI interface.
 template<Color TURN>
-SearchResult<TURN> search(SearchThread* thread, std::atomic<bool> *stopThinking, std::function<void(int, SearchResult<TURN>)> onDepthCompleted) {
+SearchResult<TURN> search(SearchThread* thread, std::atomic<bool> *stopThinking, std::function<void(int, SearchResult<TURN>, uint64_t, uint64_t)> onDepthCompleted) {
   thread->shared_->tt->new_search();
   auto startTime = std::chrono::high_resolution_clock::now();
   assert(thread->position_.turn_ == TURN);
@@ -117,7 +117,7 @@ SearchResult<TURN> search(SearchThread* thread, std::atomic<bool> *stopThinking,
   SearchResult<TURN> searchResult = negamax_result_to_search_result<TURN>(result, thread);
   SearchResult<TURN> lastResult = searchResult;
   if (onDepthCompleted != nullptr) {
-    onDepthCompleted(1, searchResult);
+    onDepthCompleted(1, searchResult, thread->nodeCount_, thread->qNodeCount_);
   }
   bool quitEarly = false;
   for (unsigned i = 2; i <= std::min(thread->shared_->depthLimit, kMaxSearchDepth) && !quitEarly; ++i) {
@@ -173,7 +173,7 @@ SearchResult<TURN> search(SearchThread* thread, std::atomic<bool> *stopThinking,
     }
     lastResult = searchResult;
     if (onDepthCompleted != nullptr) {
-      onDepthCompleted(i, searchResult);
+      onDepthCompleted(i, searchResult, thread->nodeCount_, thread->qNodeCount_);
     }
     if (thread->shared_->isTimeSensitive && (result.evaluation.value <= kLongestForcedMate || result.evaluation.value >= -kLongestForcedMate)) {
       // If we're in an actual game, stop searching deeper once we find a forced mate.
@@ -187,7 +187,7 @@ SearchResult<TURN> search(SearchThread* thread, std::atomic<bool> *stopThinking,
 SearchResult<Color::WHITE> colorless_search(
   SearchThread* thread,
   std::atomic<bool> *stopThinking,
-  std::function<void(int, SearchResult<Color::WHITE>)> onDepthCompleted
+  std::function<void(int, SearchResult<Color::WHITE>, uint64_t, uint64_t)> onDepthCompleted
 );
 
 // Convenience function to search programmatically without needing to specify color or create a thread.

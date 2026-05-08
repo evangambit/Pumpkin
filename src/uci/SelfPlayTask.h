@@ -10,6 +10,7 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <cstdint>
 #include <iostream>
 #include <memory>
 #include <mutex>
@@ -116,7 +117,7 @@ class SelfPlayTask : public Task {
       SearchResult<Color::WHITE> result = colorless_search(
         &searchThread,
         &neverStop,
-        [](int depth, SearchResult<Color::WHITE> result) {
+        [](int depth, SearchResult<Color::WHITE> result, uint64_t, uint64_t) {
           std::cout << "info depth " << depth << " score cp " << result.evaluation.value << " move " << result.bestMove.uci() << std::endl;
         }
       );

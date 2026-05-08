@@ -6,16 +6,16 @@ namespace ChessEngine {
 SearchResult<Color::WHITE> colorless_search(
   SearchThread* thread,
   std::atomic<bool> *stopThinking,
-  std::function<void(int, SearchResult<Color::WHITE>)> onDepthCompleted
+  std::function<void(int, SearchResult<Color::WHITE>, uint64_t, uint64_t)> onDepthCompleted
 ) {
   if (thread->position_.turn_ == Color::WHITE) {
     return search<Color::WHITE>(thread, stopThinking, onDepthCompleted);
   } else {
     if (onDepthCompleted != nullptr) {
-      std::function<void(int, SearchResult<Color::BLACK>)> wrappedOnDepthCompleted =
-        [onDepthCompleted](int depth, SearchResult<Color::BLACK> resultBlack) {
+      std::function<void(int, SearchResult<Color::BLACK>, uint64_t, uint64_t)> wrappedOnDepthCompleted =
+        [onDepthCompleted](int depth, SearchResult<Color::BLACK> resultBlack, uint64_t nodeCount, uint64_t qNodeCount) {
           SearchResult<Color::WHITE> resultWhite = -resultBlack;
-          onDepthCompleted(depth, resultWhite);
+          onDepthCompleted(depth, resultWhite, nodeCount, qNodeCount);
         };
       return -search<Color::BLACK>(thread, stopThinking, wrappedOnDepthCompleted);
     }
