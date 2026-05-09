@@ -66,13 +66,13 @@ void create_threats(const TypeSafeArray<Bitboard, kNumColoredPieces, ColoredPiec
 
   Bitboard whiteQueenTargets = kEmptyBitboard;
   if (ourQueens != kEmptyBitboard) {
-    whiteQueenTargets |= compute_one_bishops_targets(lsb_i_promise_board_is_not_empty(ourQueens), everyone & ~ourBishops);
-    whiteQueenTargets |= compute_single_rook_moves(lsb_i_promise_board_is_not_empty(ourQueens), everyone & ~ourRooks);
+    whiteQueenTargets |= compute_one_bishops_targets(lsb_i_promise_board_is_not_empty(ourQueens), everyone & ~ourBishops & ~ourQueens);
+    whiteQueenTargets |= compute_single_rook_moves(lsb_i_promise_board_is_not_empty(ourQueens), everyone & ~ourRooks & ~ourQueens);
   }
   Bitboard blackQueenTargets = kEmptyBitboard;
   if (theirQueens != kEmptyBitboard) {
-    blackQueenTargets |= compute_one_bishops_targets(lsb_i_promise_board_is_not_empty(theirQueens), everyone & ~theirBishops & ~ourBishops);
-    blackQueenTargets |= compute_single_rook_moves(lsb_i_promise_board_is_not_empty(theirQueens), everyone & ~theirRooks & ~ourRooks);
+    blackQueenTargets |= compute_one_bishops_targets(lsb_i_promise_board_is_not_empty(theirQueens), everyone & ~theirBishops & ~ourBishops & ~theirQueens);
+    blackQueenTargets |= compute_single_rook_moves(lsb_i_promise_board_is_not_empty(theirQueens), everyone & ~theirRooks & ~ourRooks & ~theirQueens);
   }
 
   Bitboard whiteKingTargets = kKingMoves[ourKingSq];
