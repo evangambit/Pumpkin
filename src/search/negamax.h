@@ -421,8 +421,8 @@ NegamaxResult<TURN> qsearch(SearchThread* thread, ColoredEvaluation<TURN> alpha,
 
   Threats threats;
   create_threats(thread->position_.pieceBitboards_, thread->position_.colorBitboards_, &threats);
-  ColoredEvaluation<TURN> staticEval = evaluate<TURN>(thread->position_.evaluator_, thread->position_, threats, plyFromRoot, alpha, beta).clamp_(alpha, beta);
-  NegamaxResult<TURN> bestResult(kNullMove, frame->inCheck ? alpha : staticEval);
+  frame->staticEval = evaluate<TURN>(thread->position_.evaluator_, thread->position_, threats, plyFromRoot, alpha, beta).value;
+  NegamaxResult<TURN> bestResult(kNullMove, frame->inCheck ? alpha : ColoredEvaluation<TURN>(frame->staticEval).clamp_(alpha, beta));
   if (IS_PRINT_QNODE) {
     std::cout << repeat("  ", plyFromRoot) << "Static evaluation: " << bestResult.evaluation.value << " (hash = " << frame->hash << ")" << std::endl;
   }
@@ -733,9 +733,11 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
   // Add score to each move.
   Threats threats;
   create_threats(thread->position_.pieceBitboards_, thread->position_.colorBitboards_, &threats);
-  // We never call evaluate in interior nodes, but it behooves us to keep the accumulator
-  // up to date so our children/grandchildren can benefit from it.
+  // We otherwise never call evaluate in interior nodes, but it behooves us to keep the accumulator
+  // up-to-date so our children/grandchildren can benefit from it.
   frame->staticEval = evaluate<TURN>(thread->position_.evaluator_, thread->position_, threats, plyFromRoot, alpha, beta).value;
+
+  const bool improving = plyFromRoot >= 2 ? (frame->staticEval > (frame - 2)->staticEval) : false;
 
   // Razoring.
   //  # PLAYER     :  RATING  ERROR  POINTS  PLAYED   (%)
@@ -758,6 +760,7 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
     // on a move that we're trying to prove bad... right?
     return r;
   }
+
   // Reverse futility pruning (+29.6 ± 2.7)
   if (depth == 1 && frame->staticEval > beta.value + kRazoringMargin && !frame->inCheck) {
     const auto r = NegamaxResult<TURN>(kNullMove, beta);
