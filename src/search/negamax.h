@@ -737,8 +737,6 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
   // up-to-date so our children/grandchildren can benefit from it.
   frame->staticEval = evaluate<TURN>(thread->position_.evaluator_, thread->position_, threats, plyFromRoot, alpha, beta).value;
 
-  const bool improving = plyFromRoot >= 2 ? (frame->staticEval > (frame - 2)->staticEval) : false;
-
   // Razoring.
   //  # PLAYER     :  RATING  ERROR  POINTS  PLAYED   (%)
   //  1 uci-50     :     2.7    1.8  7267.5   14400    50

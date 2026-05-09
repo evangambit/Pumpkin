@@ -131,7 +131,7 @@ class ProbeTask : public Task {
       } else {
         std::cout << "  Value: " << "wcp " << entry.value;
       }
-      std::cout << "  Depth: " << entry.depth;
+      std::cout << "  Depth: " << int(entry.depth);
       std::cout << "  Bound: " << bound_type_to_string(entry.bound);
       std::cout << "  Hash: " << pos.currentState_.hash;
       std::cout << std::endl;
