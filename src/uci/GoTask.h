@@ -142,12 +142,11 @@ class GoTask : public Task {
       std::cerr << "Error: Already running a search!" << std::endl;
       exit(1);
     }
-    state->sharedSearchThreadState = std::make_shared<SharedSearchThreadState>(goCommand, state->multiPV, isTimeSensitive, stopTime, state->tt_.get());
+    state->sharedSearchThreadState = std::make_shared<SharedSearchThreadState>(goCommand, state->multiPV, state->numThreads, isTimeSensitive, stopTime, state->tt_.get());
     this->baseThreadState = std::make_shared<SearchThread>(
       /* thread id=*/ 0,
       state->position,
-      state->sharedSearchThreadState,
-      goCommand
+      state->sharedSearchThreadState
     );
     state->stopThinking = std::make_shared<std::atomic<bool>>(false);
     auto currentStopThinking = state->stopThinking;

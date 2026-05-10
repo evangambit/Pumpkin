@@ -54,7 +54,7 @@ struct TTEntry {
   }
 };
 
-constexpr size_t kNumSpinLocks = 256;
+constexpr size_t kNumSpinLocks = 2048;
 
 class TranspositionTable {
  public:

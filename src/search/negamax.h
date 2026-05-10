@@ -152,18 +152,56 @@ struct GoCommand {
 };
 
 
+static constexpr unsigned kNumSearchManagerCounters = 32768;
+static constexpr unsigned kNumSearchManagerLocks = 256;
+struct SearchManager {
+  uint8_t counters[kNumSearchManagerCounters];
+  SpinLock locks[kNumSearchManagerLocks];
+  SearchManager() {
+    std::fill_n(counters, kNumSearchManagerCounters, 0);
+  }
+  bool should_start_searching(uint64_t hash) {
+    size_t idx = hash % kNumSearchManagerCounters;
+    SpinLock& lock = locks[hash % kNumSearchManagerLocks];
+    lock.lock();
+    bool r = counters[idx] == 0;
+    if (r) {
+      counters[idx] += 1;
+    }
+    lock.unlock();
+    return r;
+  }
+  void start_searching(uint64_t hash) {
+    size_t idx = hash % kNumSearchManagerCounters;
+    SpinLock& lock = locks[hash % kNumSearchManagerLocks];
+    lock.lock();
+    counters[idx] += 1;
+    lock.unlock();
+  }
+  void finished_searching(uint64_t hash) {
+    size_t idx = hash % kNumSearchManagerCounters;
+    SpinLock& lock = locks[hash % kNumSearchManagerLocks];
+    lock.lock();
+    counters[idx] -= 1;
+    lock.unlock();
+  }
+};
+
+
 /**
  * State for a single search which is shared across the 1+ threads performing that search.
  */
 struct SharedSearchThreadState {
-  SharedSearchThreadState(const GoCommand& command, unsigned multiPV, bool isTimeSensitive, std::chrono::high_resolution_clock::time_point stopTime, TranspositionTable* tt)
-  : tt(tt), stopTime(stopTime), permittedMoves(command.moves), multiPV(multiPV), isTimeSensitive(isTimeSensitive), nodeLimit(command.nodeLimit), depthLimit(command.depthLimit), timeLimitMs(command.timeLimitMs), isPondering(command.isPondering) {}
+  SharedSearchThreadState(const GoCommand& command, unsigned multiPV, unsigned numThreads, bool isTimeSensitive, std::chrono::high_resolution_clock::time_point stopTime, TranspositionTable* tt)
+  : tt(tt), searchManager(std::make_unique<SearchManager>()), stopTime(stopTime), permittedMoves(command.moves), multiPV(multiPV), numThreads(numThreads), isTimeSensitive(isTimeSensitive), nodeLimit(command.nodeLimit), depthLimit(command.depthLimit), timeLimitMs(command.timeLimitMs), isPondering(command.isPondering) {}
 
   // This pointer should be considered non-owning. The TranspositionTable should created and
   // managed elsewhere since it should be shared across threads and searches.
   TranspositionTable* tt;
+  std::unique_ptr<SearchManager> searchManager;
 
   const unsigned multiPV;
+  const unsigned numThreads;
 
   // Set to true if we're playing with time controls so that (e.g.) stopping early may be advantageous.
   // Is *not* set to true for "go movetime 1000", since there is no advantage to returning early.
@@ -206,8 +244,7 @@ struct SearchThread {
   SearchThread(
     uint64_t id,
     const Position& pos,
-    std::shared_ptr<SharedSearchThreadState> shared,
-    const GoCommand& command
+    std::shared_ptr<SharedSearchThreadState> shared
   ) : id_(id), position_(pos), shared_(shared) {
     std::memset(frames_, 0, sizeof(frames_));
     std::memset(quietHistory_, 0, sizeof(quietHistory_));
@@ -568,7 +605,7 @@ NegamaxResult<TURN> qsearch(SearchThread* thread, ColoredEvaluation<TURN> alpha,
  * Note: if you set stopThinking to true, there is no guarantee that this will return a sensible/valid result.
  * In practice, you will likely want to re-search with depth=1 and stopThinking=false to get a valid move.
  */
-template<Color TURN, SearchType SEARCH_TYPE>
+template<Color TURN, SearchType SEARCH_TYPE, bool IS_MULTITHREADED>
 NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<TURN> alpha, ColoredEvaluation<TURN> beta, int plyFromRoot, Frame *frame, std::atomic<bool> *stopThinking) {
   assert(thread->position_.turn_ == TURN);
   const uint64_t key = thread->position_.currentState_.hash;
@@ -724,7 +761,7 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
   #ifndef NO_IID
     // If we don't have a best move from the TT, we compute one with reduced depth.
     if (depth > 2 && (entry.key != key || entry.bestMove == kNullMove)) {
-      NegamaxResult<TURN> result = negamax<TURN, SEARCH_TYPE>(thread, depth - 2, alpha, beta, plyFromRoot, frame, stopThinking);
+      NegamaxResult<TURN> result = negamax<TURN, SEARCH_TYPE, IS_MULTITHREADED>(thread, depth - 2, alpha, beta, plyFromRoot, frame, stopThinking);
       entry.bestMove = result.bestMove;
       entry.value = result.evaluation.value;
     }
@@ -782,7 +819,7 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
     const int reducedDepth = std::max(0, depth - reduction);
     make_nullmove<TURN>(&thread->position_);
     (frame + 1)->inCheck = false;
-    ColoredEvaluation<TURN> r = to_parent_eval(negamax<opposite_color<TURN>(), SearchType::NULL_WINDOW_SEARCH>(
+    ColoredEvaluation<TURN> r = to_parent_eval(negamax<opposite_color<TURN>(), SearchType::NULL_WINDOW_SEARCH, IS_MULTITHREADED>(
       thread, reducedDepth, to_child_eval(beta), to_child_eval(beta - 1), plyFromRoot + 1, frame + 1, stopThinking
     ).evaluation);
     undo_nullmove<TURN>(&thread->position_);
@@ -900,134 +937,161 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
   // of +0.087±0.032 over using alpha.
    NegamaxResult<TURN> bestResult(kNullMove, ColoredEvaluation<TURN>(kMinEval));
   int numLegalMoves = 0;
-  for (ExtMove* move = moves; move < end; ++move) {
-    static constexpr ColoredPiece enemyKing = coloredPiece<opposite_color<TURN>(), Piece::KING>();
-    assert((thread->position_.pieceBitboards_[enemyKing] & bb(move->move.to)) == 0);
-    make_move<TURN>(&thread->position_, move->move);
+  ExtMove deferredMoves[kMaxNumMoves];
+  ExtMove *deferredMovesEnd = deferredMoves;
 
-    const bool areWeInCheck = can_enemy_attack<TURN>(
-      thread->position_,
-      lsb_i_promise_board_is_not_empty(thread->position_.pieceBitboards_[moverKing])
-    );
-    if (areWeInCheck) {
-      // Need this check because of en passant captures into check.
-      // e.g. b5c6 in position 8/1k6/6R1/KPpr4/8/8/8/8 w - c6 0 62
-      if (IS_PRINT_NODE) {
-        std::cout << repeat("  ", plyFromRoot) << "Illegal move generated that leaves us in check: " << move->move.uci() << std::endl;
+  ExtMove *activeMoves = moves;
+  ExtMove *activeEnd = end;
+  int moveIndex = -1;
+  for (int isDeferred = 0; isDeferred < (IS_MULTITHREADED ? 2 : 1); ++isDeferred) {
+    for (ExtMove* move = activeMoves; move != activeEnd; ++move) {
+      static constexpr ColoredPiece enemyKing = coloredPiece<opposite_color<TURN>(), Piece::KING>();
+      assert((thread->position_.pieceBitboards_[enemyKing] & bb(move->move.to)) == 0);
+      make_move<TURN>(&thread->position_, move->move);
+
+      // All threads proceed to the first child, but defer children that are already being searched
+      // by another thread.
+      if (IS_MULTITHREADED) {
+        if (depth > 1 && !isDeferred && move != moves && !thread->shared_->searchManager->should_start_searching(thread->position_.currentState_.hash)) {
+          *deferredMovesEnd++ = *move;
+          undo<TURN>(&thread->position_);
+          continue;
+        }
+        thread->shared_->searchManager->start_searching(thread->position_.currentState_.hash);
       }
-      undo<TURN>(&thread->position_);
-      continue;
-    }
-    ++numLegalMoves;
-    const bool moveGivesCheck = can_enemy_attack<opposite_color<TURN>()>(
-      thread->position_,
-      lsb_i_promise_board_is_not_empty(thread->position_.pieceBitboards_[enemyKing])
-    );
-    (frame + 1)->inCheck = moveGivesCheck;
-
-    ColoredEvaluation<TURN> eval;
-
-    // Don't reduce depth for sensible captures (Elo difference: 254.7 +/- 286.2, LOS: 98.7 %)
-    const bool isGoodCapture = move->capture != ColoredPiece::NO_COLORED_PIECE && cp2p(move->capture) > move->piece;
-    // Also don't reduce depth for safe passed pawn pushes.
-    const bool isSafePassedPawnPush = move->piece == Piece::PAWN && (ourPassedPawnMask & ~theirTargets & bb(move->move.to)) > 0;
-    const bool isSack = !!(threats.badForOur<TURN>(move->piece) & bb(move->move.to));
-    const int index = move - moves;
-    const bool isQuiet = (
-      (move->capture == ColoredPiece::NO_COLORED_PIECE) && (move->move.moveType != MoveType::PROMOTION)
-    );
-
-    // TODO: we can probably remove the "not checkmating" check here, but we need to be careful since null window bounds,
-    // as they are currently written, can be equal! If you want to remove the "not checkmating" condition, you should test
-    // with
-    // $ ./uci "position fen r5k1/3Q1p2/2p3pp/4b3/p7/P1P1q3/1rBR2bP/1K1R4 w - - 0 26 moves b1a1 e3c3" "go depth 4" "lazyquit"
-    const int childDepth = depth - 1;
-    if (move->move != moves[0].move && (SEARCH_TYPE != SearchType::ROOT || thread->shared_->multiPV == 1) && alpha.value > kLongestForcedMate && alpha.value < -kLongestForcedMate) {
-      #ifndef NO_LMR
-        static const auto a = FixedPoint<int32_t, 8>(SEARCH_TYPE == NULL_WINDOW_SEARCH ? LMR_NULL_A : LMR_PV_A);
-        static const auto b = FixedPoint<int32_t, 8>(SEARCH_TYPE == NULL_WINDOW_SEARCH ? LMR_NULL_B : LMR_PV_B);
-        int lateMoveReduction = (a * kLnLookup[childDepth] * kLnLookup[index] + b).floorToInt();
-        lateMoveReduction -= isGoodCapture ? 1 : 0;
-        lateMoveReduction -= isSafePassedPawnPush ? 1 : 0;
-        lateMoveReduction += isSack ? 1 : 0;
-        lateMoveReduction -= frame->killers.contains(move->move) ? 1 : 0;
-        // TODO: extend attacking trapped pieces?
-        const int reducedChildDepth = std::max(childDepth - std::max(0, lateMoveReduction), 0);
-      #else
-        const int reducedChildDepth = childDepth;
-      #endif
-
-      eval = to_parent_eval(negamax<opposite_color<TURN>(), SearchType::NULL_WINDOW_SEARCH>(thread, reducedChildDepth, to_child_eval(alpha + 1), to_child_eval(alpha), plyFromRoot + 1, frame + 1, stopThinking).evaluation);
-      if (eval.value > alpha.value) {
+      ++moveIndex;
+      
+      const bool areWeInCheck = can_enemy_attack<TURN>(
+        thread->position_,
+        lsb_i_promise_board_is_not_empty(thread->position_.pieceBitboards_[moverKing])
+      );
+      if (areWeInCheck) {
+        // Need this check because of en passant captures into check.
+        // e.g. b5c6 in position 8/1k6/6R1/KPpr4/8/8/8/8 w - c6 0 62
         if (IS_PRINT_NODE) {
-          std::cout << repeat("  ", plyFromRoot) << "Null window search failed; doing full window search." << std::endl;
+          std::cout << repeat("  ", plyFromRoot) << "Illegal move generated that leaves us in check: " << move->move.uci() << std::endl;
         }
-        constexpr SearchType searchType = SEARCH_TYPE == SearchType::ROOT ? SearchType::NORMAL_SEARCH : SEARCH_TYPE;
-        eval = to_parent_eval(negamax<opposite_color<TURN>(), searchType>(thread, childDepth, to_child_eval(beta), to_child_eval(alpha), plyFromRoot + 1, frame + 1, stopThinking).evaluation);
+        undo<TURN>(&thread->position_);
+        continue;
       }
-    } else {
-      // Simple, full-window, full-depth search. Used for the first move in non-root search.
-      // In the root node, we use this when multiPV==1, since we don't care about the exact
-      // evaluation of moves that aren't the best move.
-      constexpr SearchType firstMoveSearchType = SEARCH_TYPE == SearchType::ROOT ? SearchType::NORMAL_SEARCH : SEARCH_TYPE;
-      eval = to_parent_eval(negamax<opposite_color<TURN>(), firstMoveSearchType>(thread, childDepth, to_child_eval(beta), to_child_eval(alpha), plyFromRoot + 1, frame + 1, stopThinking).evaluation);
-    }
 
-    if (IS_PRINT_NODE) {
-      std::cout << repeat("  ", plyFromRoot) << "Move " << move->move.uci() << " has evaluation ";
-      if (eval <= alpha) {
-        std::cout << "≤" << alpha.value;
-      } else if (eval >= beta) {
-        std::cout << "≥" << beta.value;
-      } else {
-        std::cout << "=" << eval.value;
-      }
-      std::cout << " (" << alpha.value << " ≤ " << eval.value << " ≤ " << beta.value << ") " << thread->position_.history_ << std::endl;
-    }
+      ++numLegalMoves;
+      const bool moveGivesCheck = can_enemy_attack<opposite_color<TURN>()>(
+        thread->position_,
+        lsb_i_promise_board_is_not_empty(thread->position_.pieceBitboards_[enemyKing])
+      );
+      (frame + 1)->inCheck = moveGivesCheck;
 
-    undo<TURN>(&thread->position_);
-    if (eval > bestResult.evaluation) {
-      bestResult.bestMove = move->move;
-      bestResult.evaluation = eval;
-    }
-    if (eval > alpha) {
-      if (SEARCH_TYPE == SearchType::ROOT) {
-        // In multi-PV search, we want to keep track of multiple best moves and
-        // only raise alpha if we have the top N moves.
+      ColoredEvaluation<TURN> eval;
 
-        // We don't really care about optimizing this too much since it only happens
-        // at the root of the search.
-        thread->primaryVariations_.push_back(std::make_pair(move->move, eval.value));
-        std::stable_sort(
-          thread->primaryVariations_.begin(),
-          thread->primaryVariations_.end(),
-          [](const std::pair<Move, Evaluation>& a, const std::pair<Move, Evaluation>& b) {
-            return a.second > b.second;
+      // Don't reduce depth for sensible captures (Elo difference: 254.7 +/- 286.2, LOS: 98.7 %)
+      const bool isGoodCapture = move->capture != ColoredPiece::NO_COLORED_PIECE && cp2p(move->capture) > move->piece;
+      // Also don't reduce depth for safe passed pawn pushes.
+      const bool isSafePassedPawnPush = move->piece == Piece::PAWN && (ourPassedPawnMask & ~theirTargets & bb(move->move.to)) > 0;
+      const bool isSack = !!(threats.badForOur<TURN>(move->piece) & bb(move->move.to));
+      const bool isQuiet = (
+        (move->capture == ColoredPiece::NO_COLORED_PIECE) && (move->move.moveType != MoveType::PROMOTION)
+      );
+
+      // TODO: we can probably remove the "not checkmating" check here, but we need to be careful since null window bounds,
+      // as they are currently written, can be equal! If you want to remove the "not checkmating" condition, you should test
+      // with
+      // $ ./uci "position fen r5k1/3Q1p2/2p3pp/4b3/p7/P1P1q3/1rBR2bP/1K1R4 w - - 0 26 moves b1a1 e3c3" "go depth 4" "lazyquit"
+      const int childDepth = depth - 1;
+      if (move->move != moves[0].move && (SEARCH_TYPE != SearchType::ROOT || thread->shared_->multiPV == 1) && alpha.value > kLongestForcedMate && alpha.value < -kLongestForcedMate) {
+        #ifndef NO_LMR
+          static const auto a = FixedPoint<int32_t, 8>(SEARCH_TYPE == NULL_WINDOW_SEARCH ? LMR_NULL_A : LMR_PV_A);
+          static const auto b = FixedPoint<int32_t, 8>(SEARCH_TYPE == NULL_WINDOW_SEARCH ? LMR_NULL_B : LMR_PV_B);
+          int lateMoveReduction = (a * kLnLookup[childDepth] * kLnLookup[moveIndex] + b).floorToInt();
+          lateMoveReduction -= isGoodCapture ? 1 : 0;
+          lateMoveReduction -= isSafePassedPawnPush ? 1 : 0;
+          lateMoveReduction += isSack ? 1 : 0;
+          lateMoveReduction -= frame->killers.contains(move->move) ? 1 : 0;
+          // TODO: extend attacking trapped pieces?
+          const int reducedChildDepth = std::max(childDepth - std::max(0, lateMoveReduction), 0);
+        #else
+          const int reducedChildDepth = childDepth;
+        #endif
+
+        eval = to_parent_eval(negamax<opposite_color<TURN>(), SearchType::NULL_WINDOW_SEARCH, IS_MULTITHREADED>(thread, reducedChildDepth, to_child_eval(alpha + 1), to_child_eval(alpha), plyFromRoot + 1, frame + 1, stopThinking).evaluation);
+        if (eval.value > alpha.value) {
+          if (IS_PRINT_NODE) {
+            std::cout << repeat("  ", plyFromRoot) << "Null window search failed; doing full window search." << std::endl;
           }
-        );
-        if (thread->primaryVariations_.size() >= thread->shared_->multiPV) {
-          alpha = ColoredEvaluation<TURN>(thread->primaryVariations_[thread->shared_->multiPV - 1].second);
-          if (thread->primaryVariations_.size() > thread->shared_->multiPV) {
-            thread->primaryVariations_.pop_back();
-          }
+          constexpr SearchType searchType = SEARCH_TYPE == SearchType::ROOT ? SearchType::NORMAL_SEARCH : SEARCH_TYPE;
+          eval = to_parent_eval(negamax<opposite_color<TURN>(), searchType, IS_MULTITHREADED>(thread, childDepth, to_child_eval(beta), to_child_eval(alpha), plyFromRoot + 1, frame + 1, stopThinking).evaluation);
         }
       } else {
-        // If we're not at the root, just update alpha.
-        alpha = ColoredEvaluation<TURN>(eval.value);
+        // Simple, full-window, full-depth search. Used for the first move in non-root search.
+        // In the root node, we use this when multiPV==1, since we don't care about the exact
+        // evaluation of moves that aren't the best move.
+        constexpr SearchType firstMoveSearchType = SEARCH_TYPE == SearchType::ROOT ? SearchType::NORMAL_SEARCH : SEARCH_TYPE;
+        eval = to_parent_eval(negamax<opposite_color<TURN>(), firstMoveSearchType, IS_MULTITHREADED>(thread, childDepth, to_child_eval(beta), to_child_eval(alpha), plyFromRoot + 1, frame + 1, stopThinking).evaluation);
       }
-      if (alpha >= beta) {
-        // TODO: check if this move is quiet. Probably also check if we've already added it as a killer.
-        if (isQuiet) {
-          thread->quietHistory_[move->piece][move->move.to].update(depth);
+
+      if (IS_PRINT_NODE) {
+        std::cout << repeat("  ", plyFromRoot) << "Move " << move->move.uci() << " has evaluation ";
+        if (eval <= alpha) {
+          std::cout << "≤" << alpha.value;
+        } else if (eval >= beta) {
+          std::cout << "≥" << beta.value;
         } else {
-          thread->captureHistory_[move->piece][cp2p(move->capture)][move->move.to].update(depth);
+          std::cout << "=" << eval.value;
         }
-        frame->killers.add(move->move);
-        frame->responseTo[move->piece][lastMove.to] = move->move;
-        frame->responseFrom[move->piece][lastMove.from] = move->move;
-        break;
+        std::cout << " (" << alpha.value << " ≤ " << eval.value << " ≤ " << beta.value << ") " << thread->position_.history_ << std::endl;
+      }
+
+      if (IS_MULTITHREADED) {
+        thread->shared_->searchManager->finished_searching(thread->position_.currentState_.hash);
+      }
+
+      undo<TURN>(&thread->position_);
+      if (eval > bestResult.evaluation) {
+        bestResult.bestMove = move->move;
+        bestResult.evaluation = eval;
+      }
+      if (eval > alpha) {
+        if (SEARCH_TYPE == SearchType::ROOT) {
+          // In multi-PV search, we want to keep track of multiple best moves and
+          // only raise alpha if we have the top N moves.
+
+          // We don't really care about optimizing this too much since it only happens
+          // at the root of the search.
+          thread->primaryVariations_.push_back(std::make_pair(move->move, eval.value));
+          std::stable_sort(
+            thread->primaryVariations_.begin(),
+            thread->primaryVariations_.end(),
+            [](const std::pair<Move, Evaluation>& a, const std::pair<Move, Evaluation>& b) {
+              return a.second > b.second;
+            }
+          );
+          if (thread->primaryVariations_.size() >= thread->shared_->multiPV) {
+            alpha = ColoredEvaluation<TURN>(thread->primaryVariations_[thread->shared_->multiPV - 1].second);
+            if (thread->primaryVariations_.size() > thread->shared_->multiPV) {
+              thread->primaryVariations_.pop_back();
+            }
+          }
+        } else {
+          // If we're not at the root, just update alpha.
+          alpha = ColoredEvaluation<TURN>(eval.value);
+        }
+        if (alpha >= beta) {
+          // TODO: check if this move is quiet. Probably also check if we've already added it as a killer.
+          if (isQuiet) {
+            thread->quietHistory_[move->piece][move->move.to].update(depth);
+          } else {
+            thread->captureHistory_[move->piece][cp2p(move->capture)][move->move.to].update(depth);
+          }
+          frame->killers.add(move->move);
+          frame->responseTo[move->piece][lastMove.to] = move->move;
+          frame->responseFrom[move->piece][lastMove.from] = move->move;
+          deferredMovesEnd = deferredMoves;  // Skip the deferred iteration by setting the number of deferred moves to 0.
+          break;
+        }
       }
     }
+    activeMoves = deferredMoves;
+    activeEnd = deferredMovesEnd;
   }
 
   if (numLegalMoves == 0) {

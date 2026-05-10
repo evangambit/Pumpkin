@@ -7,6 +7,7 @@
 #include <chrono>
 #include <functional>
 #include <memory>
+#include <thread>
 #include <unordered_set>
 
 #include "../game/Position.h"
@@ -101,15 +102,49 @@ SearchResult<TURN> search(SearchThread* thread, std::atomic<bool> *stopThinking,
   auto startTime = std::chrono::high_resolution_clock::now();
   assert(thread->position_.turn_ == TURN);
   std::atomic<bool> neverStopThinking{false};
-  NegamaxResult<TURN> result = negamax<TURN, SearchType::ROOT>(
-    thread,
-    1,
-    /*alpha=*/ColoredEvaluation<TURN>(kMinEval),
-    /*beta=*/ColoredEvaluation<TURN>(kMaxEval),
-    /*plyFromRoot=*/0,
-    thread->root_frame(),
-    &neverStopThinking  // Guarantee we always search at least depth 1 before stopping.
-  );
+  std::vector<std::pair<std::unique_ptr<SearchThread>, std::unique_ptr<std::thread>>> otherThreads(thread->shared_->numThreads - 1);
+  for (unsigned i = 0; i < otherThreads.size(); ++i) {
+    otherThreads[i].first = std::make_unique<SearchThread>(
+      i + 1,
+      thread->position_,
+      thread->shared_
+    );
+    otherThreads[i].second = std::make_unique<std::thread>(
+      negamax<TURN, SearchType::ROOT, true>,
+      otherThreads[i].first.get(),
+      /*depth=*/1,
+      /*alpha=*/ColoredEvaluation<TURN>(kMinEval),
+      /*beta=*/ColoredEvaluation<TURN>(kMaxEval),
+      /*plyFromRoot=*/0,
+      otherThreads[i].first->root_frame(),
+      &neverStopThinking
+    );
+  }
+  NegamaxResult<TURN> result;
+  if (otherThreads.size() > 0) {
+    result = negamax<TURN, SearchType::ROOT, true>(
+      thread,
+      1,
+      /*alpha=*/ColoredEvaluation<TURN>(kMinEval),
+      /*beta=*/ColoredEvaluation<TURN>(kMaxEval),
+      /*plyFromRoot=*/0,
+      thread->root_frame(),
+      &neverStopThinking  // Guarantee we always search at least depth 1 before stopping.
+    );
+  } else {
+    result = negamax<TURN, SearchType::ROOT, false>(
+      thread,
+      1,
+      /*alpha=*/ColoredEvaluation<TURN>(kMinEval),
+      /*beta=*/ColoredEvaluation<TURN>(kMaxEval),
+      /*plyFromRoot=*/0,
+      thread->root_frame(),
+      &neverStopThinking  // Guarantee we always search at least depth 1 before stopping.
+    );
+  }
+  for (unsigned i = 0; i < otherThreads.size(); ++i) {
+    otherThreads[i].second->join();
+  }
   if (result.bestMove == kNullMove) {
     std::cout << "Error (1): Search did not find a move. " << thread->position_.currentState_.hash << std::endl;
     exit(1);
@@ -145,15 +180,42 @@ SearchResult<TURN> search(SearchThread* thread, std::atomic<bool> *stopThinking,
         }
         startTime = endTime;
       }
-      result = negamax<TURN, SearchType::ROOT>(
-        thread,
-        i,
-        /*alpha=*/alpha,
-        /*beta=*/beta,
-        /*plyFromRoot=*/0,
-        thread->root_frame(),
-        stopThinking
-      );
+      for (unsigned j = 0; j < otherThreads.size(); ++j) {
+        otherThreads[j].second = std::make_unique<std::thread>(
+          negamax<TURN, SearchType::ROOT, true>,
+          otherThreads[j].first.get(),
+          /*depth=*/i,
+          /*alpha=*/alpha,
+          /*beta=*/beta,
+          /*plyFromRoot=*/0,
+          otherThreads[j].first->root_frame(),
+          stopThinking
+        );
+      }
+      if (otherThreads.size() > 0) {
+        result = negamax<TURN, SearchType::ROOT, true>(
+          thread,
+          i,
+          /*alpha=*/alpha,
+          /*beta=*/beta,
+          /*plyFromRoot=*/0,
+          thread->root_frame(),
+          stopThinking
+        );
+      } else {
+        result = negamax<TURN, SearchType::ROOT, false>(
+          thread,
+          i,
+          /*alpha=*/alpha,
+          /*beta=*/beta,
+          /*plyFromRoot=*/0,
+          thread->root_frame(),
+          stopThinking
+        );
+      }
+      for (unsigned j = 0; j < otherThreads.size(); ++j) {
+        otherThreads[j].second->join();
+      }
       if (result.evaluation <= alpha) {
         alpha = ColoredEvaluation<TURN>(kMinEval);
       } else if (result.evaluation >= beta) {
