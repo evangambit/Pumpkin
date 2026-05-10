@@ -214,6 +214,7 @@ struct SharedSearchThreadState {
   const uint64_t timeLimitMs;
   std::atomic<bool> isPondering;
 
+  // TODO: fix race condition to stopTime (UCI thread tries to write to it too).
   void ponderHit() {
     isPondering.store(false);
     if (isTimeSensitive) {
