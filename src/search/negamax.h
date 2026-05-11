@@ -783,7 +783,7 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
   //  4 uci-200    :    -1.7    2.9  2388.0    4800    50
   //  5 old        :    -2.6    1.9  5803.0   11729    49
   #if EVAL_AGNOSTIC == 0
-  static constexpr int kRazoringMargin = 50;
+  static constexpr int kRazoringMargin = 20;
   if (SEARCH_TYPE != SearchType::ROOT && depth == 1 && frame->staticEval < alpha.value - kRazoringMargin) {
     const auto r = qsearch<TURN>(thread, alpha, beta, plyFromRoot, 0, frame, stopThinking);
     if (IS_PRINT_NODE) {
@@ -797,8 +797,13 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
     return r;
   }
 
+  // 60/40: +164-212=356  -0.033±0.012  p=0.009  (366/10000 total)
+  // 40/60: +226-235=405  -0.005±0.011  p=0.646  (433/10000 total)
+  // 40/40: +218-208=344  0.006±0.012  p=0.603  (385/10000 total)
+
   // Reverse futility pruning (+29.6 ± 2.7)
-  if (SEARCH_TYPE != SearchType::ROOT && depth == 1 && frame->staticEval > beta.value + kRazoringMargin && !frame->inCheck) {
+  static constexpr int kFutilityMargin = 20;
+  if (SEARCH_TYPE != SearchType::ROOT && depth == 1 && frame->staticEval > beta.value + kFutilityMargin && !frame->inCheck) {
     const auto r = NegamaxResult<TURN>(kNullMove, beta);
     if (IS_PRINT_NODE) {
       std::cout << repeat("  ", plyFromRoot) << "Reverse futility pruning: static eval is much better than beta. Returning beta." << std::endl;

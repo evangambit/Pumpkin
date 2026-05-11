@@ -129,7 +129,7 @@ if __name__ == '__main__':
   parser = argparse.ArgumentParser()
   parser.add_argument('--engine', default='/opt/homebrew/bin/stockfish')
   parser.add_argument('--multipv', type=int, default=5, help='Number of moves to search for each position')
-  parser.add_argument('--num_workers', type=int, default=4, help='Number of worker threads')
+  parser.add_argument('--num_workers', type=int, default=0, help='Number of worker threads (0 = auto-detect from CPU count)')
   parser.add_argument('--pdrop', type=float, default=0.9, help='Probability of dropping a move')
   parser.add_argument('--min_ply', type=int, default=15)
   parser.add_argument('--node_limit', type=int, default=10_000)
@@ -139,6 +139,8 @@ if __name__ == '__main__':
   parser.add_argument('--min_score_diff', type=float, default=0.1, help='Minimum score difference between best and worst moves; helps exclude positions where all moves are essentially equal.')
   args = parser.parse_args()
 
+  if args.num_workers == 0:
+    args.num_workers = max(1, os.cpu_count() - 1)
   assert args.multipv > 1
 
   resultQueue = Queue()
