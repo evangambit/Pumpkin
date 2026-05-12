@@ -34,14 +34,13 @@ def writer(resultQueue, args):
     t0 = time.time()
     while True:
       rows = resultQueue.get()
+      # Check if any position in the batch is a duplicate; skip the entire batch if so.
+      if any(cache.test_and_add(row[1]) for row in rows):
+        continue
       for row in rows:
         fen = row[0]
         epd = row[1]
         the_rest = row[2:]
-        # Use EPD for cache to ignore move counts when deduplicating positions
-        if cache.test_and_add(epd):
-          continue
-        cache.test_and_add(fen)
         line = fen
         for item in the_rest:
           if isinstance(item, tuple):
@@ -55,7 +54,7 @@ def writer(resultQueue, args):
           dt = time.time() - t0
           t0 = time.time()
           print(f'Saved {total_saved} positions. ({100.0/dt:.2f} pos/s)')
-        f.flush()
+      f.flush()
 
 def analyzer(resultQueue, args):
   with chess_engine.SimpleEngine.popen_uci(args.engine) as engine:

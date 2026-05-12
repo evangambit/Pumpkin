@@ -800,6 +800,7 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
   // 60/40: +164-212=356  -0.033±0.012  p=0.009  (366/10000 total)
   // 40/60: +226-235=405  -0.005±0.011  p=0.646  (433/10000 total)
   // 40/40: +218-208=344  0.006±0.012  p=0.603  (385/10000 total)
+  // 20/20: +200-241=393  -0.025±0.012  p=0.038  (417/10000 total)
 
   // Reverse futility pruning (+29.6 ± 2.7)
   static constexpr int kFutilityMargin = 20;
