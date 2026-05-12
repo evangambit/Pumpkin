@@ -114,8 +114,8 @@ def helper(engine, resultQueue, args):
               results.append((fen, temp_board.epd(), score))
               break
             temp_board.push(move)
-          if len(results) == args.multipv:
-            resultQueue.put(results)
+        if len(results) == args.multipv:
+          resultQueue.put(results)
       
 
     # Pick a random move (biased towards better moves)
