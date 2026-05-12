@@ -112,6 +112,7 @@ struct Frame {
   uint64_t hash;
   bool inCheck;
   Evaluation staticEval;
+  Move excludedMove = kNullMove;
 };
 
 struct HistoryEntry {
@@ -677,7 +678,7 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
 
   // Transposition Table probe
   TTEntry entry{0, kNullMove, 0, 0, BoundType::EXACT, 0};
-  if (thread->shared_->tt->probe(key, entry)) {
+  if (frame->excludedMove == kNullMove && thread->shared_->tt->probe(key, entry)) {
     if (entry.depth >= depth) {
       // Only use TT cutoffs in non-PV nodes (NULL_WINDOW_SEARCH).
       // In PV nodes (NORMAL_SEARCH), we only use the TT for move ordering
@@ -954,6 +955,33 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
     for (ExtMove* move = activeMoves; move != activeEnd; ++move) {
       static constexpr ColoredPiece enemyKing = coloredPiece<opposite_color<TURN>(), Piece::KING>();
       assert((thread->position_.pieceBitboards_[enemyKing] & bb(move->move.to)) == 0);
+
+      if (move->move == frame->excludedMove) {
+        continue;
+      }
+
+      // Singular extension: if the TT's move is significantly better than alternatives.
+      // We use "entry.bound != BoundType::UPPER" since an upperbound means we never actually
+      // did a thorough examination of all moves, so it is likely that the TT's "best move" isn't
+      // actually the best.
+      bool isSingular = false;
+      // TODO: tune kSingularMargin.            
+      static constexpr int kSingularMargin = SEARCH_TYPE == SearchType::NULL_WINDOW_SEARCH ? 80 : 80;
+      if (depth > 4 && move->move == entry.bestMove && entry.depth >= depth - 3 && entry.bound != BoundType::UPPER && frame->excludedMove == kNullMove && !alpha.is_mating()) {
+        frame->excludedMove = move->move;
+        auto r = negamax<TURN, SearchType::NULL_WINDOW_SEARCH, IS_MULTITHREADED>(
+          thread,
+          (depth - 1) / 2,  // Stolen from Stockfish.
+          ColoredEvaluation<TURN>(entry.value - kSingularMargin - 1),
+          ColoredEvaluation<TURN>(entry.value - kSingularMargin),
+          plyFromRoot,
+          frame,
+          stopThinking
+        );
+        frame->excludedMove = kNullMove;
+        isSingular = r.evaluation.value < entry.value - kSingularMargin;
+      }
+
       make_move<TURN>(&thread->position_, move->move);
 
       // All threads proceed to the first child, but defer children that are already being searched
@@ -1004,7 +1032,7 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
       // as they are currently written, can be equal! If you want to remove the "not checkmating" condition, you should test
       // with
       // $ ./uci "position fen r5k1/3Q1p2/2p3pp/4b3/p7/P1P1q3/1rBR2bP/1K1R4 w - - 0 26 moves b1a1 e3c3" "go depth 4" "lazyquit"
-      const int childDepth = depth - 1;
+      const int childDepth = depth - 1 + (isSingular ? 1 : 0);
       if (move->move != moves[0].move && (SEARCH_TYPE != SearchType::ROOT || thread->shared_->multiPV == 1) && alpha.value > kLongestForcedMate && alpha.value < -kLongestForcedMate) {
         #ifndef NO_LMR
           static const auto a = FixedPoint<int32_t, 8>(SEARCH_TYPE == NULL_WINDOW_SEARCH ? LMR_NULL_A : LMR_PV_A);
@@ -1138,13 +1166,15 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
   if (IS_PRINT_NODE) {
     std::cout << repeat("  ", plyFromRoot) << "Storing in TT: depth=" << depth << " move=" << bestResult.bestMove.uci() << " eval=" << bestResult.evaluation.value << " bound=" << bound_type_to_string(bound) << " hash=" << thread->position_.currentState_.hash << " fen=" << thread->position_.fen() << std::endl;
   }
-  thread->shared_->tt->store(
-    thread->position_.currentState_.hash,
-    bestResult.bestMove,
-    depth,
-    bestResult.evaluation.value,
-    bound
-  );
+  if (frame->excludedMove == kNullMove) {
+    thread->shared_->tt->store(
+      thread->position_.currentState_.hash,
+      bestResult.bestMove,
+      depth,
+      bestResult.evaluation.value,
+      bound
+    );
+  }
 
   if (IS_PRINT_NODE) {
     std::cout << repeat("  ", plyFromRoot) << "Negamax returning: bestMove=" << bestResult.bestMove.uci() << " eval=" << bestResult.evaluation.value  << " depth=" << depth << std::endl;
