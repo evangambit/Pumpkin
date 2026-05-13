@@ -762,8 +762,8 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
   // Internal Iterative Deepening.
   #ifndef NO_IID
     // If we don't have a best move from the TT, we compute one with reduced depth.
-    if (depth > 2 && (entry.key != key || entry.bestMove == kNullMove)) {
-      NegamaxResult<TURN> result = negamax<TURN, SEARCH_TYPE, IS_MULTITHREADED>(thread, depth - 2, alpha, beta, plyFromRoot, frame, stopThinking);
+    if (depth > 4 && (entry.key != key || entry.bestMove == kNullMove)) {
+      NegamaxResult<TURN> result = negamax<TURN, SEARCH_TYPE, IS_MULTITHREADED>(thread, depth - 4, alpha, beta, plyFromRoot, frame, stopThinking);
       entry.bestMove = result.bestMove;
       entry.value = result.evaluation.value;
     }
