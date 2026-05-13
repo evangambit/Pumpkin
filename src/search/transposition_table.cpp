@@ -37,18 +37,8 @@ void TranspositionTable::clear() {
   std::memset(table_.data(), 0, sizeof(TTEntry) * table_.size());
 }
 
-bool shouldReplace(const TTEntry& oldEntry, const TTEntry& newEntry) {
-  bool replace = false;
-  if (oldEntry.generation != newEntry.generation) {
-    replace = true;
-  } else if (newEntry.bound == BoundType::EXACT && oldEntry.bound != BoundType::EXACT) {
-    replace = true;
-  } else if (newEntry.bound == BoundType::EXACT && oldEntry.bound == BoundType::EXACT && newEntry.depth >= oldEntry.depth) {
-    replace = true;
-  } else if (newEntry.bound != BoundType::EXACT && oldEntry.bound != BoundType::EXACT && newEntry.depth >= oldEntry.depth) {
-    replace = true;
-  }
-  return replace;
+int score(const TTEntry& entry, uint8_t generation) {
+  return (entry.bound == BoundType::EXACT) * 128 + (entry.generation == generation) * 256 + entry.depth;
 }
 
 void TranspositionTable::store(uint64_t key, Move bestMove, int8_t depth, Evaluation value, BoundType bound) {
@@ -57,7 +47,7 @@ void TranspositionTable::store(uint64_t key, Move bestMove, int8_t depth, Evalua
   spinLocks_[key % kNumSpinLocks].lock();
   TTEntry& entry = table_[idx];
   TTEntry newEntry = {key, bestMove, depth, value, bound, generation_};
-  bool replace = shouldReplace(entry, newEntry);
+  bool replace = score(newEntry, generation_) >= score(entry, generation_);
   if (key == entry.key && ((bound == BoundType::EXACT) == (entry.bound == BoundType::EXACT)) && depth < entry.depth) {
     replace = false;
   }
