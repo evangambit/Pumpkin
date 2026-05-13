@@ -48,9 +48,6 @@ void TranspositionTable::store(uint64_t key, Move bestMove, int8_t depth, Evalua
   TTEntry& entry = table_[idx];
   TTEntry newEntry = {key, bestMove, depth, value, bound, generation_};
   bool replace = score(newEntry, generation_) >= score(entry, generation_);
-  if (key == entry.key && ((bound == BoundType::EXACT) == (entry.bound == BoundType::EXACT)) && depth < entry.depth) {
-    replace = false;
-  }
   if (replace) {
     entry = newEntry;
   }
