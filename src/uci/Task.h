@@ -50,10 +50,10 @@ class Task {
   }
 };
 
-
+constexpr int kDefaultTranspositioTableSizeMb = 100;
 struct UciEngineState {
   UciEngineState()
-    : tt_(std::make_shared<TranspositionTable>(/* megabytes= */100)),
+    : tt_(std::make_shared<TranspositionTable>(/* megabytes= */kDefaultTranspositioTableSizeMb)),
       moveOverheadMs(0),
       numThreads(1),
       multiPV(1) {

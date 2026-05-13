@@ -61,7 +61,7 @@ class TranspositionTable {
   TranspositionTable(size_t megabytes);
   void clear();
   void new_search();
-  void store(uint64_t key, Move bestMove, int depth, int value, BoundType bound);
+  void store(uint64_t key, Move bestMove, int8_t depth, Evaluation value, BoundType bound);
   bool probe(uint64_t key, TTEntry& entry);
   bool unsafe_probe(uint64_t key, TTEntry& entry) const;
   size_t kb_size() const { return table_.size() * sizeof(TTEntry) / 1024; }

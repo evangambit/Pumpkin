@@ -37,31 +37,32 @@ void TranspositionTable::clear() {
   std::memset(table_.data(), 0, sizeof(TTEntry) * table_.size());
 }
 
-void TranspositionTable::store(uint64_t key, Move bestMove, int depth, int value, BoundType bound) {
+bool shouldReplace(const TTEntry& oldEntry, const TTEntry& newEntry) {
+  bool replace = false;
+  if (oldEntry.generation != newEntry.generation) {
+    replace = true;
+  } else if (newEntry.bound == BoundType::EXACT && oldEntry.bound != BoundType::EXACT) {
+    replace = true;
+  } else if (newEntry.bound == BoundType::EXACT && oldEntry.bound == BoundType::EXACT && newEntry.depth >= oldEntry.depth) {
+    replace = true;
+  } else if (newEntry.bound != BoundType::EXACT && oldEntry.bound != BoundType::EXACT && newEntry.depth >= oldEntry.depth) {
+    replace = true;
+  }
+  return replace;
+}
+
+void TranspositionTable::store(uint64_t key, Move bestMove, int8_t depth, Evaluation value, BoundType bound) {
   assert(depth >= std::numeric_limits<int8_t>::min() && depth <= std::numeric_limits<int8_t>::max());
   size_t idx = key % table_.size();
   spinLocks_[key % kNumSpinLocks].lock();
   TTEntry& entry = table_[idx];
-  bool replace = false;
-  if (entry.generation != generation_) {
-    replace = true;
-  } else if (bound == BoundType::EXACT && entry.bound != BoundType::EXACT) {
-    replace = true;
-  } else if (bound == BoundType::EXACT && entry.bound == BoundType::EXACT && depth >= entry.depth) {
-    replace = true;
-  } else if (bound != BoundType::EXACT && entry.bound != BoundType::EXACT && depth >= entry.depth) {
-    replace = true;
-  }
+  TTEntry newEntry = {key, bestMove, depth, value, bound, generation_};
+  bool replace = shouldReplace(entry, newEntry);
   if (key == entry.key && ((bound == BoundType::EXACT) == (entry.bound == BoundType::EXACT)) && depth < entry.depth) {
     replace = false;
   }
   if (replace) {
-    entry.key = key;
-    entry.bestMove = bestMove;
-    entry.depth = depth;
-    entry.value = value;
-    entry.bound = bound;
-    entry.generation = generation_;
+    entry = newEntry;
   }
   spinLocks_[key % kNumSpinLocks].unlock();
 }
