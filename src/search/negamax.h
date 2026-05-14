@@ -49,49 +49,6 @@
 #define EVAL_AGNOSTIC 0
 #endif
 
-// 0.6 vs 0.4:  +3439-3461=6572  -0.001±0.003  p=0.779  (6736/10000 total)
-#ifndef LMR_PV_A
-#define LMR_PV_A 0.4
-#endif
-
-#ifndef LMR_PV_B
-#define LMR_PV_B 0.3
-#endif
-
-// Expected point advantage to Elo conversion.
-// 0.01 ->  6.95 Elo
-// 0.02 -> 13.90 Elo
-// 0.03 -> 20.87 Elo
-// 0.04 -> 27.85 Elo
-// 0.05 -> 34.86 Elo
-
-// 0.7 vs 0.5: 0.022±0.008
-// 0.8 vs 0.6: 0.024±0.009
-// 0.8 vs 1.0: 0.007±0.006
-#ifndef LMR_NULL_A
-#define LMR_NULL_A 0.9
-#endif
-
-#ifndef LMR_NULL_B
-#define LMR_NULL_B 0.4
-#endif
-
-#ifndef SINGULAR_MARGIN
-#define SINGULAR_MARGIN 50
-#endif
-
-#ifndef RAZORING_MARGIN
-#define RAZORING_MARGIN 20
-#endif
-
-#ifndef FUTILITY_MARGIN
-#define FUTILITY_MARGIN 20
-#endif
-
-#ifndef NULL_MOVE_PRUNING_DEPTH_REDUCTION
-#define NULL_MOVE_PRUNING_DEPTH_REDUCTION 5
-#endif
-
 namespace ChessEngine {
 
 /**
@@ -200,13 +157,27 @@ struct SearchManager {
   }
 };
 
+struct SearchHyperParams {
+  FixedPoint<int32_t, 8> lmr_pv_a = 0.4;
+  FixedPoint<int32_t, 8> lmr_pv_b = 0.3;
+  FixedPoint<int32_t, 8> lmr_null_a = 0.9;
+  FixedPoint<int32_t, 8> lmr_null_b = 0.4;
+  int singular_margin = 50;
+  int razoring_margin = 20;
+  int futility_margin = 20;
+  int null_move_pruning_depth_reduction = 5;
+};
 
 /**
  * State for a single search which is shared across the 1+ threads performing that search.
  */
 struct SharedSearchThreadState {
   SharedSearchThreadState(const GoCommand& command, unsigned multiPV, unsigned numThreads, bool isTimeSensitive, std::chrono::high_resolution_clock::time_point stopTime, TranspositionTable* tt)
-  : tt(tt), searchManager(std::make_unique<SearchManager>()), stopTime(stopTime), permittedMoves(command.moves), multiPV(multiPV), numThreads(numThreads), isTimeSensitive(isTimeSensitive), nodeLimit(command.nodeLimit), depthLimit(command.depthLimit), timeLimitMs(command.timeLimitMs), isPondering(command.isPondering) {}
+  : tt(tt), searchManager(std::make_unique<SearchManager>()), stopTime(stopTime), permittedMoves(command.moves), multiPV(multiPV), numThreads(numThreads), isTimeSensitive(isTimeSensitive), nodeLimit(command.nodeLimit), depthLimit(command.depthLimit), timeLimitMs(command.timeLimitMs), isPondering(command.isPondering) {
+
+  }
+
+  SearchHyperParams search_hyper_params;
 
   // This pointer should be considered non-owning. The TranspositionTable should created and
   // managed elsewhere since it should be shared across threads and searches.
@@ -788,6 +759,8 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
   // up-to-date so our children/grandchildren can benefit from it.
   frame->staticEval = evaluate<TURN>(thread->position_.evaluator_, thread->position_, threats, plyFromRoot, alpha, beta).value;
 
+  const auto& searchHyperParams = thread->shared_->search_hyper_params;
+
   // Razoring.
   //  # PLAYER     :  RATING  ERROR  POINTS  PLAYED   (%)
   //  1 uci-50     :     2.7    1.8  7267.5   14400    50
@@ -796,7 +769,7 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
   //  4 uci-200    :    -1.7    2.9  2388.0    4800    50
   //  5 old        :    -2.6    1.9  5803.0   11729    49
   #if EVAL_AGNOSTIC == 0
-  if (SEARCH_TYPE != SearchType::ROOT && depth == 1 && frame->staticEval < alpha.value - RAZORING_MARGIN) {
+  if (SEARCH_TYPE != SearchType::ROOT && depth == 1 && frame->staticEval < alpha.value - searchHyperParams.razoring_margin) {
     const auto r = qsearch<TURN>(thread, alpha, beta, plyFromRoot, 0, frame, stopThinking);
     if (IS_PRINT_NODE) {
       std::cout << repeat("  ", plyFromRoot) << "Razoring: static eval is much worse than alpha. Returning from quiescence search: " << r << std::endl;
@@ -815,7 +788,7 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
   // 20/20: +200-241=393  -0.025±0.012  p=0.038  (417/10000 total)
 
   // Reverse futility pruning (+29.6 ± 2.7)
-  if (SEARCH_TYPE != SearchType::ROOT && depth == 1 && frame->staticEval > beta.value + FUTILITY_MARGIN && !frame->inCheck) {
+  if (SEARCH_TYPE != SearchType::ROOT && depth == 1 && frame->staticEval > beta.value + searchHyperParams.futility_margin && !frame->inCheck) {
     const auto r = NegamaxResult<TURN>(kNullMove, beta);
     if (IS_PRINT_NODE) {
       std::cout << repeat("  ", plyFromRoot) << "Reverse futility pruning: static eval is much better than beta. Returning beta." << std::endl;
@@ -833,8 +806,7 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
   //  4 main-fast    :   -62.3    5.4  1852.0    4800    39
   const int myPieceCount = std::popcount(thread->position_.colorBitboards_[TURN] & ~thread->position_.pieceBitboards_[coloredPiece<TURN, Piece::PAWN>()]);
   if (SEARCH_TYPE == SearchType::NULL_WINDOW_SEARCH && !frame->inCheck && myPieceCount > 1 && depth > 0) {
-    constexpr int reduction = NULL_MOVE_PRUNING_DEPTH_REDUCTION;
-    const int reducedDepth = std::max(0, depth - reduction);
+    const int reducedDepth = std::max(0, depth - searchHyperParams.null_move_pruning_depth_reduction);
     make_nullmove<TURN>(&thread->position_);
     (frame + 1)->inCheck = false;
     ColoredEvaluation<TURN> r = to_parent_eval(negamax<opposite_color<TURN>(), SearchType::NULL_WINDOW_SEARCH, IS_MULTITHREADED>(
@@ -980,14 +952,14 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
         auto r = negamax<TURN, SearchType::NULL_WINDOW_SEARCH, IS_MULTITHREADED>(
           thread,
           (depth - 1) / 2,  // Stolen from Stockfish.
-          ColoredEvaluation<TURN>(entry.value - SINGULAR_MARGIN - 1),
-          ColoredEvaluation<TURN>(entry.value - SINGULAR_MARGIN),
+          ColoredEvaluation<TURN>(entry.value - searchHyperParams.singular_margin - 1),
+          ColoredEvaluation<TURN>(entry.value - searchHyperParams.singular_margin),
           plyFromRoot,
           frame,
           stopThinking
         );
         frame->excludedMove = kNullMove;
-        isSingular = r.evaluation.value < entry.value - SINGULAR_MARGIN;
+        isSingular = r.evaluation.value < entry.value - searchHyperParams.singular_margin;
       }
 
       make_move<TURN>(&thread->position_, move->move);
@@ -1043,8 +1015,8 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
       const int childDepth = depth - 1 + (isSingular ? 1 : 0);
       if (move->move != moves[0].move && (SEARCH_TYPE != SearchType::ROOT || thread->shared_->multiPV == 1) && alpha.value > kLongestForcedMate && alpha.value < -kLongestForcedMate) {
         #ifndef NO_LMR
-          static const auto a = FixedPoint<int32_t, 8>(SEARCH_TYPE == NULL_WINDOW_SEARCH ? LMR_NULL_A : LMR_PV_A);
-          static const auto b = FixedPoint<int32_t, 8>(SEARCH_TYPE == NULL_WINDOW_SEARCH ? LMR_NULL_B : LMR_PV_B);
+          const auto a = SEARCH_TYPE == NULL_WINDOW_SEARCH ? searchHyperParams.lmr_null_a : searchHyperParams.lmr_pv_a;
+          const auto b = SEARCH_TYPE == NULL_WINDOW_SEARCH ? searchHyperParams.lmr_null_b : searchHyperParams.lmr_pv_b;
           int lateMoveReduction = (a * kLnLookup[childDepth] * kLnLookup[moveIndex] + b).floorToInt();
           lateMoveReduction -= isGoodCapture ? 1 : 0;
           lateMoveReduction -= isSafePassedPawnPush ? 1 : 0;
