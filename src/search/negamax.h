@@ -80,6 +80,10 @@
 #define LMR_NULL_B 0.4
 #endif
 
+#ifndef SINGULAR_MARGIN
+#define SINGULAR_MARGIN 50
+#endif
+
 namespace ChessEngine {
 
 /**
@@ -966,7 +970,7 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
       // actually the best.
       bool isSingular = false;
       // TODO: tune kSingularMargin.            
-      static constexpr int kSingularMargin = SEARCH_TYPE == SearchType::NULL_WINDOW_SEARCH ? 50 : 50;
+      static constexpr int kSingularMargin = SINGULAR_MARGIN
       if (depth > 4 && move->move == entry.bestMove && entry.depth >= depth - 3 && entry.bound != BoundType::UPPER && frame->excludedMove == kNullMove && !alpha.is_mating()) {
         frame->excludedMove = move->move;
         auto r = negamax<TURN, SearchType::NULL_WINDOW_SEARCH, IS_MULTITHREADED>(
