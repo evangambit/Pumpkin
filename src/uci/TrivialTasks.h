@@ -559,6 +559,63 @@ class IncrementWeightTask : public Task {
   std::deque<std::string> command;
 };
 
+class IncrementSearchHyperParamTask : public Task {
+ public:
+  IncrementSearchHyperParamTask(std::deque<std::string> command) : command(command) {}
+  void start(UciEngineState *state) {
+    command.pop_front();
+    if (command.size() != 3) {
+      std::cout << "Error: increment_search command requires exactly 3 arguments: <param_name> [+*] <delta>" << std::endl;
+      exit(1);
+    }
+    std::string paramName = command.at(0);
+    char op = command.at(1)[0];
+    if (op != '+' && op != '*') {
+      std::cout << "Error: increment_search command requires op to be '+' or '*'" << std::endl;
+      exit(1);
+    }
+    int delta = std::stoi(command.at(2));
+    auto& p = state->searchHyperParams;
+
+    if (paramName == "lmr_pv_a") {
+      apply_fixed_point(p.lmr_pv_a, op, delta);
+    } else if (paramName == "lmr_pv_b") {
+      apply_fixed_point(p.lmr_pv_b, op, delta);
+    } else if (paramName == "lmr_null_a") {
+      apply_fixed_point(p.lmr_null_a, op, delta);
+    } else if (paramName == "lmr_null_b") {
+      apply_fixed_point(p.lmr_null_b, op, delta);
+    } else if (paramName == "singular_margin") {
+      apply_int(p.singular_margin, op, delta);
+    } else if (paramName == "razoring_margin") {
+      apply_int(p.razoring_margin, op, delta);
+    } else if (paramName == "futility_margin") {
+      apply_int(p.futility_margin, op, delta);
+    } else if (paramName == "null_move_pruning_depth_reduction") {
+      apply_int(p.null_move_pruning_depth_reduction, op, delta);
+    } else {
+      std::cout << "Error: unknown search hyper param '" << paramName << "'" << std::endl;
+      exit(1);
+    }
+  }
+ private:
+  static void apply_int(int& value, char op, int delta) {
+    if (op == '+') {
+      value += delta;
+    } else {
+      value = (value * delta) / 100;
+    }
+  }
+  static void apply_fixed_point(FixedPoint<int32_t, 8>& value, char op, int delta) {
+    if (op == '+') {
+      value = FixedPoint<int32_t, 8>(value.value + delta);
+    } else {
+      value = FixedPoint<int32_t, 8>((value.value * delta) / 100);
+    }
+  }
+  std::deque<std::string> command;
+};
+
 class DumpWeightsTask : public Task {
  public:
   DumpWeightsTask(std::deque<std::string> command) : command(command) {}

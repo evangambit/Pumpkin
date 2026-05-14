@@ -95,6 +95,7 @@ struct UciEngineState {
   unsigned numThreads;
   unsigned multiPV;
   Position position;
+  SearchHyperParams searchHyperParams;
   std::string name;
 };
 

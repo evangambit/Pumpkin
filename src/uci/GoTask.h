@@ -143,6 +143,7 @@ class GoTask : public Task {
       exit(1);
     }
     state->sharedSearchThreadState = std::make_shared<SharedSearchThreadState>(goCommand, state->multiPV, state->numThreads, isTimeSensitive, stopTime, state->tt_.get());
+    state->sharedSearchThreadState->search_hyper_params = state->searchHyperParams;
     this->baseThreadState = std::make_shared<SearchThread>(
       /* thread id=*/ 0,
       state->position,
