@@ -89,7 +89,7 @@
 #endif
 
 #ifndef NULL_MOVE_PRUNING_DEPTH_REDUCTION
-#define NULL_MOVE_PRUNING_DEPTH_REDUCTION 4
+#define NULL_MOVE_PRUNING_DEPTH_REDUCTION 5
 #endif
 
 namespace ChessEngine {
