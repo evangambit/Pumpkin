@@ -193,12 +193,22 @@ def main():
     c_vec = np.full(p, args.c, dtype=float)
 
     # --- Widening / narrowing factors ---
-    draw_rate = args.draw_rate
+    target_draw_rate = args.draw_rate
     # widen_factor^n = 2  =>  widen_factor = 2^(1/n)
     widen_factor = 2.0 ** (1.0 / args.draws_to_double)
-    omega = widen_factor - 1.0
-    rho = (draw_rate * omega) / (1.0 - draw_rate)
-    narrow_factor = 1.0 - rho
+    # EMA draw rate for adaptive narrowing (~20 iteration half-life)
+    ema_decay = 0.97
+    ema_draw_rate = target_draw_rate  # initialize to target
+
+    def compute_narrow_factor(ema_dr):
+        """Recompute narrow_factor from current EMA draw rate."""
+        # Clamp to avoid division by zero or negative factor
+        ema_dr = max(0.01, min(0.99, ema_dr))
+        omega = widen_factor - 1.0
+        rho = (ema_dr * omega) / (1.0 - ema_dr)
+        return max(0.9, 1.0 - rho)  # floor at 0.9 to avoid over-shrinking
+
+    narrow_factor = compute_narrow_factor(ema_draw_rate)
 
     # Time control
     tc = parse_time_control(args.tc)
@@ -226,7 +236,9 @@ def main():
         c_vec = np.array(state["c_vec"])
         start_iter = state["iteration"] + 1
         history = state.get("history", [])
-        print(f"Resuming from iteration {start_iter}, theta={np.round(theta, 2)}")
+        ema_draw_rate = state.get("stats", {}).get("ema_draw_rate", target_draw_rate)
+        narrow_factor = compute_narrow_factor(ema_draw_rate)
+        print(f"Resuming from iteration {start_iter}, theta={np.round(theta, 2)}, ema_draw_rate={ema_draw_rate:.2f}")
 
     # --- Print configuration ---
     print(f"\n{'='*60}")
@@ -241,10 +253,11 @@ def main():
     print(f"TC:           {args.tc}")
     print(f"Opening:      {args.opening}")
     print(f"a={args.a}  c={args.c}  A={A}  alpha={args.alpha}")
-    print(f"Draw target:  {draw_rate*100:.0f}%")
+    print(f"Draw target:  {target_draw_rate*100:.0f}%")
     print(f"Draws to 2x:  {args.draws_to_double}")
+    print(f"EMA decay:    {ema_decay}")
     print(f"Widen:        x{widen_factor:.6f}  (on draw)")
-    print(f"Narrow:       x{narrow_factor:.6f}  (on decisive)")
+    print(f"Narrow:       x{narrow_factor:.6f}  (on decisive, adaptive)")
     if bounds:
         print(f"Bounds:       {bounds}")
     print(f"Concurrency:  {args.concurrency}")
@@ -304,6 +317,11 @@ def main():
                     # pair_score > 0 means theta_plus won -> gradient is positive
                     gradient_sum += pair_score / (c_vec * delta)
 
+            # Update EMA draw rate and recompute narrow_factor
+            batch_draw_rate = batch_draws / concurrency
+            ema_draw_rate = ema_decay * ema_draw_rate + (1 - ema_decay) * batch_draw_rate
+            narrow_factor = compute_narrow_factor(ema_draw_rate)
+
             # Update c_vec: widen for draws, narrow for decisive
             new_c = c_vec * (widen_factor ** batch_draws) * (narrow_factor ** batch_decisive)
 
@@ -323,8 +341,6 @@ def main():
             # Track
             total_draws += batch_draws
             total_decisive += batch_decisive
-            total = total_draws + total_decisive
-            observed_draw_rate = total_draws / total if total > 0 else 0
 
             # Log each pair in the batch
             for delta, pair_score in results:
@@ -346,7 +362,8 @@ def main():
                 f"theta=[{', '.join(f'{v:+.1f}' for v in theta)}]  "
                 f"c=[{', '.join(f'{v:.2f}' for v in c_vec)}]  "
                 f"a_k={a_k:.4f}  "
-                f"draw_rate={observed_draw_rate*100:.1f}%"
+                f"ema_dr={ema_draw_rate*100:.1f}%  "
+                f"nf={narrow_factor:.4f}"
             )
 
             # Save checkpoint every iteration
@@ -361,7 +378,7 @@ def main():
                     "c": args.c,
                     "A": A,
                     "alpha": args.alpha,
-                    "draw_rate": draw_rate,
+                    "draw_rate": target_draw_rate,
                     "draws_to_double": args.draws_to_double,
                     "tc": args.tc,
                     "opening": args.opening,
@@ -369,7 +386,7 @@ def main():
                 "stats": {
                     "draws": total_draws,
                     "decisive": total_decisive,
-                    "observed_draw_rate": observed_draw_rate,
+                    "ema_draw_rate": ema_draw_rate,
                 },
                 "history": history,
             }
