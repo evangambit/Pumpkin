@@ -367,7 +367,7 @@ def main():
                 })
 
             # Print progress
-            scores_str = ", ".join(f"{ps:+.2f}" for _, ps in results)
+            scores_str = ", ".join(f"{ps:+.2f}" for _, ps, _ in results)
             print(
                 f"  [{k+1}/{args.iterations}]  "
                 f"scores=[{scores_str}]  "
