@@ -966,7 +966,7 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
       // actually the best.
       bool isSingular = false;
       // TODO: tune kSingularMargin.            
-      static constexpr int kSingularMargin = SEARCH_TYPE == SearchType::NULL_WINDOW_SEARCH ? 80 : 80;
+      static constexpr int kSingularMargin = SEARCH_TYPE == SearchType::NULL_WINDOW_SEARCH ? 50 : 50;
       if (depth > 4 && move->move == entry.bestMove && entry.depth >= depth - 3 && entry.bound != BoundType::UPPER && frame->excludedMove == kNullMove && !alpha.is_mating()) {
         frame->excludedMove = move->move;
         auto r = negamax<TURN, SearchType::NULL_WINDOW_SEARCH, IS_MULTITHREADED>(
