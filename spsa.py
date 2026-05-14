@@ -65,6 +65,15 @@ def build_engine_cmd(base_engine, feature_templates, theta):
     return cmd
 
 
+def integer_step_vector(c_vec):
+    """Map floating perturbation sizes onto integer feature steps.
+
+    The tuned features are rendered as integers in the engine command, so the
+    effective perturbation must stay on the integer lattice as well.
+    """
+    return np.maximum(1, np.rint(c_vec).astype(int))
+
+
 # ---------------------------------------------------------------------------
 # Single SPSA perturbation (play one game pair, return raw results)
 # ---------------------------------------------------------------------------
@@ -87,8 +96,11 @@ def play_perturbation(
     # Bernoulli +/-1 perturbation
     delta = np.random.choice([-1, 1], size=p)
 
-    theta_plus = theta + c_vec * delta
-    theta_minus = theta - c_vec * delta
+    theta_center = np.rint(theta).astype(int)
+    step_vec = integer_step_vector(c_vec)
+
+    theta_plus = theta_center + step_vec * delta
+    theta_minus = theta_center - step_vec * delta
 
     engine_plus = build_engine_cmd(base_engine, feature_templates, theta_plus)
     engine_minus = build_engine_cmd(base_engine, feature_templates, theta_minus)
@@ -102,7 +114,7 @@ def play_perturbation(
         timeout=timeout,
     )
 
-    return delta, pair_score
+    return delta, pair_score, step_vec
 
 
 # ---------------------------------------------------------------------------
@@ -190,7 +202,7 @@ def main():
     A = args.A if args.A is not None else int(0.1 * args.iterations)
 
     # Perturbation vector (one c per feature, all start the same)
-    c_vec = np.full(p, args.c, dtype=float)
+    c_vec = np.full(p, max(1.0, args.c), dtype=float)
 
     # --- Widening / narrowing factors ---
     target_draw_rate = args.draw_rate
@@ -308,14 +320,14 @@ def main():
             batch_decisive = 0
             gradient_sum = np.zeros(p, dtype=float)
 
-            for delta, pair_score in results:
+            for delta, pair_score, step_vec in results:
                 is_draw = (pair_score == 0.0)
                 if is_draw:
                     batch_draws += 1
                 else:
                     batch_decisive += 1
                     # pair_score > 0 means theta_plus won -> gradient is positive
-                    gradient_sum += pair_score / (c_vec * delta)
+                    gradient_sum += pair_score / (step_vec * delta)
 
             # Update EMA draw rate and recompute narrow_factor
             batch_draw_rate = batch_draws / concurrency
@@ -324,6 +336,7 @@ def main():
 
             # Update c_vec: widen for draws, narrow for decisive
             new_c = c_vec * (widen_factor ** batch_draws) * (narrow_factor ** batch_decisive)
+            new_c = np.maximum(1.0, new_c)
 
             # Update theta: average gradient across decisive results
             new_theta = theta.copy()
@@ -343,7 +356,7 @@ def main():
             total_decisive += batch_decisive
 
             # Log each pair in the batch
-            for delta, pair_score in results:
+            for delta, pair_score, _ in results:
                 history.append({
                     "iteration": k,
                     "theta": theta.tolist(),
