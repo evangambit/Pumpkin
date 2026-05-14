@@ -89,7 +89,8 @@ def play_perturbation(
 ):
     """Play one game pair between theta+c*delta and theta-c*delta.
 
-    Returns (delta, pair_score) where delta is the perturbation direction vector.
+    Returns (delta, pair_score, step_vec) where delta is the perturbation
+    direction vector and step_vec is the effective integer perturbation size.
     """
     p = len(theta)
 
@@ -368,12 +369,14 @@ def main():
 
             # Print progress
             scores_str = ", ".join(f"{ps:+.2f}" for _, ps, _ in results)
+            step_str = ", ".join(str(v) for v in integer_step_vector(c_vec))
             print(
                 f"  [{k+1}/{args.iterations}]  "
                 f"scores=[{scores_str}]  "
                 f"draws={batch_draws}/{concurrency}  "
                 f"theta=[{', '.join(f'{v:+.1f}' for v in theta)}]  "
                 f"c=[{', '.join(f'{v:.2f}' for v in c_vec)}]  "
+                f"step=[{step_str}]  "
                 f"a_k={a_k:.4f}  "
                 f"ema_dr={ema_draw_rate*100:.1f}%  "
                 f"nf={narrow_factor:.4f}"
@@ -426,7 +429,7 @@ def main():
         print(f"  {rendered}")
     print(f"\nFinal perturbation sizes:")
     for i, c in enumerate(c_vec):
-        print(f"  [{i}]: c={c:.4f}")
+        print(f"  [{i}]: c={c:.4f}  step={integer_step_vector(c_vec)[i]}")
     print(f"\nResults saved to: {args.out}")
 
 
