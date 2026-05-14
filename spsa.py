@@ -26,10 +26,12 @@ Example:
 import argparse
 import json
 import math
+import threading
 import os
 import random
 import sys
 import numpy as np
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 
 from match import (
@@ -64,24 +66,21 @@ def build_engine_cmd(base_engine, feature_templates, theta):
 
 
 # ---------------------------------------------------------------------------
-# Single SPSA iteration (one game pair with widening)
+# Single SPSA perturbation (play one game pair, return raw results)
 # ---------------------------------------------------------------------------
 
-def run_iteration(
+def play_perturbation(
     base_engine,
     feature_templates,
     theta,
     c_vec,
-    a_k,
-    widen_factor,
-    narrow_factor,
     tc,
     fen,
     timeout,
 ):
     """Play one game pair between theta+c*delta and theta-c*delta.
 
-    Returns (new_theta, new_c_vec, pair_score, is_draw).
+    Returns (delta, pair_score) where delta is the perturbation direction vector.
     """
     p = len(theta)
 
@@ -103,26 +102,7 @@ def run_iteration(
         timeout=timeout,
     )
 
-    # Classify the pair result
-    is_draw = (pair_score == 0.0)
-
-    new_c = c_vec.copy()
-    new_theta = theta.copy()
-
-    if is_draw:
-        # Flat zone -- widen perturbation to escape
-        new_c = c_vec * widen_factor
-    else:
-        # Found a gradient -- narrow perturbation for precision
-        new_c = c_vec * narrow_factor
-
-        # pair_score > 0 means theta_plus won -> gradient is positive
-        gradient = pair_score / (c_vec * delta)
-
-        # SPSA update (maximise win rate)
-        new_theta = theta + a_k * gradient
-
-    return new_theta, new_c, pair_score, is_draw
+    return delta, pair_score
 
 
 # ---------------------------------------------------------------------------
@@ -170,7 +150,7 @@ def main():
     parser.add_argument("--timeout", type=int, default=30,
                         help="Per-move timeout in seconds (default: 30)")
     parser.add_argument("--concurrency", type=int, default=1,
-                        help="(reserved for future use, currently 1 pair at a time)")
+                        help="Number of game pairs to play in parallel per iteration (default: 1)")
 
     # Output
     parser.add_argument("--out", default="spsa_results.json",
@@ -267,6 +247,7 @@ def main():
     print(f"Narrow:       x{narrow_factor:.6f}  (on decisive)")
     if bounds:
         print(f"Bounds:       {bounds}")
+    print(f"Concurrency:  {args.concurrency}")
     print()
 
     # --- Tracking stats ---
@@ -274,32 +255,62 @@ def main():
     total_decisive = len(history) - total_draws
 
     # --- SPSA loop ---
+    concurrency = args.concurrency
+
+    def pick_fen(k):
+        if epd_fens:
+            return epd_fens[k % len(epd_fens)]
+        elif args.opening == "random":
+            board = chess.Board()
+            for _ in range(random.randint(4, 8)):
+                moves = list(board.legal_moves)
+                if not moves:
+                    break
+                board.push(random.choice(moves))
+            return board.fen()
+        else:
+            return chess.STARTING_FEN
+
     try:
         for k in range(start_iter, args.iterations):
             # Decaying step size
             a_k = args.a / ((k + 1 + A) ** args.alpha)
 
-            # Pick an opening
-            if epd_fens:
-                fen = epd_fens[k % len(epd_fens)]
-            elif args.opening == "random":
-                board = chess.Board()
-                for _ in range(random.randint(4, 8)):
-                    moves = list(board.legal_moves)
-                    if not moves:
-                        break
-                    board.push(random.choice(moves))
-                fen = board.fen()
-            else:
-                fen = chess.STARTING_FEN
+            # Dispatch `concurrency` perturbation game pairs in parallel
+            with ThreadPoolExecutor(max_workers=concurrency) as pool:
+                futures = []
+                for c_idx in range(concurrency):
+                    fen = pick_fen(k * concurrency + c_idx)
+                    futures.append(pool.submit(
+                        play_perturbation,
+                        args.engine, feature_templates,
+                        theta, c_vec,
+                        tc, fen, args.timeout,
+                    ))
 
-            # Run one SPSA iteration
-            new_theta, new_c, pair_score, is_draw = run_iteration(
-                args.engine, feature_templates,
-                theta, c_vec, a_k,
-                widen_factor, narrow_factor,
-                tc, fen, args.timeout,
-            )
+                results = [f.result() for f in futures]
+
+            # Aggregate results from the batch
+            batch_draws = 0
+            batch_decisive = 0
+            gradient_sum = np.zeros(p, dtype=float)
+
+            for delta, pair_score in results:
+                is_draw = (pair_score == 0.0)
+                if is_draw:
+                    batch_draws += 1
+                else:
+                    batch_decisive += 1
+                    # pair_score > 0 means theta_plus won -> gradient is positive
+                    gradient_sum += pair_score / (c_vec * delta)
+
+            # Update c_vec: widen for draws, narrow for decisive
+            new_c = c_vec * (widen_factor ** batch_draws) * (narrow_factor ** batch_decisive)
+
+            # Update theta: average gradient across decisive results
+            new_theta = theta.copy()
+            if batch_decisive > 0:
+                new_theta = theta + a_k * (gradient_sum / batch_decisive)
 
             # Apply bounds
             if bounds:
@@ -310,26 +321,28 @@ def main():
             c_vec = new_c
 
             # Track
-            if is_draw:
-                total_draws += 1
-            else:
-                total_decisive += 1
+            total_draws += batch_draws
+            total_decisive += batch_decisive
             total = total_draws + total_decisive
             observed_draw_rate = total_draws / total if total > 0 else 0
 
-            history.append({
-                "iteration": k,
-                "theta": theta.tolist(),
-                "c_vec": c_vec.tolist(),
-                "pair_score": pair_score,
-                "draw": is_draw,
-                "a_k": a_k,
-            })
+            # Log each pair in the batch
+            for delta, pair_score in results:
+                history.append({
+                    "iteration": k,
+                    "theta": theta.tolist(),
+                    "c_vec": c_vec.tolist(),
+                    "pair_score": pair_score,
+                    "draw": (pair_score == 0.0),
+                    "a_k": a_k,
+                })
 
             # Print progress
-            draw_tag = "DRAW" if is_draw else f"DECISIVE ({pair_score:+.2f})"
+            scores_str = ", ".join(f"{ps:+.2f}" for _, ps in results)
             print(
-                f"  [{k+1}/{args.iterations}]  {draw_tag}  "
+                f"  [{k+1}/{args.iterations}]  "
+                f"scores=[{scores_str}]  "
+                f"draws={batch_draws}/{concurrency}  "
                 f"theta=[{', '.join(f'{v:+.1f}' for v in theta)}]  "
                 f"c=[{', '.join(f'{v:.2f}' for v in c_vec)}]  "
                 f"a_k={a_k:.4f}  "
