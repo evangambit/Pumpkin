@@ -164,7 +164,13 @@ struct SearchHyperParams {
   FixedPoint<int32_t, 8> lmr_null_b = 0.4;
   int singular_margin = 50;
   int razoring_margin = 20;
-  int futility_margin = 20;
+
+  // 15 vs 25:  +779- 881=1244  -0.018±0.007  p=0.009  (1452/10000 total)
+  // 25 vs 35: +5317-5207=7144   0.003±0.003  p=0.265  (8834/10000 total)
+  // 35 vs 45: +1533-1477=2138   0.005±0.005  p=0.293  (2574/10000 total)
+  // 45 vs 55:    +255-202=347   0.033±0.013  p=0.009  (402/10000 total)
+  int futility_margin = 35;
+
   int null_move_pruning_depth_reduction = 5;
 };
 
