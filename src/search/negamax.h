@@ -49,11 +49,7 @@
 #define EVAL_AGNOSTIC 0
 #endif
 
-// 0.2 vs 0.4: -0.039±0.015  (p=0.009; +131-174=249)
-// 0.5 vs 0.4: -0.003±0.006  (p=0.546; +1192-1221=1935)
-// 0.6 vs 0.4:  0.014±0.005  (p=0.009; +1155-1039=1870)
-// 0.7 vs 0.4: -0.007±0.004  (p=0.045; +2451-2587=4370)
-// 0.9 vs 0.4: -0.048±0.017  (p=0.005; +97-135=168)
+// 0.6 vs 0.4:  +3439-3461=6572  -0.001±0.003  p=0.779  (6736/10000 total)
 #ifndef LMR_PV_A
 #define LMR_PV_A 0.4
 #endif
@@ -970,7 +966,7 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
       // actually the best.
       bool isSingular = false;
       // TODO: tune kSingularMargin.            
-      static constexpr int kSingularMargin = SINGULAR_MARGIN
+      static constexpr int kSingularMargin = SINGULAR_MARGIN;
       if (depth > 4 && move->move == entry.bestMove && entry.depth >= depth - 3 && entry.bound != BoundType::UPPER && frame->excludedMove == kNullMove && !alpha.is_mating()) {
         frame->excludedMove = move->move;
         auto r = negamax<TURN, SearchType::NULL_WINDOW_SEARCH, IS_MULTITHREADED>(
