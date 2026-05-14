@@ -80,6 +80,18 @@
 #define SINGULAR_MARGIN 50
 #endif
 
+#ifndef RAZORING_MARGIN
+#define RAZORING_MARGIN 20
+#endif
+
+#ifndef FUTILITY_MARGIN
+#define FUTILITY_MARGIN 20
+#endif
+
+#ifndef NULL_MOVE_PRUNING_DEPTH_REDUCTION
+#define NULL_MOVE_PRUNING_DEPTH_REDUCTION 4
+#endif
+
 namespace ChessEngine {
 
 /**
@@ -784,8 +796,7 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
   //  4 uci-200    :    -1.7    2.9  2388.0    4800    50
   //  5 old        :    -2.6    1.9  5803.0   11729    49
   #if EVAL_AGNOSTIC == 0
-  static constexpr int kRazoringMargin = 20;
-  if (SEARCH_TYPE != SearchType::ROOT && depth == 1 && frame->staticEval < alpha.value - kRazoringMargin) {
+  if (SEARCH_TYPE != SearchType::ROOT && depth == 1 && frame->staticEval < alpha.value - RAZORING_MARGIN) {
     const auto r = qsearch<TURN>(thread, alpha, beta, plyFromRoot, 0, frame, stopThinking);
     if (IS_PRINT_NODE) {
       std::cout << repeat("  ", plyFromRoot) << "Razoring: static eval is much worse than alpha. Returning from quiescence search: " << r << std::endl;
@@ -804,8 +815,7 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
   // 20/20: +200-241=393  -0.025±0.012  p=0.038  (417/10000 total)
 
   // Reverse futility pruning (+29.6 ± 2.7)
-  static constexpr int kFutilityMargin = 20;
-  if (SEARCH_TYPE != SearchType::ROOT && depth == 1 && frame->staticEval > beta.value + kFutilityMargin && !frame->inCheck) {
+  if (SEARCH_TYPE != SearchType::ROOT && depth == 1 && frame->staticEval > beta.value + FUTILITY_MARGIN && !frame->inCheck) {
     const auto r = NegamaxResult<TURN>(kNullMove, beta);
     if (IS_PRINT_NODE) {
       std::cout << repeat("  ", plyFromRoot) << "Reverse futility pruning: static eval is much better than beta. Returning beta." << std::endl;
@@ -823,7 +833,7 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
   //  4 main-fast    :   -62.3    5.4  1852.0    4800    39
   const int myPieceCount = std::popcount(thread->position_.colorBitboards_[TURN] & ~thread->position_.pieceBitboards_[coloredPiece<TURN, Piece::PAWN>()]);
   if (SEARCH_TYPE == SearchType::NULL_WINDOW_SEARCH && !frame->inCheck && myPieceCount > 1 && depth > 0) {
-    constexpr int reduction = 4;
+    constexpr int reduction = NULL_MOVE_PRUNING_DEPTH_REDUCTION;
     const int reducedDepth = std::max(0, depth - reduction);
     make_nullmove<TURN>(&thread->position_);
     (frame + 1)->inCheck = false;
@@ -965,21 +975,19 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
       // did a thorough examination of all moves, so it is likely that the TT's "best move" isn't
       // actually the best.
       bool isSingular = false;
-      // TODO: tune kSingularMargin.            
-      static constexpr int kSingularMargin = SINGULAR_MARGIN;
       if (depth > 4 && move->move == entry.bestMove && entry.depth >= depth - 3 && entry.bound != BoundType::UPPER && frame->excludedMove == kNullMove && !alpha.is_mating()) {
         frame->excludedMove = move->move;
         auto r = negamax<TURN, SearchType::NULL_WINDOW_SEARCH, IS_MULTITHREADED>(
           thread,
           (depth - 1) / 2,  // Stolen from Stockfish.
-          ColoredEvaluation<TURN>(entry.value - kSingularMargin - 1),
-          ColoredEvaluation<TURN>(entry.value - kSingularMargin),
+          ColoredEvaluation<TURN>(entry.value - SINGULAR_MARGIN - 1),
+          ColoredEvaluation<TURN>(entry.value - SINGULAR_MARGIN),
           plyFromRoot,
           frame,
           stopThinking
         );
         frame->excludedMove = kNullMove;
-        isSingular = r.evaluation.value < entry.value - kSingularMargin;
+        isSingular = r.evaluation.value < entry.value - SINGULAR_MARGIN;
       }
 
       make_move<TURN>(&thread->position_, move->move);
