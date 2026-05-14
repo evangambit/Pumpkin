@@ -608,9 +608,9 @@ class IncrementSearchHyperParamTask : public Task {
   }
   static void apply_fixed_point(FixedPoint<int32_t, 8>& value, char op, int delta) {
     if (op == '+') {
-      value = FixedPoint<int32_t, 8>(value.value + delta);
+      value = value + FixedPoint<int32_t, 8>(delta);
     } else {
-      value = FixedPoint<int32_t, 8>((value.value * delta) / 100);
+      value = value * FixedPoint<int32_t, 8>(delta) / FixedPoint<int32_t, 8>(100);
     }
   }
   std::deque<std::string> command;

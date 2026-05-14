@@ -28,6 +28,9 @@ struct FixedPoint {
   FixedPoint operator*(const FixedPoint& that) const {
     return FixedPoint((this->value * that.value) >> SHIFT);
   }
+  FixedPoint operator/(const FixedPoint& that) const {
+    return FixedPoint((this->value << SHIFT) / that.value);
+  }
 };
 
 extern FixedPoint<int32_t, 8> kLnLookup[256];
