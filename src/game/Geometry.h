@@ -439,28 +439,31 @@ Bitboard northFill(Bitboard b);
 
 Bitboard southFill(Bitboard b);
 
-Bitboard eastFill(Bitboard b);
-
-Bitboard westFill(Bitboard b);
-
 inline Bitboard southFill(Bitboard gen, Bitboard notobstacles) {
+  if constexpr (Direction::SOUTH > 0) {
     gen |= (gen << 8)  & notobstacles;
     gen |= (gen << 16) & (notobstacles & (notobstacles << 8));
     gen |= (gen << 32) & (notobstacles & (notobstacles << 8) & (notobstacles << 16) & (notobstacles << 24));
-    return gen;
+  } else {
+    gen |= (gen >> 8) & notobstacles;
+    gen |= (gen >> 16) & (notobstacles & (notobstacles >> 8));
+    gen |= (gen >> 32) & (notobstacles & (notobstacles >> 8) & (notobstacles >> 16) & (notobstacles >> 24));
+  }
+  return gen;
 }
 
 inline Bitboard northFill(Bitboard gen, Bitboard notobstacles) {
-  gen |= (gen >> 8) & notobstacles;
-  gen |= (gen >> 16) & (notobstacles & (notobstacles >> 8));
-  gen |= (gen >> 32) & (notobstacles & (notobstacles >> 8) & (notobstacles >> 16) & (notobstacles >> 24));
+  if constexpr (Direction::NORTH > 0) {
+    gen |= (gen << 8)  & notobstacles;
+    gen |= (gen << 16) & (notobstacles & (notobstacles << 8));
+    gen |= (gen << 32) & (notobstacles & (notobstacles << 8) & (notobstacles << 16) & (notobstacles << 24));
+  } else {
+    gen |= (gen >> 8) & notobstacles;
+    gen |= (gen >> 16) & (notobstacles & (notobstacles >> 8));
+    gen |= (gen >> 32) & (notobstacles & (notobstacles >> 8) & (notobstacles >> 16) & (notobstacles >> 24));
+  }
   return gen;
 };
-
-inline uint8_t eastmost_file_to_byte(Bitboard board) {
-  constexpr Bitboard magic = bb(SafeSquare(49)) | bb(SafeSquare(42)) | bb(SafeSquare(35)) | bb(SafeSquare(28)) | bb(SafeSquare(21)) | bb(SafeSquare(14)) | bb(SafeSquare(7)) | bb(SafeSquare(0));
-  return (board * magic) >> 56;
-}
 
 extern const int8_t kDistToEdge[64];
 extern const int8_t kDistToCorner[64];
