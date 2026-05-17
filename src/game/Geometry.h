@@ -184,8 +184,17 @@ const TypeSafeArray<Bitboard, 8, Rank> kRanks = {
   0x0000000000000000ULL,  // Maps NO_SQUARE / 8 maps to 0.
 };
 
-inline Bitboard square2rank(UnsafeSquare sq) {
+inline Bitboard square2rankmask(UnsafeSquare sq) {
+  assert_valid_square(sq);
   return kRanks[Rank(sq / 8)];
+}
+
+inline Rank square2rank(UnsafeSquare sq) {
+  return Rank(sq / 8);
+}
+
+inline Rank square2rank(SafeSquare sq) {
+  return Rank(sq / 8);
 }
 
 const Bitboard kCenter16 = (kFiles[FILE_C] | kFiles[FILE_D] | kFiles[FILE_E] | kFiles[FILE_F]) & (kRanks[RANK_3] | kRanks[RANK_4] | kRanks[RANK_5] | kRanks[RANK_6]);
@@ -236,7 +245,7 @@ constexpr Bitboard kMainBlackDiagonal = 0x10204081020408;
 // 7 for promotion rank, 0 for home rank.
 template<Color COLOR>
 inline int dist_from_home_rank(SafeSquare sq) {
-  const int rank = sq / 8;
+  const Rank rank = square2rank(sq);
   if constexpr (COLOR == Color::WHITE) {
     return 7 - rank;
   } else {

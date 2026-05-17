@@ -362,11 +362,7 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
   const int veryLateness = std::max(0, lateness - kMaxEarliness / 2);
 
   out[EF::KING_ON_BACK_RANK] = std::popcount(ourRanks[0] & ourKings) - std::popcount(theirRanks[0] & theirKings);
-  if (US == Color::WHITE) {
-    out[EF::KING_ACTIVE] = (ourKingSq / 8 < 5) - (theirKingSq / 8 > 2);
-  } else {
-    out[EF::KING_ACTIVE] = (ourKingSq / 8 > 2) - (theirKingSq / 8 < 5);
-  }
+  out[EF::KING_ACTIVE] = (dist_from_home_rank<US>(ourKingSq) > 2) - (dist_from_home_rank<THEM>(theirKingSq) > 2);
   out[EF::KING_ACTIVE] *= veryLateness;
 
   out[EF::THREATS_NEAR_KING_2] = std::popcount(kNearby[2][ourKingSq] & theirTargets & ~ourTargets) - std::popcount(kNearby[2][theirKingSq] & ourTargets & ~theirTargets);
@@ -450,7 +446,7 @@ void pos2features(const Position& pos, const Threats& threats, int8_t *out) {
   UnsafeSquare ourRookSq = lsb_or_none(ourRooks);
   UnsafeSquare theirRookSq = lsb_or_none(theirRooks);
   // Note: "kFiles[ourRookSq % 8]" will return kFiles[0] if ourRookSq == NO_SQUARE, but this is fine, since "& ourRooks" will always return zero.
-  out[EF::CONNECTED_ROOKS] = (std::popcount((kFiles[File(ourRookSq % 8)] | square2rank(ourRookSq)) & ourRooks) >= 2) - (std::popcount((kFiles[File(theirRookSq % 8)] | square2rank(theirRookSq)) & theirRooks) >= 2);
+  out[EF::CONNECTED_ROOKS] = (std::popcount((kFiles[File(ourRookSq % 8)] | square2rankmask(ourRookSq)) & ourRooks) >= 2) - (std::popcount((kFiles[File(theirRookSq % 8)] | square2rankmask(theirRookSq)) & theirRooks) >= 2);
 
   PinMasks ourPinnedMask = compute_pin_masks<US>(pos, ourKingSq);
   PinMasks theirPinnedMask = compute_pin_masks<THEM>(pos, theirKingSq);
