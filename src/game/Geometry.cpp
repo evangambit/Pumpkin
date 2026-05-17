@@ -7,9 +7,10 @@ namespace ChessEngine {
 
 std::string bstr(Bitboard b) {
   std::string r;
-  for (size_t y = 0; y < 8; ++y) {
-    for (size_t x = 0; x < 8; ++x) {
-      if (b & ((Location(1) << (y * 8 + x)))) {
+  static constexpr Rank kRenderRanks[] = { RANK_8, RANK_7, RANK_6, RANK_5, RANK_4, RANK_3, RANK_2, RANK_1 };
+  for (Rank rank : kRenderRanks) {
+    for (File file = FILE_A; file <= FILE_H; file = File(file + 1)) {
+      if (b & (bb(make_square(file, rank)))) {
         r += "x";
       } else {
         r += ".";
@@ -213,7 +214,7 @@ UnsafeSquare string_to_square(const std::string& string) {
   if (string[1] < '1' || string[1] > '8') {
     throw std::runtime_error("string_to_square error 3");
   }
-  UnsafeSquare sq = UnsafeSquare((7 - (string[1] - '1')) * 8 + (string[0] - 'a'));
+  UnsafeSquare sq = UnsafeSquare(make_square(char2file(string[0]), char2rank(string[1])));
   if (sq < 0 || sq >= kNumSquares) {
     throw std::runtime_error("Bad square");
   }
@@ -234,8 +235,9 @@ std::string square_to_string(UnsafeSquare sq) {
   }
   assert_valid_square(sq);
   std::string r = "..";
-  r[0] = 'a' + (sq % 8);
-  r[1] = '8' - (sq / 8);
+  std::pair<File, Rank> filerank = square2filerank(sq);
+  r[0] = file2char(filerank.first);
+  r[1] = rank2char(filerank.second);
   return r;
 }
 
@@ -245,30 +247,28 @@ std::string square_to_string(SafeSquare sq) {
 }
 
 Bitboard southFill(Bitboard b) {
-   b |= (b <<  8);
-   b |= (b << 16);
-   b |= (b << 32);
-   return b;
-}
-
-Bitboard northFill(Bitboard b) {
-   b |= (b >>  8);
-   b |= (b >> 16);
-   b |= (b >> 32);
-   return b;
-}
-
-Bitboard eastFill(Bitboard b) {
-  b |= (b & ~kFiles[FILE_H]) << 1;
-  b |= (b & ~(kFiles[FILE_H] | kFiles[FILE_G])) << 2;
-  b |= (b & ~(kFiles[FILE_H] | kFiles[FILE_G] | kFiles[FILE_F] | kFiles[FILE_E])) << 4;
+  if constexpr (Direction::SOUTH > 0) {
+    b |= (b <<  8);
+    b |= (b << 16);
+    b |= (b << 32);
+  } else {
+    b |= (b >>  8);
+    b |= (b >> 16);
+    b |= (b >> 32);
+  }
   return b;
 }
 
-Bitboard westFill(Bitboard b) {
-  b |= (b & ~kFiles[FILE_A]) >> 1;
-  b |= (b & ~(kFiles[FILE_A] | kFiles[FILE_B])) >> 2;
-  b |= (b & ~(kFiles[FILE_A] | kFiles[FILE_B] | kFiles[FILE_C] | kFiles[FILE_D])) >> 4;
+Bitboard northFill(Bitboard b) {
+  if constexpr (Direction::NORTH > 0) {
+    b |= (b <<  8);
+    b |= (b << 16);
+    b |= (b << 32);
+  } else {
+    b |= (b >>  8);
+    b |= (b >> 16);
+    b |= (b >> 32);
+  }
   return b;
 }
 

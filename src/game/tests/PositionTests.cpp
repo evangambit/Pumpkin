@@ -2,10 +2,17 @@
 
 #include <vector>
 
+#include "../MakeMove.h"
 #include "../Position.h"
 #include "../Utils.h"
 
 namespace ChessEngine {
+
+void print_zorbrist_debug(uint64_t actual, uint64_t expected) {
+  std::cerr << "Zorbrist hash mismatch!" << std::endl;
+  std::cerr << "Actual:   " << std::hex << actual << std::dec << std::endl;
+  std::cerr << "Expected: " << std::hex << expected << std::dec << std::endl;
+}
 
 struct FakeBoardListener : public EvaluatorInterface {
   std::vector<std::pair<ColoredPiece, SafeSquare>> placedPieces;
@@ -27,10 +34,10 @@ struct FakeBoardListener : public EvaluatorInterface {
     removedSquares.push_back(square);
   }
 
-  ColoredEvaluation<Color::WHITE> evaluate_white(const Position& pos) override {
+  ColoredEvaluation<Color::WHITE> evaluate_white(const Position& pos, const Threats& threats, int plyFromRoot, ColoredEvaluation<Color::WHITE> alpha, ColoredEvaluation<Color::WHITE> beta) override {
     return ColoredEvaluation<Color::WHITE>(0);
   }
-  ColoredEvaluation<Color::BLACK> evaluate_black(const Position& pos) override {
+  ColoredEvaluation<Color::BLACK> evaluate_black(const Position& pos, const Threats& threats, int plyFromRoot, ColoredEvaluation<Color::BLACK> alpha, ColoredEvaluation<Color::BLACK> beta) override {
     return ColoredEvaluation<Color::BLACK>(0);
   }
   std::shared_ptr<EvaluatorInterface> clone() const override {
@@ -120,6 +127,13 @@ TEST_F(PositionTest, FenRoundTrip) {
   EXPECT_EQ(pos.fen(), originalFen);
 }
 
+TEST_F(PositionTest, FourCornersToByteMatchesCastlingRightsEncoding) {
+  EXPECT_EQ(four_corners_to_byte(bb(SafeSquare::SA1)), kCastlingRights_WhiteQueen);
+  EXPECT_EQ(four_corners_to_byte(bb(SafeSquare::SH1)), kCastlingRights_WhiteKing);
+  EXPECT_EQ(four_corners_to_byte(bb(SafeSquare::SA8)), kCastlingRights_BlackQueen);
+  EXPECT_EQ(four_corners_to_byte(bb(SafeSquare::SH8)), kCastlingRights_BlackKing);
+}
+
 Move e2e4() {
   Move move;
   move.from = SafeSquare::SE2;  // e2 in 0-indexed from top
@@ -162,6 +176,38 @@ TEST_F(PositionTest, MakeMoveAndUndo) {
     EXPECT_TRUE(false);
     return;
   }
+}
+
+TEST_F(PositionTest, RookMoveClearsOnlyMatchingCastlingRightAndUndoRestores) {
+  Position pos("r3k2r/8/8/8/8/8/7R/R3K3 w Qkq - 0 1");
+  const CastlingRights originalRights = pos.currentState_.castlingRights;
+
+  make_move<Color::WHITE>(&pos, Move::create(SafeSquare::SH2, SafeSquare::SH3));
+
+  EXPECT_FALSE(pos.currentState_.castlingRights & kCastlingRights_WhiteKing);
+  EXPECT_TRUE(pos.currentState_.castlingRights & kCastlingRights_WhiteQueen);
+  EXPECT_TRUE(pos.currentState_.castlingRights & kCastlingRights_BlackKing);
+  EXPECT_TRUE(pos.currentState_.castlingRights & kCastlingRights_BlackQueen);
+
+  undo<Color::WHITE>(&pos);
+
+  EXPECT_EQ(pos.currentState_.castlingRights, originalRights);
+}
+
+TEST_F(PositionTest, KingMoveClearsBothCastlingRightsAndUndoRestores) {
+  Position pos("r3k2r/8/8/8/8/8/8/R3K2R b KQkq - 0 1");
+  const CastlingRights originalRights = pos.currentState_.castlingRights;
+
+  make_move<Color::BLACK>(&pos, Move::create(SafeSquare::SE8, SafeSquare::SE7));
+
+  EXPECT_TRUE(pos.currentState_.castlingRights & kCastlingRights_WhiteKing);
+  EXPECT_TRUE(pos.currentState_.castlingRights & kCastlingRights_WhiteQueen);
+  EXPECT_FALSE(pos.currentState_.castlingRights & kCastlingRights_BlackKing);
+  EXPECT_FALSE(pos.currentState_.castlingRights & kCastlingRights_BlackQueen);
+
+  undo<Color::BLACK>(&pos);
+
+  EXPECT_EQ(pos.currentState_.castlingRights, originalRights);
 }
 
 // Test null move

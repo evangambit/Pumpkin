@@ -1176,13 +1176,6 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
     std::cout << repeat("  ", plyFromRoot) << "Negamax returning: bestMove=" << bestResult.bestMove.uci() << " eval=" << bestResult.evaluation.value  << " depth=" << depth << std::endl;
   }
 
-  #ifndef NDEBUG
-  if (SEARCH_TYPE == SearchType::ROOT) {
-    // In the root node, we want to return the best move regardless of whether it fails low or not, since that's what the GUI will play. So we ignore the alpha-beta bounds when setting bestResult.evaluation.
-    std::cout << thread->position_.evaluator_->to_string() << std::endl;
-  }
-  #endif
-
   return bestResult;
 }
 

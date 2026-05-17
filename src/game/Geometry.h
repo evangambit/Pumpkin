@@ -88,6 +88,14 @@ enum UnsafeSquare : uint8_t {
   UNO_SQUARE,
 };
 
+inline void assert_valid_square(UnsafeSquare sq) {
+  assert(sq < UnsafeSquare::UNO_SQUARE);
+}
+
+inline void assert_valid_square(SafeSquare sq) {
+  assert(sq <= SafeSquare::SH1);
+}
+
 inline UnsafeSquare to_unsafe_square(SafeSquare sq) {
   return UnsafeSquare(sq);
 }
@@ -114,6 +122,42 @@ enum Rank {
   RANK_1,
   RANK_NONE,
 };
+
+inline Rank char2rank(char c) {
+  assert(c >= '1' && c <= '8');
+  return Rank('8' - c);
+}
+
+inline File char2file(char c) {
+  assert(c >= 'a' && c <= 'h');
+  return File(c - 'a');
+}
+
+inline char rank2char(Rank r) {
+  assert(r >= RANK_8 && r <= RANK_1);
+  return '8' - r;
+}
+
+inline char file2char(File f) {
+  assert(f >= FILE_A && f <= FILE_H);
+  return 'a' + f;
+}
+
+inline SafeSquare make_square(File file, Rank rank) {
+  assert(file >= FILE_A && file <= FILE_H);
+  assert(rank >= RANK_8 && rank <= RANK_1);
+  return SafeSquare(rank * 8 + file);
+}
+
+inline std::pair<File, Rank> square2filerank(UnsafeSquare sq) {
+  assert_valid_square(sq);
+  return { File(sq % 8), Rank(sq / 8) };
+}
+
+inline std::pair<File, Rank> square2filerank(SafeSquare sq) {
+  assert_valid_square(sq);
+  return { File(sq % 8), Rank(sq / 8) };
+}
 
 constexpr Bitboard kEmptyBitboard = 0;
 constexpr Bitboard kUniverse = ~Bitboard(0);
@@ -149,8 +193,8 @@ const Bitboard kCenter4 = (kFiles[FILE_D] | kFiles[FILE_E]) & (kRanks[RANK_4] | 
 
 const Bitboard kWhiteSquares = 0xaa55aa55aa55aa55;
 const Bitboard kBlackSquares = 0x55aa55aa55aa55aa;
-const Bitboard kWhiteSide = 0xffffffff00000000;
-const Bitboard kBlackSide = 0x00000000ffffffff;
+const Bitboard kWhiteSide = kRanks[RANK_1] | kRanks[RANK_2] | kRanks[RANK_3] | kRanks[RANK_4];
+const Bitboard kBlackSide = kRanks[RANK_5] | kRanks[RANK_6] | kRanks[RANK_7] | kRanks[RANK_8];
 
 const Bitboard kOuterRing = kFiles[FILE_A] | kFiles[FILE_H] | kRanks[RANK_1] | kRanks[RANK_8];
 
@@ -165,7 +209,7 @@ inline SafeSquare vertical_mirror(SafeSquare sq) {
   return SafeSquare(sq ^ 0b111000);
 }
 
-inline Bitboard flip_vertically(Bitboard x) {
+constexpr inline Bitboard flip_vertically(Bitboard x) {
   x = ((x >> 8) & 0x00FF00FF00FF00FF) | ((x << 8) & 0xFF00FF00FF00FF00);
   x = ((x >> 16) & 0x0000FFFF0000FFFF) | ((x << 16) & 0xFFFF0000FFFF0000);
   x = (x >> 32) | (x << 32);
@@ -189,21 +233,32 @@ inline SafeSquare horizontally_flip_square(SafeSquare sq) {
 constexpr Bitboard kMainWhiteDiagonal = 0x8040201008040201;
 constexpr Bitboard kMainBlackDiagonal = 0x10204081020408;
 
+// 7 for promotion rank, 0 for home rank.
+template<Color COLOR>
+inline int dist_from_home_rank(SafeSquare sq) {
+  const int rank = sq / 8;
+  if constexpr (COLOR == Color::WHITE) {
+    return 7 - rank;
+  } else {
+    return rank;
+  }
+}
+
 enum Direction : int8_t {
-  SOUTH =  8,
-  WEST  = -1,
-  EAST  =  1,
-  NORTH = -8,
+  SOUTH = SafeSquare::SA1 - SafeSquare::SA2,  // i.e. "forward" for black.
+  WEST  = SafeSquare::SA1 - SafeSquare::SB1,  // i.e. "left" from white's perspective.
+  EAST  = SafeSquare::SB1 - SafeSquare::SA1,  // i.e. "right" from white's perspective.
+  NORTH = SafeSquare::SA2 - SafeSquare::SA1,  // i.e. "forward" for white.
 
-  NORTH_WEST = -9,
-  NORTH_EAST = -7,
-  SOUTH_WEST = 7,
-  SOUTH_EAST = 9,
+  NORTH_WEST = Direction::NORTH + Direction::WEST,
+  NORTH_EAST = Direction::NORTH + Direction::EAST,
+  SOUTH_WEST = Direction::SOUTH + Direction::WEST,
+  SOUTH_EAST = Direction::SOUTH + Direction::EAST,
 
-  SOUTHx2 =  16,
-  WESTx2  = -2,
-  EASTx2  =  2,
-  NORTHx2 = -16,
+  SOUTHx2 = Direction::SOUTH * 2,
+  WESTx2  = Direction::WEST * 2,
+  EASTx2  = Direction::EAST * 2,
+  NORTHx2 = Direction::NORTH * 2,
 };
 
 constexpr Direction opposite_dir(Direction dir) {

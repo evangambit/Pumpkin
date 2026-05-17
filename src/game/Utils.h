@@ -80,6 +80,8 @@ Color opposite_color(Color color);
 void assert_valid_color(Color color);
 
 // Important for these values to line up with "four_corners_to_byte"
+// TODO: probably should move four_corners_to_byte and this to Geometry.h since they
+// rely on arbitrary geometry choices.
 constexpr CastlingRights kCastlingRights_WhiteKing = 8;
 constexpr CastlingRights kCastlingRights_WhiteQueen = 4;
 constexpr CastlingRights kCastlingRights_BlackKing = 2;
