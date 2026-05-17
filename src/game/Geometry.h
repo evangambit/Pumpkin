@@ -204,12 +204,30 @@ constexpr Location bb(SafeSquare sq) {
   return Location(1) << sq;
 }
 
+// Deprecated.
+constexpr Location bb(unsigned sq) {
+  return Location(1) << sq;
+}
+
 constexpr Bitboard kWhiteSquares = (0xaa55aa55aa55aa55 & bb(SafeSquare::SA8)) ? 0xaa55aa55aa55aa55 : 0x55aa55aa55aa55aa;
 constexpr Bitboard kBlackSquares = ~kWhiteSquares;
 const Bitboard kWhiteSide = kRanks[RANK_1] | kRanks[RANK_2] | kRanks[RANK_3] | kRanks[RANK_4];
 const Bitboard kBlackSide = kRanks[RANK_5] | kRanks[RANK_6] | kRanks[RANK_7] | kRanks[RANK_8];
 
 const Bitboard kOuterRing = kFiles[FILE_A] | kFiles[FILE_H] | kRanks[RANK_1] | kRanks[RANK_8];
+
+// Maps (0 -> 0), (7 -> 1), (56 -> 2), and (63 -> 3)
+constexpr inline uint8_t four_corners_to_byte(Bitboard b) {
+  constexpr Bitboard mask = bb(SafeSquare::SA1) | bb(SafeSquare::SA8) | bb(SafeSquare::SH1) | bb(SafeSquare::SH8);
+  return ((b & mask) * 0x1040000000000041) >> 60;
+}
+
+// Important for these values to line up with "four_corners_to_byte"
+constexpr CastlingRights kCastlingRights_WhiteKing = four_corners_to_byte(bb(SafeSquare::SH1));
+constexpr CastlingRights kCastlingRights_WhiteQueen = four_corners_to_byte(bb(SafeSquare::SA1));
+constexpr CastlingRights kCastlingRights_BlackKing = four_corners_to_byte(bb(SafeSquare::SH8));
+constexpr CastlingRights kCastlingRights_BlackQueen = four_corners_to_byte(bb(SafeSquare::SA8));
+constexpr CastlingRights kCastlingRights_NoRights = 0;
 
 constexpr int kNumSquares = 64;
 
