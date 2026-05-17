@@ -118,7 +118,11 @@ void make_move(Position *pos, Move move) {
       assert(move.to == 62 || move.to == 58);
     }
     SafeSquare rookDestination = SafeSquare((uint16_t(move.from) + uint16_t(move.to)) / 2);
-    SafeSquare rookOrigin = SafeSquare(((uint16_t(move.to) % 8) * 7 - 14) / 4 + (TURN == Color::WHITE ? 56 : 0));
+    SafeSquare rookOrigin = TURN == Color::WHITE ? SafeSquare(
+      move.to == SafeSquare::SG1 ? SafeSquare::SH1 : SafeSquare::SA1
+    ) : SafeSquare(
+      move.to == SafeSquare::SG8 ? SafeSquare::SH8 : SafeSquare::SA8
+    );
 
     Bitboard rookDestinationBB = bb(rookDestination);
     Bitboard rookOriginBB = bb(rookOrigin);
