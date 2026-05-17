@@ -161,6 +161,16 @@ inline std::pair<File, Rank> square2filerank(SafeSquare sq) {
 
 constexpr Bitboard kEmptyBitboard = 0;
 constexpr Bitboard kUniverse = ~Bitboard(0);
+constexpr Bitboard kUntypedFiles[8] = {
+  0x0101010101010101ULL,
+  0x0202020202020202ULL,
+  0x0404040404040404ULL,
+  0x0808080808080808ULL,
+  0x1010101010101010ULL,
+  0x2020202020202020ULL,
+  0x4040404040404040ULL,
+  0x8080808080808080ULL,
+};
 const TypeSafeArray<Bitboard, 8, File> kFiles = {
   0x0101010101010101ULL,
   0x0202020202020202ULL,
@@ -171,7 +181,16 @@ const TypeSafeArray<Bitboard, 8, File> kFiles = {
   0x4040404040404040ULL,
   0x8080808080808080ULL,
 };
-
+const Bitboard kUntypedRanks[8] = {
+  0x00000000000000ffULL,
+  0x000000000000ff00ULL,
+  0x0000000000ff0000ULL,
+  0x00000000ff000000ULL,
+  0x000000ff00000000ULL,
+  0x0000ff0000000000ULL,
+  0x00ff000000000000ULL,
+  0xff00000000000000ULL,
+};
 const TypeSafeArray<Bitboard, 8, Rank> kRanks = {
   0x00000000000000ffULL,
   0x000000000000ff00ULL,
@@ -439,7 +458,7 @@ Bitboard northFill(Bitboard b);
 
 Bitboard southFill(Bitboard b);
 
-inline Bitboard southFill(Bitboard gen, Bitboard notobstacles) {
+constexpr inline Bitboard southFill(Bitboard gen, Bitboard notobstacles) {
   if constexpr (Direction::SOUTH > 0) {
     gen |= (gen << 8)  & notobstacles;
     gen |= (gen << 16) & (notobstacles & (notobstacles << 8));
@@ -451,8 +470,10 @@ inline Bitboard southFill(Bitboard gen, Bitboard notobstacles) {
   }
   return gen;
 }
+static_assert(southFill(bb(SafeSquare::SA8), kUniverse) == kUntypedFiles[FILE_A]);
+static_assert(southFill(bb(SafeSquare::SA2), kUniverse) == (bb(SafeSquare::SA1) | bb(SafeSquare::SA2)));
 
-inline Bitboard northFill(Bitboard gen, Bitboard notobstacles) {
+constexpr inline Bitboard northFill(Bitboard gen, Bitboard notobstacles) {
   if constexpr (Direction::NORTH > 0) {
     gen |= (gen << 8)  & notobstacles;
     gen |= (gen << 16) & (notobstacles & (notobstacles << 8));
@@ -464,6 +485,8 @@ inline Bitboard northFill(Bitboard gen, Bitboard notobstacles) {
   }
   return gen;
 };
+static_assert(northFill(bb(SafeSquare::SA1), kUniverse) == kUntypedFiles[FILE_A]);
+static_assert(northFill(bb(SafeSquare::SA7), kUniverse) == (bb(SafeSquare::SA8) | bb(SafeSquare::SA7)));
 
 extern const int8_t kDistToEdge[64];
 extern const int8_t kDistToCorner[64];
@@ -471,6 +494,14 @@ extern const int8_t kDistToCorner[64];
 // Strictly speaking, this is not safe. We rely on the caller to ensure that the result is a valid square.
 constexpr SafeSquare operator+(SafeSquare s, Direction d) { return SafeSquare(int(s) + int(d)); }
 constexpr SafeSquare operator-(SafeSquare s, Direction d) { return SafeSquare(int(s) - int(d)); }
+static_assert(SafeSquare::SA1 + Direction::NORTH == SafeSquare::SA2);
+static_assert(SafeSquare::SA2 + Direction::SOUTH == SafeSquare::SA1);
+static_assert(SafeSquare::SA1 + Direction::EAST == SafeSquare::SB1);
+static_assert(SafeSquare::SB1 + Direction::WEST == SafeSquare::SA1);
+static_assert(SafeSquare::SA2 - Direction::NORTH == SafeSquare::SA1);
+static_assert(SafeSquare::SA1 - Direction::SOUTH == SafeSquare::SA2);
+static_assert(SafeSquare::SB1 - Direction::EAST == SafeSquare::SA1);
+static_assert(SafeSquare::SA1 - Direction::WEST == SafeSquare::SB1);
 
 inline SafeSquare lsb_i_promise_board_is_not_empty(Bitboard b) {
   assert(b != 0);
