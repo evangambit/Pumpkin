@@ -200,8 +200,12 @@ inline Rank square2rank(SafeSquare sq) {
 const Bitboard kCenter16 = (kFiles[FILE_C] | kFiles[FILE_D] | kFiles[FILE_E] | kFiles[FILE_F]) & (kRanks[RANK_3] | kRanks[RANK_4] | kRanks[RANK_5] | kRanks[RANK_6]);
 const Bitboard kCenter4 = (kFiles[FILE_D] | kFiles[FILE_E]) & (kRanks[RANK_4] | kRanks[RANK_5]);
 
-const Bitboard kWhiteSquares = 0xaa55aa55aa55aa55;
-const Bitboard kBlackSquares = 0x55aa55aa55aa55aa;
+constexpr Location bb(SafeSquare sq) {
+  return Location(1) << sq;
+}
+
+constexpr Bitboard kWhiteSquares = (0xaa55aa55aa55aa55 & bb(SafeSquare::SA8)) ? 0xaa55aa55aa55aa55 : 0x55aa55aa55aa55aa;
+constexpr Bitboard kBlackSquares = ~kWhiteSquares;
 const Bitboard kWhiteSide = kRanks[RANK_1] | kRanks[RANK_2] | kRanks[RANK_3] | kRanks[RANK_4];
 const Bitboard kBlackSide = kRanks[RANK_5] | kRanks[RANK_6] | kRanks[RANK_7] | kRanks[RANK_8];
 
@@ -333,15 +337,6 @@ constexpr Direction opposite_dir() {
 Location square2location(SafeSquare sq);
 
 int8_t king_dist(SafeSquare sq1, SafeSquare sq2);
-
-constexpr Location bb(SafeSquare sq) {
-  return Location(1) << sq;
-}
-
-// Deprecated.
-constexpr Location bb(unsigned sq) {
-  return Location(1) << sq;
-}
 
 const Bitboard kRookFiles = kFiles[FILE_A] | kFiles[FILE_H];
 
