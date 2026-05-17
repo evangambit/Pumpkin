@@ -64,10 +64,10 @@ void make_move(Position *pos, Move move) {
   //       This will make it easier to count 3-fold draw.
   const UnsafeSquare oldEpSquare = pos->currentState_.epSquare;
   if (TURN == Color::WHITE) {
-    bool cond = (movingPiece == coloredPiece<TURN, Piece::PAWN>() && move.from - move.to == 16);
+    bool cond = (movingPiece == coloredPiece<TURN, Piece::PAWN>() && move.from - move.to == Direction::SOUTHx2);
     pos->currentState_.epSquare = UnsafeSquare(cond * (move.to + 8) + (1 - cond) * UnsafeSquare::UNO_SQUARE);
   } else {
-    bool cond = (movingPiece == coloredPiece<TURN, Piece::PAWN>() && move.to - move.from == 16);
+    bool cond = (movingPiece == coloredPiece<TURN, Piece::PAWN>() && move.from - move.to == Direction::NORTHx2);
     pos->currentState_.epSquare = UnsafeSquare(cond * (move.to - 8) + (1 - cond) * UnsafeSquare::UNO_SQUARE);
   }
   pos->currentState_.hash ^= (
