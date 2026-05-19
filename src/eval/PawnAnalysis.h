@@ -24,6 +24,9 @@ struct PawnAnalysis {
     
     Bitboard aheadOfOurPawns = shift<kForward>(US == Color::WHITE ? northFill(ourPawns) : southFill(ourPawns));
     Bitboard aheadOfTheirPawns = shift<kBackward>(US == Color::WHITE ? southFill(theirPawns) : northFill(theirPawns));
+    Bitboard behindOurPawns = shift<kBackward>(US == Color::WHITE ? southFill(ourPawns) : northFill(ourPawns));
+    Bitboard behindTheirPawns = shift<kBackward>(US == Color::WHITE ? southFill(theirPawns) : northFill(theirPawns));
+
     Bitboard filesWithOurPawns = US == Color::WHITE ? southFill(aheadOfOurPawns) : northFill(aheadOfOurPawns);
     Bitboard filesWithTheirPawns = US == Color::WHITE ? northFill(aheadOfTheirPawns) : southFill(aheadOfTheirPawns);
     filesWithoutOurPawns = ~filesWithOurPawns;
@@ -32,8 +35,8 @@ struct PawnAnalysis {
     this->theirPassedPawns = theirPawns & ~fatten(aheadOfOurPawns);
     this->ourIsolatedPawns = ourPawns & ~shift<Direction::WEST>(filesWithOurPawns) & ~shift<Direction::EAST>(filesWithOurPawns);
     this->theirIsolatedPawns = theirPawns & ~shift<Direction::WEST>(filesWithTheirPawns) & ~shift<Direction::EAST>(filesWithTheirPawns);
-    this->ourDoubledPawns = ourPawns & aheadOfOurPawns;
-    this->theirDoubledPawns = theirPawns & aheadOfTheirPawns;
+    this->ourDoubledPawns = ourPawns & behindOurPawns;
+    this->theirDoubledPawns = theirPawns & behindTheirPawns;
 
     // An outpost is a square that is not ahead of an enemy pawn on its left or right side,
     // but *is* protected by a friendly pawn.

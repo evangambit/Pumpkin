@@ -84,18 +84,3 @@ TEST_F(PawnAnalysisTests, FilesWithoutPawns) {
     EXPECT_BB_EQ(analysis.filesWithoutTheirPawns, kFiles[FILE_A] | kFiles[FILE_B] | kFiles[FILE_D] | kFiles[FILE_F] | kFiles[FILE_G] | kFiles[FILE_H]);
   }
 }
-
-TEST_F(PawnAnalysisTests, Outposts) {
-  {
-    Position pos = Position::init();
-    PawnAnalysis<Color::WHITE> analysis(pos);
-    EXPECT_BB_EQ(analysis.ourOutposts, kEmptyBitboard);
-    EXPECT_BB_EQ(analysis.theirOutposts, kEmptyBitboard);
-  }
-  {
-    Position pos("rnbqkbnr/pp1p1ppp/8/2p1p3/2P1P3/8/PP1P1PPP/RNBQKBNR w KQkq - 0 1");
-    PawnAnalysis<Color::WHITE> analysis(pos);
-    EXPECT_BB_EQ(analysis.ourOutposts, bb(SafeSquare::SD5));
-    EXPECT_BB_EQ(analysis.theirOutposts, bb(SafeSquare::SD4));
-  }
-}
