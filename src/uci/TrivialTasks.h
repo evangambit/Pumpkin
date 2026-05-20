@@ -19,7 +19,9 @@ extern unsigned int byhand_bin_len;
 #include <iostream>
 #include <mutex>
 #include <sstream>
+#include <thread>
 #include <unordered_set>
+#include <vector>
 #include <fstream>
 
 #include "Task.h"
@@ -701,6 +703,165 @@ class DumpWeightsTask : public Task {
       out.write(reinterpret_cast<const char*>(&val), sizeof(float));
     }
   }
+};
+
+struct AnalyzeFens : public Task {
+  AnalyzeFens(std::deque<std::string> command) : command(command) {}
+  void start(UciEngineState *state) {
+    // analyzefens <filename> <depth> <limit>
+    // Dumps to out.txt
+    // Writes <fen>|<eval@depth=1>|<eval@depth=2>|... for each fen in the file, up to the specified depth.
+    if (command.front() != "analyzefens") {
+      std::cout << "Error: expected analyzefens command." << std::endl;
+      return;
+    }
+    command.pop_front();
+    if (command.size() != 3) {
+      std::cout << "Error: analyzefens command requires a filename, depth, and limit argument." << std::endl;
+      return;
+    }
+    std::string filename = command.at(0);
+    int depth = std::stoi(command.at(1));
+    int limit = std::stoi(command.at(2));
+
+    std::ifstream file(filename);
+    if (!file.is_open()) {
+      std::cout << "Error: could not open file " << filename << std::endl;
+      return;
+    }
+
+    if (depth < 1) {
+      std::cout << "Error: analyzefens depth must be at least 1." << std::endl;
+      return;
+    }
+    if (limit < 0) {
+      std::cout << "Error: analyzefens limit must be non-negative." << std::endl;
+      return;
+    }
+
+    std::ofstream out("out.txt");
+    if (!out.is_open()) {
+      std::cout << "Error: could not open out.txt for writing." << std::endl;
+      return;
+    }
+
+    std::vector<std::string> fens;
+    fens.reserve(limit);
+    std::string line;
+    while (fens.size() < static_cast<size_t>(limit) && std::getline(file, line)) {
+      size_t separator = line.find('|');
+      std::string fen = separator == std::string::npos ? line : line.substr(0, separator);
+      remove_excess_whitespace(&fen);
+      if (fen.empty()) {
+        continue;
+      }
+
+      fens.push_back(fen);
+    }
+
+    if (fens.empty()) {
+      std::cout << "Analyzed 0 FENs to depth " << depth << " into out.txt" << std::endl;
+      return;
+    }
+
+    const unsigned hardwareThreads = std::thread::hardware_concurrency();
+    const size_t numWorkers = std::min<size_t>(
+      fens.size(),
+      hardwareThreads > 0 ? hardwareThreads : 4
+    );
+    const size_t ttSizeMb = std::max<size_t>(1, state->tt_->kb_size() / 1024);
+    const size_t ttSizeMbPerWorker = std::max<size_t>(1, ttSizeMb / numWorkers);
+    const size_t progressInterval = std::max<size_t>(1, fens.size() / 20);
+
+    std::atomic<size_t> nextFenIndex{0};
+    std::atomic<size_t> analyzed{0};
+    std::mutex ioMutex;
+    std::vector<std::thread> workers;
+    workers.reserve(numWorkers);
+
+    for (size_t workerId = 0; workerId < numWorkers; ++workerId) {
+      workers.emplace_back([&, workerId]() {
+        auto tt = std::make_shared<TranspositionTable>(ttSizeMbPerWorker);
+
+        while (true) {
+          size_t fenIndex = nextFenIndex.fetch_add(1);
+          if (fenIndex >= fens.size()) {
+            break;
+          }
+
+          const std::string& fen = fens[fenIndex];
+
+          Position pos(fen);
+          pos.set_listener(state->position.evaluator_->clone());
+
+          GoCommand goCommand;
+          goCommand.pos = pos;
+          goCommand.depthLimit = depth;
+
+          auto shared = std::make_shared<SharedSearchThreadState>(
+            goCommand,
+            /* multiPV=*/1,
+            /* numThreads=*/1,
+            /* isTimeSensitive=*/false,
+            std::chrono::high_resolution_clock::time_point::max(),
+            tt.get()
+          );
+          shared->search_hyper_params = state->searchHyperParams;
+
+          SearchThread searchThread(
+            /* thread id=*/static_cast<int>(workerId),
+            pos,
+            shared
+          );
+
+          std::vector<Evaluation> evals;
+          evals.reserve(depth);
+          std::atomic<bool> neverStop{false};
+          SearchResult<Color::WHITE> finalResult = colorless_search(
+            &searchThread,
+            &neverStop,
+            [&evals](int completedDepth, SearchResult<Color::WHITE> result, uint64_t, uint64_t) {
+              if (evals.size() < static_cast<size_t>(completedDepth)) {
+                evals.resize(completedDepth);
+              }
+              evals[completedDepth - 1] = result.evaluation.value;
+            }
+          );
+
+          if (evals.empty()) {
+            evals.push_back(finalResult.evaluation.value);
+          }
+
+          std::ostringstream row;
+          row << fen;
+          for (Evaluation eval : evals) {
+            row << "|" << eval;
+          }
+          row << std::endl;
+
+          const size_t completed = analyzed.fetch_add(1) + 1;
+          const bool shouldPrintProgress =
+            completed == fens.size() ||
+            (progressInterval > 0 && completed % progressInterval == 0);
+
+          std::lock_guard<std::mutex> lock(ioMutex);
+          out << row.str();
+          if (shouldPrintProgress && completed < fens.size()) {
+            std::cout << "Analyzed " << completed << " / " << fens.size() << " FENs..." << std::endl;
+          }
+        }
+      });
+    }
+
+    for (std::thread& worker : workers) {
+      worker.join();
+    }
+
+    std::cout << "Analyzed " << analyzed.load() << " FENs to depth " << depth << " into out.txt" << std::endl;
+
+  }
+ private:
+  std::deque<std::string> command;
 };
 
 }  // namespace ChessEngine

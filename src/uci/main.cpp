@@ -233,6 +233,8 @@ struct UciEngine {
       state->taskQueue.push_back(std::make_shared<IncrementSearchHyperParamTask>(parts));
     } else if (parts[0] == "dumpweights") {
       state->taskQueue.push_back(std::make_shared<DumpWeightsTask>(parts));
+    } else if (parts[0] == "analyzefens") {
+      state->taskQueue.push_back(std::make_shared<AnalyzeFens>(parts));
     } else {
       state->taskQueue.push_back(std::make_shared<UnrecognizedCommandTask>(parts));
     }
