@@ -73,6 +73,12 @@ struct MoveCache {
   }
 };
 
+enum NodeType {
+  PV_NODE,
+  CUT_NODE,
+  ALL_NODE
+};
+
 /** Ply-specific information. */
 struct Frame {
   MoveCache killers;
@@ -82,6 +88,7 @@ struct Frame {
   bool inCheck;
   Evaluation staticEval;
   Move excludedMove = kNullMove;
+  NodeType nodeType;
 };
 
 struct HistoryEntry {
@@ -662,6 +669,7 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
       thread->position_,
       lsb_i_promise_board_is_not_empty(thread->position_.pieceBitboards_[moverKing])
     );
+    frame->nodeType = NodeType::PV_NODE;
   }
 
   if (SEARCH_TYPE != SearchType::ROOT && stopThinking->load()) {
@@ -838,6 +846,7 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
     const int reducedDepth = std::max(0, depth - searchHyperParams.null_move_pruning_depth_reduction);
     make_nullmove<TURN>(&thread->position_);
     (frame + 1)->inCheck = false;
+    (frame + 1)->nodeType = NodeType::ALL_NODE;
     ColoredEvaluation<TURN> r = to_parent_eval(negamax<opposite_color<TURN>(), SearchType::NULL_WINDOW_SEARCH, IS_MULTITHREADED>(
       thread, reducedDepth, to_child_eval(beta), to_child_eval(beta - 1), plyFromRoot + 1, frame + 1, stopThinking
     ).evaluation);
@@ -1057,6 +1066,13 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
           const int reducedChildDepth = childDepth;
         #endif
 
+        if (SEARCH_TYPE != SearchType::NULL_WINDOW_SEARCH) {
+          // We are entering a null window search from a PV node, so the child node is a cut node.
+          (frame + 1)->nodeType = NodeType::CUT_NODE;
+        } else {
+          // TODO: The first k children of a CUT_NODE are ALL_NODEs, but the rest should probably be CUT_NODEs.
+          (frame + 1)->nodeType = (frame->nodeType == NodeType::CUT_NODE ? NodeType::ALL_NODE : NodeType::CUT_NODE);
+        }
         eval = to_parent_eval(negamax<opposite_color<TURN>(), SearchType::NULL_WINDOW_SEARCH, IS_MULTITHREADED>(thread, reducedChildDepth, to_child_eval(alpha + 1), to_child_eval(alpha), plyFromRoot + 1, frame + 1, stopThinking).evaluation);
         if (eval.value > alpha.value) {
           if (IS_PRINT_NODE) {
@@ -1069,7 +1085,12 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
         // Simple, full-window, full-depth search. Used for the first move in non-root search.
         // In the root node, we use this when multiPV==1, since we don't care about the exact
         // evaluation of moves that aren't the best move.
-        constexpr SearchType firstMoveSearchType = SEARCH_TYPE == SearchType::ROOT ? SearchType::NORMAL_SEARCH : SEARCH_TYPE;
+        static constexpr SearchType firstMoveSearchType = SEARCH_TYPE == SearchType::ROOT ? SearchType::NORMAL_SEARCH : SEARCH_TYPE;
+        if (SEARCH_TYPE != SearchType::NULL_WINDOW_SEARCH) {
+          (frame + 1)->nodeType = NodeType::PV_NODE;
+        } else {
+          (frame + 1)->nodeType = (frame->nodeType == NodeType::CUT_NODE ? NodeType::ALL_NODE : NodeType::CUT_NODE);
+        }
         eval = to_parent_eval(negamax<opposite_color<TURN>(), firstMoveSearchType, IS_MULTITHREADED>(thread, childDepth, to_child_eval(beta), to_child_eval(alpha), plyFromRoot + 1, frame + 1, stopThinking).evaluation);
       }
 
