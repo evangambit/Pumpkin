@@ -53,6 +53,7 @@ struct TTEntry {
     }
   }
 };
+static_assert(sizeof(TTEntry) <= 16, "TTEntry should be 16 bytes or less to fit efficiently in cache lines");
 
 constexpr size_t kNumSpinLocks = 2048;
 

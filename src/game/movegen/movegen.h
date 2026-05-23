@@ -16,9 +16,9 @@
 
 namespace ChessEngine {
 
-inline void initialize_movegen() {
-  initialize_sliding();
-}
+void initialize_movegen();
+
+bool is_move_feasible(Piece piece, Move move);
 
 namespace StaticExchangeAnalysis {
 

@@ -602,6 +602,15 @@ NegamaxResult<TURN> qsearch(SearchThread* thread, ColoredEvaluation<TURN> alpha,
   return bestResult;
 }
 
+template<Color TURN>
+inline bool sanity_check(const Position& pos, Move move) {
+  if (TURN == Color::WHITE) {
+    return pos.tiles_[move.from] >= ColoredPiece::WHITE_PAWN && pos.tiles_[move.from] <= ColoredPiece::WHITE_KING && is_move_feasible(cp2p(pos.tiles_[move.from]), move);
+  } else {
+    return pos.tiles_[move.from] >= ColoredPiece::BLACK_PAWN && pos.tiles_[move.from] <= ColoredPiece::BLACK_KING && is_move_feasible(cp2p(pos.tiles_[move.from]), move);
+  }
+}
+
 /**
  * Note: if you set stopThinking to true, there is no guarantee that this will return a sensible/valid result.
  * In practice, you will likely want to re-search with depth=1 and stopThinking=false to get a valid move.
@@ -677,7 +686,7 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
 
   // Transposition Table probe
   TTEntry entry{0, kNullMove, 0, 0, BoundType::EXACT, 0};
-  if (frame->excludedMove == kNullMove && thread->shared_->tt->probe(key, entry)) {
+  if (frame->excludedMove == kNullMove && thread->shared_->tt->probe(key, entry) && sanity_check<TURN>(thread->position_, entry.bestMove)) {
     if (entry.depth >= depth) {
       // Only use TT cutoffs in non-PV nodes (NULL_WINDOW_SEARCH).
       // In PV nodes (NORMAL_SEARCH), we only use the TT for move ordering
@@ -758,15 +767,19 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
     return NegamaxResult<TURN>(kNullMove, ColoredEvaluation<TURN>(kDraw).clamp_(originalAlpha, beta));
   }
 
-  // Internal Iterative Deepening.
-  #ifndef NO_IID
-    // If we don't have a best move from the TT, we compute one with reduced depth.
-    if (depth > 4 && (entry.key != key || entry.bestMove == kNullMove)) {
+  if (depth > 4 && entry.bestMove == kNullMove) {
+    if (SEARCH_TYPE != SearchType::NULL_WINDOW_SEARCH) {
+      // Internal Iterative Deepening.
+      // If we don't have a best move from the TT, we compute one with reduced depth.
       NegamaxResult<TURN> result = negamax<TURN, SEARCH_TYPE, IS_MULTITHREADED>(thread, depth - 4, alpha, beta, plyFromRoot, frame, stopThinking);
       entry.bestMove = result.bestMove;
       entry.value = result.evaluation.value;
+    } else {
+      // However, for null window searches we simply reduce the depth by 2 to avoid the
+      // significant overhead of a shallow search.
+      depth -= 2;
     }
-  #endif
+  }
 
   // Add score to each move.
   Threats threats;
