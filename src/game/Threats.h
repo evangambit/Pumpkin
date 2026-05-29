@@ -3,7 +3,7 @@
 
 #include "Utils.h"
 #include "Geometry.h"
-#include "../TypeSafeArray.h"
+#include "../utils/TypeSafeArray.h"
 
 namespace ChessEngine {
 

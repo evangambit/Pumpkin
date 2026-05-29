@@ -14,7 +14,7 @@
 #include "Threats.h"
 #include "Utils.h"
 #include "Move.h"
-#include "../StringUtils.h"
+#include "../utils/StringUtils.h"
 #include "../eval/ColoredEvaluation.h"
 
 namespace ChessEngine {

@@ -13,7 +13,7 @@
 #include "../../game/Position.h"
 #include "../../game/Threats.h"
 #include "../../game/CreateThreats.h"
-#include "../../TypeSafeArray.h"
+#include "../../utils/TypeSafeArray.h"
 #include "../Evaluator.h"
 
 using namespace ChessEngine;

@@ -42,7 +42,7 @@
 #include "game/Position.h"
 #include "game/Geometry.h"
 #include "game/movegen/movegen.h"
-#include "StringUtils.h"
+#include "utils/StringUtils.h"
 
 // Command line flags
 DEFINE_string(input_path, "", "Directory or file path containing PGN files to process");

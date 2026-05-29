@@ -2,7 +2,7 @@
 #include "../game/Position.h"
 #include "../game/movegen/movegen.h"
 #include "../game/Utils.h"
-#include "../StringUtils.h"
+#include "../utils/StringUtils.h"
 #include "GoTask.h"
 #include "SelfPlayTask.h"
 #include "Task.h"

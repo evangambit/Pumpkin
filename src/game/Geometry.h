@@ -9,7 +9,7 @@
 #include <string>
 
 #include "Utils.h"
-#include "../TypeSafeArray.h"
+#include "../utils/TypeSafeArray.h"
 
 namespace ChessEngine {
 

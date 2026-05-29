@@ -10,7 +10,7 @@
 #include "TrivialTasks.h"
 #include "SetOptionTask.h"
 #include "PositionTask.h"
-#include "../StringUtils.h"
+#include "../utils/StringUtils.h"
 
 #include <atomic>
 #include <condition_variable>

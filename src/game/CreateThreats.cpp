@@ -7,7 +7,7 @@
 #include "movegen/rooks.h"
 #include "movegen/knights.h"
 #include "movegen/kings.h"
-#include "../TypeSafeArray.h"
+#include "../utils/TypeSafeArray.h"
 
 namespace ChessEngine {
 

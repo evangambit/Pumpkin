@@ -7,7 +7,7 @@
 #include <gflags/gflags.h>
 
 #include "game/movegen/movegen.h"
-#include "StringUtils.h"
+#include "utils/StringUtils.h"
 
 using json = nlohmann::json;
 
