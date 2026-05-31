@@ -26,7 +26,7 @@ setup(name='_nnue_dataset',
       ext_modules=[
           cpp_extension.CppExtension(
               '_nnue_dataset',
-              ['dataset.cpp', '../src/game/Position.cpp', '../src/game/Move.cpp', '../src/eval/nnue/Utils.cpp', '../src/StringUtils.cpp', '../src/game/CreateThreats.cpp', '../src/game/Utils.cpp', '../src/game/Geometry.cpp'],
+              ['dataset.cpp', '../src/game/Position.cpp', '../src/game/Move.cpp', '../src/eval/nnue/Utils.cpp', '../src/utils/StringUtils.cpp', '../src/game/CreateThreats.cpp', '../src/game/Utils.cpp', '../src/game/Geometry.cpp'],
               extra_compile_args=extra_compile_args,
               include_dirs=['../src']
           )

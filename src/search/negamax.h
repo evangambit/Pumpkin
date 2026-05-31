@@ -832,7 +832,6 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
     }
     return r;
   }
-  #endif
 
   // Null move pruning.
   // This is roughly equivalent to having twice as much time.
@@ -858,6 +857,7 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
       return NegamaxResult<TURN>(kNullMove, beta);
     }
   }
+  #endif  // EVAL_AGNOSTIC
 
   const Move lastMove = SEARCH_TYPE == SearchType::ROOT ? kNullMove : thread->position_.history_.back().move;
   // Move ordering operates in bands
@@ -985,6 +985,7 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
       // did a thorough examination of all moves, so it is likely that the TT's "best move" isn't
       // actually the best.
       bool isSingular = false;
+      #if EVAL_AGNOSTIC == 0
       if (depth > 4 && move->move == entry.bestMove && entry.depth >= depth - 3 && entry.bound != BoundType::UPPER && frame->excludedMove == kNullMove && !alpha.is_mating()) {
         frame->excludedMove = move->move;
         auto r = negamax<TURN, SearchType::NULL_WINDOW_SEARCH, IS_MULTITHREADED>(
@@ -999,6 +1000,7 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
         frame->excludedMove = kNullMove;
         isSingular = r.evaluation.value < entry.value - searchHyperParams.singular_margin;
       }
+      #endif  // EVAL_AGNOSTIC
 
       make_move<TURN>(&thread->position_, move->move);
 

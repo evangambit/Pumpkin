@@ -9,6 +9,7 @@ import io
 import os
 import datetime
 import time
+import json
 
 import torch.utils.data as tdata
 from sharded_matrix import ShardedLoader
@@ -55,7 +56,7 @@ class CosineAnnealingWithWarmup:
 
 # We load data in chunks, rather than 1 row at a time, as it is much faster. It doesn't matter
 # much for non-trivial networks though.
-BATCH_SIZE = 2048
+BATCH_SIZE = 8192
 CHUNK_SIZE = 128
 assert BATCH_SIZE % CHUNK_SIZE == 0
 
@@ -89,11 +90,12 @@ if __name__ == "__main__":
   dataloader = tdata.DataLoader(dataset, batch_size=BATCH_SIZE//CHUNK_SIZE, shuffle=False, num_workers=0, pin_memory=True, drop_last=True, collate_fn=collate_fn)
 
   print("Creating model...")
+  # Simple hiiden_sizes=[1] yields (loss: 0.0262, mse: 0.6076, penalty: 0.2377)
   # loss: 0.0142, mse: 0.3296, penalty: 0.0075
   model = NNUE(hidden_sizes=[256, 16], output_size=1).to(device)
 
   print("Creating optimizer...")
-  opt = torch.optim.AdamW(model.parameters(), lr=0.0, weight_decay=0.1)
+  opt = torch.optim.AdamW(model.parameters(), lr=0.0, weight_decay=1.0)
 
   def warmup_length(beta, c = 2.0):
     # The amount of warmup needs to increase as beta approaches 1,
@@ -107,6 +109,7 @@ if __name__ == "__main__":
   total_steps = NUM_EPOCHS * steps_per_epoch
   warmup_steps = warmup_length(0.9) # AdamW's beta is 0.999.
   assert warmup_steps < total_steps // 10, "You probably made a mistake."
+  print(f"Total steps: {total_steps}, Warmup steps: {warmup_steps}")
 
   scheduler = CosineAnnealingWithWarmup(
     opt,
@@ -124,13 +127,26 @@ if __name__ == "__main__":
     assert win_mover_perspective.shape == lose_mover_perspective.shape
     return win_mover_perspective + draw_mover_perspective * 0.5
 
+  config = {
+    'batch_size': BATCH_SIZE,
+    'model': str(model).splitlines(),
+    'dataset': dataset.file_paths,
+    'scheduler': {
+      'min_lr': scheduler.min_lr,
+      'max_lr': scheduler.max_lr,
+      'warmup_steps': scheduler.warmup_steps,
+      'total_steps': scheduler.total_steps,
+    },
+    'opt': str(opt).splitlines(),
+  }
+
   metrics = defaultdict(list)
   num_models_saved = 0
   last_save_time = 0
   for epoch in range(NUM_EPOCHS):
     print(f"Starting Epoch {epoch+1}/{NUM_EPOCHS}")
     t0 = time.time()
-    for batch_idx, batch in tqdm(enumerate(dataloader), total=len(dataloader)):
+    for batch_idx, batch in tqdm(enumerate(dataloader), total=steps_per_epoch):
       t_data = time.time()
       
       opt.zero_grad()
@@ -152,9 +168,7 @@ if __name__ == "__main__":
       label = torch.sigmoid(label)
 
       assert output.shape == label.shape, f"{output.shape} vs {label.shape}"
-      loss = nn.functional.mse_loss(
-        output, label, reduction='mean',
-      )
+      loss = (torch.abs(output - label)**2.5).mean()
       t_forward = time.time()
       
       mse = loss.item()
@@ -162,6 +176,10 @@ if __name__ == "__main__":
 
       (loss + penalty * 0.02).backward()
       opt.step()
+      # Oops. TODO: remove this
+      with torch.no_grad():
+        model.mlp[0].weight[0,0] = 1.0
+        model.mlp[0].weight[0,1] = -1.0
       t_backward = time.time()
       metrics["loss"].append(loss.item())
       metrics["mse"].append(mse / baseline)
@@ -201,12 +219,23 @@ if __name__ == "__main__":
   label = label.squeeze().cpu().detach().numpy()
   I = np.argsort(output)
   output, label = output[I], label[I]
+  plt.xlabel('Predicted Score')
+  plt.ylabel('Actual Score')
   plt.scatter(output, label, alpha=0.1)
   plt.scatter(np.convolve(output, np.ones(100)/100, mode='valid'), np.convolve(label, np.ones(100)/100, mode='valid'), color='red', label='moving average')
   plt.savefig(os.path.join(run_dir, 'nnue-scatter.png'))
 
   plt.figure(figsize=(10,10))
-  plt.plot(np.convolve(metrics['loss'][500:], np.ones(100)/100, mode='valid'), label='loss')
+  plt.plot(np.convolve(metrics['loss'][500:], np.ones(100)/100, mode='valid'), label='loss (smooth=100)')
+  plt.plot(np.convolve(metrics['loss'][500:], np.ones(150)/150, mode='valid'), label='loss (smooth=150)')
+  plt.plot(np.convolve(metrics['loss'][500:], np.ones(200)/200, mode='valid'), label='loss (smooth=200)')
+  plt.plot(metrics['loss'][500:], label='loss', alpha=0.3)
+  plt.grid()
   plt.legend()
   plt.savefig(os.path.join(run_dir, 'nnue-loss.png'))
 
+  with open(os.path.join(run_dir, 'config.json'), 'w') as f:
+    config['batches/epoch'] = batch_idx + 1
+    config['epochs'] = epoch + 1
+    config['sched_final'] = str(opt)
+    json.dump(config, f, indent=2)
