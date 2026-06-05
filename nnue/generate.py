@@ -13,6 +13,16 @@ from multiprocessing import Process, Queue
 import chess
 from chess import engine as chess_engine
 
+
+def detect_num_workers():
+  try:
+    cpu_count = len(os.sched_getaffinity(0))
+  except AttributeError:
+    cpu_count = os.cpu_count() or 1
+
+  # Leave one logical CPU free for the inserter process and general system work.
+  return max(1, cpu_count - 1)
+
 """
 a=de7-md4
 sqlite3 data/${a}/db.sqlite3 "select * from positions" > data/${a}/pos.txt
@@ -98,7 +108,7 @@ def helper(engine, resultQueue, args):
       b = None
 
     # Drop blunders
-    lines = [l for l in lines if abs(score2float(l['score']) - score2float(lines[0]['score'])) < 0.1]
+    lines = [l for l in lines if abs(score2float(l['score']) - score2float(lines[0]['score'])) < 0.5]
 
     if score2float(lines[0]['score']) < 0.25 and board.turn:
       # If white is losing, make the best move
@@ -174,10 +184,13 @@ if __name__ == '__main__':
   parser.add_argument('--engine', default='/usr/games/stockfish')
   parser.add_argument('--depth', type=int, default=7)
   parser.add_argument('--multipv', type=int, default=5)
-  parser.add_argument('--num_workers', type=int, default=4)
+  parser.add_argument('--num_workers', type=int, default=0, help='Number of analyzer processes. Use 0 to auto-select based on available CPUs.')
   parser.add_argument('--min_depth', type=int, default=4)
   parser.add_argument('--dropout', type=int, default=75, help='Probability of dropping a position (0-100). Helps promote higher diversity.')
   args = parser.parse_args()
+
+  if args.num_workers == 0:
+    args.num_workers = detect_num_workers()
 
   database = os.path.join('data', f'de{args.depth}-md{args.min_depth}', f'db.sqlite3')
   if not os.path.exists(os.path.dirname(database)):
