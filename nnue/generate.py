@@ -31,6 +31,22 @@ def score2float(score):
   wdl = score.white().wdl()
   return (wdl.wins + wdl.draws * 0.5) / (wdl.wins + wdl.draws + wdl.losses)
 
+def repetition_key(board):
+  return board.epd()
+
+def repetition_state_after_push(board, move, seen_positions, repeated_since_reset):
+  is_capture = board.is_capture(move)
+  is_pawn_move = board.piece_type_at(move.from_square) == chess.PAWN
+  board.push(move)
+
+  if is_capture or is_pawn_move:
+    return {repetition_key(board): 1}, False
+
+  key = repetition_key(board)
+  seen_positions = dict(seen_positions)
+  seen_positions[key] = seen_positions.get(key, 0) + 1
+  return seen_positions, repeated_since_reset or seen_positions[key] >= 2
+
 def analyzer(resultQueue, args):
   engine = chess_engine.SimpleEngine.popen_uci(args.engine)
   while True:
@@ -38,29 +54,46 @@ def analyzer(resultQueue, args):
 
 def helper(engine, resultQueue, args):
   board = chess.Board()
+  seen_positions = {repetition_key(board): 1}
+  repeated_since_reset = False
   t = ''
   while not board.is_game_over() and not board.is_repetition() and board.ply() < 200:
     lines = engine.analyse(board, chess_engine.Limit(depth=args.depth), multipv=args.multipv)
 
-    if len(lines) < 3:
-      board.push(lines[0]['pv'][0])
+    if len(lines) < args.multipv:
+      seen_positions, repeated_since_reset = repetition_state_after_push(
+        board,
+        lines[0]['pv'][0],
+        seen_positions,
+        repeated_since_reset,
+      )
       continue
 
     for line in lines:
       wdl = line['score'].white().wdl()
       moves = line['pv']
-      if len(moves) < 3:
+      if len(moves) < args.min_depth:
         continue
-      b = chess.Board(board.fen())
-      b.push(moves[0])
+      b = board.copy()
+      b_seen_positions, b_repeated_since_reset = repetition_state_after_push(
+        b,
+        moves[0],
+        seen_positions,
+        repeated_since_reset,
+      )
       is_quiet = False
       for i in range(1, len(moves) - args.min_depth):
         san = b.san(moves[i])
-        if 'x' not in san and '+' not in san and '=' not in san:
+        if 'x' not in san and '+' not in san and '=' not in san and '#' not in san:
           is_quiet = True
           break
-        b.push(moves[i])
-      if is_quiet and random.randint(0, 100) >= args.dropout:
+        b_seen_positions, b_repeated_since_reset = repetition_state_after_push(
+          b,
+          moves[i],
+          b_seen_positions,
+          b_repeated_since_reset,
+        )
+      if is_quiet and not b_repeated_since_reset and random.randint(0, 99) >= args.dropout:
         resultQueue.put((b.fen(), wdl.wins, wdl.draws, wdl.losses))
       b = None
 
@@ -79,7 +112,12 @@ def helper(engine, resultQueue, args):
       for i, line in enumerate(lines[::-1]):
         L += [line] * (i + 1)
       line = random.choice(L)
-    board.push(line['pv'][0])
+    seen_positions, repeated_since_reset = repetition_state_after_push(
+      board,
+      line['pv'][0],
+      seen_positions,
+      repeated_since_reset,
+    )
 
 from functools import lru_cache
 class MyLru:
