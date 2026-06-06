@@ -48,12 +48,10 @@ struct ChunkedDataset {
                 continue;
             }
 
-            size_t bar_pos = line.find('|');
-            if (bar_pos == std::string::npos) continue;
+            std::vector<std::string> parts = split(line, '|');
 
-            std::string fen = line.substr(0, bar_pos);
-            std::string eval_str = line.substr(bar_pos + 1);
-            float eval = std::stof(eval_str);
+            std::string fen = parts[0];
+            float eval = (std::stof(parts[1]) + std::stof(parts[2]) * 0.5) / 1000.0f;
 
             Position pos(fen);
             Threats threats;
@@ -62,6 +60,7 @@ struct ChunkedDataset {
             NNUE::Features features = NNUE::pos2features(pos, threats);
             if (pos.turn_ == Color::BLACK) {
                 features.flip_();
+                eval = 1 - eval; // Flip evaluation for black
             }
             
             for (size_t i = 0; i < features.size(); i++) {

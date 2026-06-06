@@ -61,15 +61,13 @@ CHUNK_SIZE = 128
 assert BATCH_SIZE % CHUNK_SIZE == 0
 
 def collate_fn(rows):
-  values, lengths, labels, turns, kings = zip(*rows)
+  values, lengths, labels, kings = zip(*rows)
   values = torch.from_numpy(np.concatenate(values))
   lengths = torch.from_numpy(np.concatenate(lengths))
   labels = torch.from_numpy(np.stack(labels))
-  turns = torch.from_numpy(np.stack(turns))
   kings = torch.from_numpy(np.concatenate(kings))
   labels = labels.reshape(labels.shape[0] * labels.shape[1], *labels.shape[2:])
-  turns = turns.reshape(turns.shape[0] * turns.shape[1], *turns.shape[2:])
-  return values, lengths, labels, turns, kings
+  return values, lengths, labels, kings
 
 
 if __name__ == "__main__":
@@ -83,7 +81,7 @@ if __name__ == "__main__":
   device = torch.device('cpu')
 
   print("Loading dataset...")
-  dataset = ndata.NnueDataset(['../data/pos.shuf.txt'])
+  dataset = ndata.NnueDataset(['data/de7-md4/pos.txt'])
 
   print(f'Dataset loaded with {len(dataset) * CHUNK_SIZE} rows.')
 
@@ -107,7 +105,7 @@ if __name__ == "__main__":
   NUM_EPOCHS = 1
   steps_per_epoch = len(dataloader)
   total_steps = NUM_EPOCHS * steps_per_epoch
-  warmup_steps = warmup_length(0.9) # AdamW's beta is 0.999.
+  warmup_steps = warmup_length(0.999) # AdamW's beta is 0.999.
   assert warmup_steps < total_steps // 10, "You probably made a mistake."
   print(f"Total steps: {total_steps}, Warmup steps: {warmup_steps}")
 
@@ -155,7 +153,7 @@ if __name__ == "__main__":
       scheduler.step()
       
       batch = [x.to(device) for x in batch]
-      values, lengths, label, turn, kings = batch
+      values, lengths, label, kings = batch
       t_transfer = time.time()
 
       output, layers = model(values, lengths, kings)
@@ -165,7 +163,6 @@ if __name__ == "__main__":
         penalty += (layer_output.mean() ** 2 + (layer_output.std() - 1.0) ** 2)
 
       output = torch.sigmoid(output)[:,0]
-      label = torch.sigmoid(label)
 
       assert output.shape == label.shape, f"{output.shape} vs {label.shape}"
       loss = (torch.abs(output - label)**2.5).mean()
@@ -176,10 +173,6 @@ if __name__ == "__main__":
 
       (loss + penalty * 0.02).backward()
       opt.step()
-      # Oops. TODO: remove this
-      with torch.no_grad():
-        model.mlp[0].weight[0,0] = 1.0
-        model.mlp[0].weight[0,1] = -1.0
       t_backward = time.time()
       metrics["loss"].append(loss.item())
       metrics["mse"].append(mse / baseline)
