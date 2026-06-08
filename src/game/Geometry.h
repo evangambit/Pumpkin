@@ -191,7 +191,7 @@ const Bitboard kUntypedRanks[8] = {
   0x00ff000000000000ULL,
   0xff00000000000000ULL,
 };
-const TypeSafeArray<Bitboard, 8, Rank> kRanks = {
+const TypeSafeArray<Bitboard, 9, Rank> kRanks = {
   0x00000000000000ffULL,
   0x000000000000ff00ULL,
   0x0000000000ff0000ULL,

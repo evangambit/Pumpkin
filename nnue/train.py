@@ -56,12 +56,12 @@ class CosineAnnealingWithWarmup:
 
 # We load data in chunks, rather than 1 row at a time, as it is much faster. It doesn't matter
 # much for non-trivial networks though.
-BATCH_SIZE = 8192
+BATCH_SIZE = 4096
 CHUNK_SIZE = 128
 assert BATCH_SIZE % CHUNK_SIZE == 0
 
 def collate_fn(rows):
-  values, lengths, labels, kings = zip(*rows)
+  values, lengths, labels, _ , kings = zip(*rows)
   values = torch.from_numpy(np.concatenate(values))
   lengths = torch.from_numpy(np.concatenate(lengths))
   labels = torch.from_numpy(np.stack(labels))
@@ -81,7 +81,7 @@ if __name__ == "__main__":
   device = torch.device('cpu')
 
   print("Loading dataset...")
-  dataset = ndata.NnueDataset(['data/de7-md4/pos.txt'])
+  dataset = ndata.NnueDataset([r'data/de7-md4/pos.shuf.txt'])
 
   print(f'Dataset loaded with {len(dataset) * CHUNK_SIZE} rows.')
 

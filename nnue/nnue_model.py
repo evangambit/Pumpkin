@@ -40,3 +40,15 @@ class NNUE(nn.Module):
         layers.append(z)
     return z, layers
 
+class PSTModel(nn.Module):
+  def __init__(self):
+    super(PSTModel, self).__init__()
+    self.emb = Emb(dout=1)
+  
+  def embed(self, values, lengths, kings):
+    z_us, z_them = self.emb(values, lengths, kings)
+    return torch.cat([z_us, z_them], dim=1)
+
+  def forward(self, values, lengths, kings):
+    z = self.embed(values, lengths, kings)
+    return z[:,0:1] - z[:,1:2]
