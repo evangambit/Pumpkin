@@ -11,6 +11,19 @@
 
 using namespace ChessEngine;
 
+namespace {
+
+int16_t compute_lateness(const Position& pos) {
+    int lateness = 0;
+    lateness += (std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_KNIGHT]) + std::popcount(pos.pieceBitboards_[ColoredPiece::BLACK_KNIGHT]));
+    lateness += (std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_BISHOP]) + std::popcount(pos.pieceBitboards_[ColoredPiece::BLACK_BISHOP]));
+    lateness += (std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_ROOK]) + std::popcount(pos.pieceBitboards_[ColoredPiece::BLACK_ROOK]));
+    lateness += (std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_QUEEN]) + std::popcount(pos.pieceBitboards_[ColoredPiece::BLACK_QUEEN])) * 3;
+    return static_cast<int16_t>(std::min(lateness, 18));
+}
+
+}
+
 struct ChunkedDataset {
     std::vector<std::string> paths;
     int chunk_size;
@@ -28,8 +41,8 @@ struct ChunkedDataset {
     std::vector<torch::Tensor> next() {
         std::vector<int16_t> all_values;
         std::vector<int16_t> all_lengths;
+        std::vector<int16_t> all_lateness;
         std::vector<float> all_evals;
-        std::vector<int8_t> all_turns;
         std::vector<int8_t> all_kings;
         
         int lines_read = 0;
@@ -54,6 +67,7 @@ struct ChunkedDataset {
             float eval = (std::stof(parts[1]) + std::stof(parts[2]) * 0.5) / 1000.0f;
 
             Position pos(fen);
+            const int16_t lateness = compute_lateness(pos);
             Threats threats;
             create_threats(pos.pieceBitboards_, pos.colorBitboards_, &threats);
 
@@ -67,8 +81,8 @@ struct ChunkedDataset {
                 all_values.push_back(features[i]);
             }
             all_lengths.push_back(features.size());
+            all_lateness.push_back(lateness);
             all_evals.push_back(eval);
-            all_turns.push_back(static_cast<int8_t>(pos.turn_));
             all_kings.push_back(static_cast<int8_t>(features.whiteKingSquare));
             all_kings.push_back(static_cast<int8_t>(features.blackKingSquare));
             lines_read++;
@@ -84,16 +98,16 @@ struct ChunkedDataset {
         auto lengths_tensor = torch::empty({(long)all_lengths.size()}, torch::TensorOptions().dtype(torch::kInt16));
         std::memcpy(lengths_tensor.data_ptr<int16_t>(), all_lengths.data(), all_lengths.size() * sizeof(int16_t));
 
+        auto lateness_tensor = torch::empty({(long)all_lateness.size()}, torch::TensorOptions().dtype(torch::kInt16));
+        std::memcpy(lateness_tensor.data_ptr<int16_t>(), all_lateness.data(), all_lateness.size() * sizeof(int16_t));
+
         auto evals_tensor = torch::empty({(long)all_evals.size()}, torch::TensorOptions().dtype(torch::kFloat32));
         std::memcpy(evals_tensor.data_ptr<float>(), all_evals.data(), all_evals.size() * sizeof(float));
 
-        auto turn_tensor = torch::empty({(long)all_turns.size()}, torch::TensorOptions().dtype(torch::kInt8));
-        std::memcpy(turn_tensor.data_ptr<int8_t>(), all_turns.data(), all_turns.size() * sizeof(int8_t));
-
-        auto kings_tensor = torch::empty({(long)all_turns.size(), 2}, torch::TensorOptions().dtype(torch::kInt8));
+        auto kings_tensor = torch::empty({(long)all_lengths.size(), 2}, torch::TensorOptions().dtype(torch::kInt8));
         std::memcpy(kings_tensor.data_ptr<int8_t>(), all_kings.data(), all_kings.size() * sizeof(int8_t));
 
-        return {values_tensor, lengths_tensor, evals_tensor, turn_tensor, kings_tensor};
+        return {values_tensor, lengths_tensor, evals_tensor, kings_tensor, lateness_tensor};
     }
 };
 

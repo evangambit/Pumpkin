@@ -27,18 +27,18 @@ class NNUE(nn.Module):
     self.mlp = nn.Sequential(*layers)
 
   def embed(self, values, lengths, kings):
-    z_us, z_them = self.emb(values, lengths, kings)
-    return torch.cat([z_us, z_them], dim=1)
+    z_us, z_them, buckets = self.emb(values, lengths, kings)
+    return torch.cat([z_us, z_them], dim=1), buckets
 
   def forward(self, values, lengths, kings):
     # Turn is 1 for white to move, -1 for black to move
-    z = self.embed(values, lengths, kings)
+    z, buckets = self.embed(values, lengths, kings)
     layers = []
     for layer in self.mlp:
       z = layer(z)
       if isinstance(layer, nn.Linear):
         layers.append(z)
-    return z, layers
+    return z, layers, buckets
 
 class PSTModel(nn.Module):
   def __init__(self):

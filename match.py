@@ -552,7 +552,7 @@ def main(concurrency, args):
       if epd_fens:
         fens.append(epd_fens[g % len(epd_fens)])
       elif args.opening == "random":
-        fens.append(random_opening(ply=args.opening_random_ply))
+        fens.append(random_opening(args.opening_random_ply))
       else:
         fens.append(chess.STARTING_FEN)
     matchup_fens[key] = fens

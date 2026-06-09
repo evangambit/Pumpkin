@@ -15,7 +15,7 @@ import torch.utils.data as tdata
 from sharded_matrix import ShardedLoader
 from ShardedMatricesIterableDataset import ShardedMatricesIterableDataset, SingleShardedMatrixIterator, DynamicShardedMatrixIterator
 from features import board2x, x2board
-from accumulator import Emb
+from accumulator import Emb, kKingBuckets
 from nnue_model import NNUE
 
 import dataset as ndata
@@ -61,13 +61,14 @@ CHUNK_SIZE = 128
 assert BATCH_SIZE % CHUNK_SIZE == 0
 
 def collate_fn(rows):
-  values, lengths, labels, _ , kings = zip(*rows)
+  values, lengths, labels, kings, lateness = zip(*rows)
   values = torch.from_numpy(np.concatenate(values))
   lengths = torch.from_numpy(np.concatenate(lengths))
   labels = torch.from_numpy(np.stack(labels))
   kings = torch.from_numpy(np.concatenate(kings))
+  lateness = torch.from_numpy(np.concatenate(lateness))
   labels = labels.reshape(labels.shape[0] * labels.shape[1], *labels.shape[2:])
-  return values, lengths, labels, kings
+  return values, lengths, labels, kings, lateness
 
 
 if __name__ == "__main__":
@@ -82,6 +83,7 @@ if __name__ == "__main__":
 
   print("Loading dataset...")
   dataset = ndata.NnueDataset([r'data/de7-md4/pos.shuf.txt'])
+  # dataset = ndata.NnueDataset([r'data/de7-md4/tiny.txt'])
 
   print(f'Dataset loaded with {len(dataset) * CHUNK_SIZE} rows.')
 
@@ -90,6 +92,12 @@ if __name__ == "__main__":
   print("Creating model...")
   # Simple hiiden_sizes=[1] yields (loss: 0.0262, mse: 0.6076, penalty: 0.2377)
   # loss: 0.0142, mse: 0.3296, penalty: 0.0075
+  teacher = NNUE(hidden_sizes=[1024, 64, 64], output_size=1).to(device)
+  with open('runs/20260608-205859/model.pt', 'rb') as f:
+    teacher.load_state_dict(torch.load(f))
+
+  teacher.eval()
+
   model = NNUE(hidden_sizes=[256, 16], output_size=1).to(device)
 
   print("Creating optimizer...")
@@ -153,16 +161,22 @@ if __name__ == "__main__":
       scheduler.step()
       
       batch = [x.to(device) for x in batch]
-      values, lengths, label, kings = batch
+      values, lengths, label, kings, lateness = batch
       t_transfer = time.time()
 
-      output, layers = model(values, lengths, kings)
+      output, layers, _ = model(values, lengths, kings)
 
       penalty = 0.0
       for layer_output in layers:
         penalty += (layer_output.mean() ** 2 + (layer_output.std() - 1.0) ** 2)
 
       output = torch.sigmoid(output)[:,0]
+
+      if teacher is not None:
+        with torch.no_grad():
+          teacher_output, _, _ = teacher(values, lengths, kings)
+          teacher_output = torch.sigmoid(teacher_output)[:,0]
+          label = label * 0.5 + teacher_output * 0.5
 
       assert output.shape == label.shape, f"{output.shape} vs {label.shape}"
       loss = (torch.abs(output - label)**2.5).mean()
@@ -215,12 +229,12 @@ if __name__ == "__main__":
   plt.xlabel('Predicted Score')
   plt.ylabel('Actual Score')
   plt.scatter(output, label, alpha=0.1)
-  plt.scatter(np.convolve(output, np.ones(100)/100, mode='valid'), np.convolve(label, np.ones(100)/100, mode='valid'), color='red', label='moving average')
+  plt.scatter(np.convolve(output, np.ones(50)/50, mode='valid'), np.convolve(label, np.ones(50)/50, mode='valid'), color='red', label='moving average (50)')
+  plt.scatter(np.convolve(output, np.ones(200)/200, mode='valid'), np.convolve(label, np.ones(200)/200, mode='valid'), color='red', label='moving average (200)')
   plt.savefig(os.path.join(run_dir, 'nnue-scatter.png'))
 
   plt.figure(figsize=(10,10))
-  plt.plot(np.convolve(metrics['loss'][500:], np.ones(100)/100, mode='valid'), label='loss (smooth=100)')
-  plt.plot(np.convolve(metrics['loss'][500:], np.ones(150)/150, mode='valid'), label='loss (smooth=150)')
+  plt.plot(np.convolve(metrics['loss'][500:], np.ones(50)/50, mode='valid'), label='loss (smooth=50)')
   plt.plot(np.convolve(metrics['loss'][500:], np.ones(200)/200, mode='valid'), label='loss (smooth=200)')
   plt.plot(metrics['loss'][500:], label='loss', alpha=0.3)
   plt.grid()
