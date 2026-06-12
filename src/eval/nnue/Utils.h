@@ -55,7 +55,7 @@ inline int16_t flip_feature_index(int16_t index) {
 
 // Shift used for int16_t fixed-point scaling.
 constexpr int SCALE_SHIFT = 8;
-constexpr int EMBEDDING_DIM = 256;
+constexpr int EMBEDDING_DIM = 384;
 constexpr int HIDDEN1_DIM = 16;
 constexpr int OUTPUT_DIM = 1;
 

@@ -92,13 +92,14 @@ if __name__ == "__main__":
   print("Creating model...")
   # Simple hiiden_sizes=[1] yields (loss: 0.0262, mse: 0.6076, penalty: 0.2377)
   # loss: 0.0142, mse: 0.3296, penalty: 0.0075
-  teacher = NNUE(hidden_sizes=[1024, 64, 64], output_size=1).to(device)
-  with open('runs/20260608-205859/model.pt', 'rb') as f:
-    teacher.load_state_dict(torch.load(f))
 
+  # teacher = None
+  teacher = NNUE(hidden_sizes=[1024, 256, 128], output_size=1).to(device)
+  with open('runs/20260610-084538/model.pt', 'rb') as f:
+    teacher.load_state_dict(torch.load(f))
   teacher.eval()
 
-  model = NNUE(hidden_sizes=[256, 16], output_size=1).to(device)
+  model = NNUE(hidden_sizes=[384, 16], output_size=1).to(device)
 
   print("Creating optimizer...")
   opt = torch.optim.AdamW(model.parameters(), lr=0.0, weight_decay=1.0)
