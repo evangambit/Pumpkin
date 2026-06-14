@@ -799,14 +799,8 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
   const auto& searchHyperParams = thread->shared_->search_hyper_params;
 
   // Razoring.
-  //  # PLAYER     :  RATING  ERROR  POINTS  PLAYED   (%)
-  //  1 uci-50     :     2.7    1.8  7267.5   14400    50
-  //  2 uci-150    :     1.5    2.3  4010.0    8000    50
-  //  3 uci-100    :     0.2    1.8  6660.5   13329    50
-  //  4 uci-200    :    -1.7    2.9  2388.0    4800    50
-  //  5 old        :    -2.6    1.9  5803.0   11729    49
   #if EVAL_AGNOSTIC == 0
-  if (SEARCH_TYPE != SearchType::ROOT && depth == 1 && frame->staticEval < alpha.value - searchHyperParams.razoring_margin) {
+  if (SEARCH_TYPE != SearchType::ROOT && depth <= 2 && frame->staticEval < alpha.value - searchHyperParams.razoring_margin * depth * depth) {
     const auto r = qsearch<TURN>(thread, alpha, beta, plyFromRoot, 0, frame, stopThinking);
     if (IS_PRINT_NODE) {
       std::cout << repeat("  ", plyFromRoot) << "Razoring: static eval is much worse than alpha. Returning from quiescence search: " << r << std::endl;
