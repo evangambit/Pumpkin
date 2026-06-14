@@ -33,6 +33,9 @@ typedef ChessEngine::File File;
 
 namespace NNUE {
 
+typedef ChessEngine::Piece Piece;
+typedef ChessEngine::Color Color;
+
 double randn(double stddev = 1.0);
 
 NnueFeatureBitmapType cp2nfbt(ChessEngine::ColoredPiece cp);
@@ -112,6 +115,7 @@ inline ChessEngine::Bitboard nnue_feature_to_bitboard(
       if (pos.currentState_.castlingRights & ChessEngine::kCastlingRights_WhiteQueen) {
         r |= ChessEngine::bb(1);
       }
+      // We can have separate embeddings for passed pawns, so it is redundant to include them as regular pawns.
       r &= ~whitePawnAnalysis.ourPassedPawns;
       return r;
     }
@@ -127,6 +131,16 @@ inline ChessEngine::Bitboard nnue_feature_to_bitboard(
       return pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_KING];
     case NF_WHITE_PASSED_PAWN:
       return whitePawnAnalysis.ourPassedPawns;
+    case NF_HANGING_WHITE_PAWN:
+      return threats.badForOur<Color::WHITE>(Piece::PAWN) & pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_PAWN];
+    case NF_HANGING_WHITE_KNIGHT:
+      return threats.badForOur<Color::WHITE>(Piece::KNIGHT) & pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_KNIGHT];
+    case NF_HANGING_WHITE_BISHOP:
+      return threats.badForOur<Color::WHITE>(Piece::BISHOP) & pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_BISHOP];
+    case NF_HANGING_WHITE_ROOK:
+      return threats.badForOur<Color::WHITE>(Piece::ROOK) & pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_ROOK];
+    case NF_HANGING_WHITE_QUEEN:
+      return threats.badForOur<Color::WHITE>(Piece::QUEEN) & pos.pieceBitboards_[ChessEngine::ColoredPiece::WHITE_QUEEN];
     case NF_BLACK_PAWN: {
       ChessEngine::Bitboard r = pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_PAWN];
       if (pos.currentState_.castlingRights & ChessEngine::kCastlingRights_BlackKing) {
@@ -150,6 +164,16 @@ inline ChessEngine::Bitboard nnue_feature_to_bitboard(
       return pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_KING];
     case NF_BLACK_PASSED_PAWN:
       return whitePawnAnalysis.theirPassedPawns;
+    case NF_HANGING_BLACK_PAWN:
+      return threats.badForOur<Color::BLACK>(Piece::PAWN) & pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_PAWN];
+    case NF_HANGING_BLACK_KNIGHT:
+      return threats.badForOur<Color::BLACK>(Piece::KNIGHT) & pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_KNIGHT];
+    case NF_HANGING_BLACK_BISHOP:
+      return threats.badForOur<Color::BLACK>(Piece::BISHOP) & pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_BISHOP];
+    case NF_HANGING_BLACK_ROOK:
+      return threats.badForOur<Color::BLACK>(Piece::ROOK) & pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_ROOK];
+    case NF_HANGING_BLACK_QUEEN:
+      return threats.badForOur<Color::BLACK>(Piece::QUEEN) & pos.pieceBitboards_[ChessEngine::ColoredPiece::BLACK_QUEEN];
     default:
       std::cerr << "Invalid NnueFeatureBitmapType: " << feature << std::endl;
   }

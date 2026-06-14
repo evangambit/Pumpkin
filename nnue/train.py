@@ -95,11 +95,12 @@ if __name__ == "__main__":
 
   # teacher = None
   teacher = NNUE(hidden_sizes=[1024, 256, 128], output_size=1).to(device)
-  with open('runs/20260610-084538/model.pt', 'rb') as f:
+  with open('runs/20260613-122411/model.pt', 'rb') as f:
     teacher.load_state_dict(torch.load(f))
   teacher.eval()
 
   model = NNUE(hidden_sizes=[384, 16], output_size=1).to(device)
+  # model = NNUE(hidden_sizes=[1024, 256, 128], output_size=1).to(device)
 
   print("Creating optimizer...")
   opt = torch.optim.AdamW(model.parameters(), lr=0.0, weight_decay=1.0)
@@ -164,6 +165,9 @@ if __name__ == "__main__":
       batch = [x.to(device) for x in batch]
       values, lengths, label, kings, lateness = batch
       t_transfer = time.time()
+
+      if batch_idx == 0:
+        print(values.max(), lengths.max())
 
       output, layers, _ = model(values, lengths, kings)
 

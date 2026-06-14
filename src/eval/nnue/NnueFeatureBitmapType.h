@@ -17,6 +17,12 @@ enum NnueFeatureBitmapType {
   // without us explicitly encoding it as a feature.
   NF_WHITE_KING,
   NF_WHITE_PASSED_PAWN,
+  NF_HANGING_WHITE_PAWN,
+  NF_HANGING_WHITE_KNIGHT,
+  NF_HANGING_WHITE_BISHOP,
+  NF_HANGING_WHITE_ROOK,
+  NF_HANGING_WHITE_QUEEN,
+
   NF_BLACK_PAWN,
   NF_BLACK_KNIGHT,
   NF_BLACK_BISHOP,
@@ -24,6 +30,11 @@ enum NnueFeatureBitmapType {
   NF_BLACK_QUEEN,
   NF_BLACK_KING,
   NF_BLACK_PASSED_PAWN,
+  NF_HANGING_BLACK_PAWN,
+  NF_HANGING_BLACK_KNIGHT,
+  NF_HANGING_BLACK_BISHOP,
+  NF_HANGING_BLACK_ROOK,
+  NF_HANGING_BLACK_QUEEN,
   NF_COUNT
 };
 static_assert(NF_COUNT % 2 == 0, "NF_COUNT must be even");
@@ -91,6 +102,11 @@ inline std::string nnue_feature_to_string(NnueFeatureBitmapType feature) {
     case NF_WHITE_QUEEN: return "White Queen";
     case NF_WHITE_KING: return "White King";
     case NF_WHITE_PASSED_PAWN: return "White Passed Pawn";
+    case NF_HANGING_WHITE_PAWN: return "Hanging White Pawn";
+    case NF_HANGING_WHITE_KNIGHT: return "Hanging White Knight";
+    case NF_HANGING_WHITE_BISHOP: return "Hanging White Bishop";
+    case NF_HANGING_WHITE_ROOK: return "Hanging White Rook";
+    case NF_HANGING_WHITE_QUEEN: return "Hanging White Queen";
     case NF_BLACK_PAWN: return "Black Pawn";
     case NF_BLACK_KNIGHT: return "Black Knight";
     case NF_BLACK_BISHOP: return "Black Bishop";
@@ -98,6 +114,11 @@ inline std::string nnue_feature_to_string(NnueFeatureBitmapType feature) {
     case NF_BLACK_QUEEN: return "Black Queen";
     case NF_BLACK_KING: return "Black King";
     case NF_BLACK_PASSED_PAWN: return "Black Passed Pawn";
+    case NF_HANGING_BLACK_PAWN: return "Hanging Black Pawn";
+    case NF_HANGING_BLACK_KNIGHT: return "Hanging Black Knight";
+    case NF_HANGING_BLACK_BISHOP: return "Hanging Black Bishop";
+    case NF_HANGING_BLACK_ROOK: return "Hanging Black Rook";
+    case NF_HANGING_BLACK_QUEEN: return "Hanging Black Queen";
     default:
       std::cerr << "Invalid NnueFeatureBitmapType: " << feature << std::endl;
       return "Invalid Feature";
