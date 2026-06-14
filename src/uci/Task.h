@@ -69,10 +69,10 @@ struct UciEngineState {
     evaluator->load_from_stream(f);
     this->position.set_listener(evaluator);
     #elif DEFAULT_EVALUATOR == 'n'
-    auto nnue_model = std::make_shared<NNUE::Nnue>();
+    auto nnue_model = std::make_shared<NNUE::Nnue<int16_t>>();
     std::istringstream f(std::string(model_bin, model_bin_len));
     nnue_model->load(f);
-    this->position.set_listener(std::make_shared<NNUE::NnueEvaluator>(nnue_model));
+    this->position.set_listener(std::make_shared<NNUE::NnueEvaluator<int16_t>>(nnue_model));
     #else
     static_assert(false, "Invalid DEFAULT_EVALUATOR");
     #endif
