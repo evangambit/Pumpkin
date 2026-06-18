@@ -95,7 +95,7 @@ if __name__ == "__main__":
 
   # teacher = None
   teacher = NNUE(hidden_sizes=[1024, 256, 128], output_size=1).to(device)
-  with open('runs/20260613-122411/model.pt', 'rb') as f:
+  with open('runs/20260618-021209/model.pt', 'rb') as f:
     teacher.load_state_dict(torch.load(f))
   teacher.eval()
 
@@ -112,7 +112,7 @@ if __name__ == "__main__":
     return int(c / (1 - beta))
 
   # Calculate total steps
-  NUM_EPOCHS = 1
+  NUM_EPOCHS = 2
   steps_per_epoch = len(dataloader)
   total_steps = NUM_EPOCHS * steps_per_epoch
   warmup_steps = warmup_length(0.999) # AdamW's beta is 0.999.
