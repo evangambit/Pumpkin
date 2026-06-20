@@ -9,7 +9,7 @@
 
 #include "../game/Position.h"
 #include "../game/Move.h"
-#include "../SpinLock.h"
+#include "../utils/SpinLock.h"
 
 namespace ChessEngine {
 

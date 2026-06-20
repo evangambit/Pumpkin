@@ -6,7 +6,7 @@
 #include "../eval/byhand/byhand.h"
 #include "../search/transposition_table.h"
 #include "../search/negamax.h"
-#include "../SpinLock.h"
+#include "../utils/SpinLock.h"
 
 #include <atomic>
 #include <condition_variable>
