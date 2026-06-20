@@ -494,6 +494,95 @@ inline void matmul(Matrix<HEIGHT, WIDTH, int16_t>& mat, const Vector<WIDTH, int1
   }
 }
 
+template<size_t HEIGHT, size_t WIDTH>
+inline void matmul(Matrix<HEIGHT, WIDTH, int8_t>& mat, const Vector<WIDTH, int16_t>& vec, Vector<HEIGHT, int16_t>* out) {
+  for (size_t i = 0; i < HEIGHT; ++i) {
+    int32_t sum = 0;
+#if defined(__ARM_NEON) || defined(__aarch64__)
+    int32x4_t sum_vec = vdupq_n_s32(0);
+    size_t j = 0;
+    for (; j + 15 < WIDTH; j += 16) {
+      int8x8_t m0 = vld1_s8(&mat.data[i * WIDTH + j]);
+      int16x8_t v0 = vld1q_s16(&vec.data[j]);
+      int8x8_t m1 = vld1_s8(&mat.data[i * WIDTH + j + 8]);
+      int16x8_t v1 = vld1q_s16(&vec.data[j + 8]);
+
+      // Multiply int8 * int16 to get int32
+      int16x8_t m0_ext = vmovl_s8(m0);
+      int16x8_t m1_ext = vmovl_s8(m1);
+      
+      sum_vec = vmlal_s16(sum_vec, vget_low_s16(m0_ext), vget_low_s16(v0));
+      sum_vec = vmlal_s16(sum_vec, vget_high_s16(m0_ext), vget_high_s16(v0));
+      
+      sum_vec = vmlal_s16(sum_vec, vget_low_s16(m1_ext), vget_low_s16(v1));
+      sum_vec = vmlal_s16(sum_vec, vget_high_s16(m1_ext), vget_high_s16(v1));
+    }
+    for (; j + 7 < WIDTH; j += 8) {
+      int8x8_t m0 = vld1_s8(&mat.data[i * WIDTH + j]);
+      int16x8_t v0 = vld1q_s16(&vec.data[j]);
+      
+      int16x8_t m0_ext = vmovl_s8(m0);
+      sum_vec = vmlal_s16(sum_vec, vget_low_s16(m0_ext), vget_low_s16(v0));
+      sum_vec = vmlal_s16(sum_vec, vget_high_s16(m0_ext), vget_high_s16(v0));
+    }
+    sum = vaddvq_s32(sum_vec);
+    for (; j < WIDTH; ++j) {
+      sum += static_cast<int32_t>(mat.data[i * WIDTH + j]) * static_cast<int32_t>(vec.data[j]);
+    }
+#elif defined(__AVX2__)
+    __m256i sum0 = _mm256_setzero_si256();
+    size_t j = 0;
+    for (; j + 31 < WIDTH; j += 32) {
+      // Load 32 int8_t values from matrix
+      __m256i m0 = _mm256_load_si256((const __m256i*)&mat.data[i * WIDTH + j]);
+      // Load 16 int16_t values (first half)
+      __m256i v0 = _mm256_load_si256((const __m256i*)&vec.data[j]);
+      // Load 16 int16_t values (second half)
+      __m256i v1 = _mm256_load_si256((const __m256i*)&vec.data[j + 16]);
+      
+      // Sign-extend int8 to int16
+      __m256i m0_lo = _mm256_cvtepi8_epi16(_mm256_castsi256_si128(m0));
+      __m256i m0_hi = _mm256_cvtepi8_epi16(_mm256_extracti128_si256(m0, 1));
+      
+      // Multiply int16 * int16 to get int32
+      sum0 = _mm256_add_epi32(sum0, _mm256_madd_epi16(m0_lo, v0));
+      sum0 = _mm256_add_epi32(sum0, _mm256_madd_epi16(m0_hi, v1));
+    }
+    for (; j + 15 < WIDTH; j += 16) {
+      __m128i m0 = _mm_load_si128((const __m128i*)&mat.data[i * WIDTH + j]);
+      __m256i v0 = _mm256_load_si256((const __m256i*)&vec.data[j]);
+      
+      __m256i m0_ext = _mm256_cvtepi8_epi16(m0);
+      sum0 = _mm256_add_epi32(sum0, _mm256_madd_epi16(m0_ext, v0));
+    }
+    __m128i sum128 = _mm_add_epi32(_mm256_castsi256_si128(sum0), _mm256_extracti128_si256(sum0, 1));
+    sum128 = _mm_add_epi32(sum128, _mm_shuffle_epi32(sum128, _MM_SHUFFLE(1, 0, 3, 2)));
+    sum128 = _mm_add_epi32(sum128, _mm_shuffle_epi32(sum128, _MM_SHUFFLE(2, 3, 0, 1)));
+    sum = _mm_cvtsi128_si32(sum128);
+    for (; j < WIDTH; ++j) {
+      sum += static_cast<int32_t>(mat.data[i * WIDTH + j]) * static_cast<int32_t>(vec.data[j]);
+    }
+#else
+    for (size_t j = 0; j < WIDTH; ++j) {
+      sum += static_cast<int32_t>(mat.data[i * WIDTH + j]) * static_cast<int32_t>(vec.data[j]);
+    }
+#endif
+    sum >>= SCALE_SHIFT;
+    out->data[i] = static_cast<int16_t>(std::max(-(1 << 15), std::min(static_cast<int32_t>(1 << 15) - 1, sum)));
+  }
+}
+
+template<size_t HEIGHT, size_t WIDTH>
+inline void matmul(Matrix<HEIGHT, WIDTH, int8_t>& mat, const Vector<WIDTH, float>& vec, Vector<HEIGHT, float>* out) {
+  for (size_t i = 0; i < HEIGHT; ++i) {
+    float sum = 0;
+    for (size_t j = 0; j < WIDTH; ++j) {
+      sum += static_cast<float>(mat.data[i * WIDTH + j]) * vec.data[j];
+    }
+    out->data[i] = sum;
+  }
+}
+
 /**
  * Performs matmul(mat, concat(vec1, vec2)), where concat(vec1, vec2) is the concatenation of the two vectors.
  */
