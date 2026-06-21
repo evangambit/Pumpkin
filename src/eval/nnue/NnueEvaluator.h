@@ -20,6 +20,15 @@ using namespace ChessEngine;
 
 namespace NNUE {
 
+inline int16_t compute_lateness(const Position& pos) {
+    int lateness = 0;
+    lateness += (std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_KNIGHT]) + std::popcount(pos.pieceBitboards_[ColoredPiece::BLACK_KNIGHT]));
+    lateness += (std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_BISHOP]) + std::popcount(pos.pieceBitboards_[ColoredPiece::BLACK_BISHOP]));
+    lateness += (std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_ROOK]) + std::popcount(pos.pieceBitboards_[ColoredPiece::BLACK_ROOK]));
+    lateness += (std::popcount(pos.pieceBitboards_[ColoredPiece::WHITE_QUEEN]) + std::popcount(pos.pieceBitboards_[ColoredPiece::BLACK_QUEEN])) * 3;
+    return static_cast<int16_t>(std::min(lateness, 18));
+}
+
 inline std::string diff_bstr(Bitboard oldb, Bitboard newb) {
   std::string result;
   for (int y = 0; y < 8; ++y) {
@@ -241,7 +250,9 @@ struct NnueEvaluator : public EvaluatorInterface {
     }
     int16_t score;
     if (std::is_same<T, int16_t>::value) {
-      score = eval[0];
+      int32_t lateness = compute_lateness(pos);
+      score = (eval[0] * (18 - lateness) + eval[1] * lateness) / 18;
+       // score = eval[0];
     } else {
       const int64_t v = std::round(eval[0] * (1 << SCALE_SHIFT));
       const int64_t maxVal = (1 << 15) - 1;

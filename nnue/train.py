@@ -16,7 +16,7 @@ from sharded_matrix import ShardedLoader
 from ShardedMatricesIterableDataset import ShardedMatricesIterableDataset, SingleShardedMatrixIterator, DynamicShardedMatrixIterator
 from features import board2x, x2board
 from accumulator import Emb, kKingBuckets
-from nnue_model import NNUE
+from nnue_model import NNUE, OLDNNUE
 
 import dataset as ndata
 
@@ -94,7 +94,7 @@ if __name__ == "__main__":
   # loss: 0.0142, mse: 0.3296, penalty: 0.0075
 
   # teacher = None
-  teacher = NNUE(hidden_sizes=[1024, 256, 128], output_size=1).to(device)
+  teacher = OLDNNUE(hidden_sizes=[1024, 256, 128], output_size=1).to(device)
   with open('runs/20260618-021209/model.pt', 'rb') as f:
     teacher.load_state_dict(torch.load(f))
   teacher.eval()
@@ -164,12 +164,14 @@ if __name__ == "__main__":
       
       batch = [x.to(device) for x in batch]
       values, lengths, label, kings, lateness = batch
+      lateness = lateness.float().clip(0, 18) / 18.0
       t_transfer = time.time()
 
       if batch_idx == 0:
         print(values.max(), lengths.max())
 
-      output, layers, _ = model(values, lengths, kings)
+      output, layers, _ = model(values, lengths, kings, lateness.unsqueeze(1))
+      assert len(output.shape) == 2 and output.shape[1] == 1
 
       penalty = 0.0
       for layer_output in layers:
@@ -239,9 +241,9 @@ if __name__ == "__main__":
   plt.savefig(os.path.join(run_dir, 'nnue-scatter.png'))
 
   plt.figure(figsize=(10,10))
-  plt.plot(np.convolve(metrics['loss'][500:], np.ones(50)/50, mode='valid'), label='loss (smooth=50)')
-  plt.plot(np.convolve(metrics['loss'][500:], np.ones(200)/200, mode='valid'), label='loss (smooth=200)')
-  plt.plot(metrics['loss'][500:], label='loss', alpha=0.3)
+  plt.plot(np.convolve(metrics['loss'][1000:], np.ones(50)/50, mode='valid'), label='loss (smooth=50)')
+  plt.plot(np.convolve(metrics['loss'][1000:], np.ones(500)/500, mode='valid'), label='loss (smooth=200)')
+  plt.plot(metrics['loss'][1000:], label='loss', alpha=0.3)
   plt.grid()
   plt.legend()
   plt.savefig(os.path.join(run_dir, 'nnue-loss.png'))

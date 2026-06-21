@@ -10,9 +10,9 @@ class CReLU(nn.Module):
   def forward(self, x):
     return x.clip(0, 1)
 
-class NNUE(nn.Module):
+class OLDNNUE(nn.Module):
   def __init__(self, hidden_sizes: list[int], output_size: int):
-    super(NNUE, self).__init__()
+    super(OLDNNUE, self).__init__()
     self.emb = Emb(dout=hidden_sizes[0])
     layers = []
     hidden_sizes[0] *= 2
@@ -39,6 +39,39 @@ class NNUE(nn.Module):
       if isinstance(layer, nn.Linear):
         layers.append(z)
     return z, layers, buckets
+
+class NNUE(nn.Module):
+  def __init__(self, hidden_sizes: list[int], output_size: int):
+    super(NNUE, self).__init__()
+    self.emb = Emb(dout=hidden_sizes[0])
+    layers = []
+    hidden_sizes[0] *= 2
+    output_size *= 2
+    for i in range(len(hidden_sizes) - 1):
+      layers.append(nn.Linear(hidden_sizes[i], hidden_sizes[i + 1]))
+      layers.append(CReLU())
+    layers.append(nn.Linear(hidden_sizes[-1], output_size))
+    for layer in layers:
+      if isinstance(layer, nn.Linear):
+        nn.init.kaiming_normal_(layer.weight, nonlinearity='relu')
+        nn.init.zeros_(layer.bias)
+    self.mlp = nn.Sequential(*layers)
+
+  def embed(self, values, lengths, kings):
+    z_us, z_them, buckets = self.emb(values, lengths, kings)
+    return torch.cat([z_us, z_them], dim=1), buckets
+
+  def forward(self, values, lengths, kings, lateness):
+    # Turn is 1 for white to move, -1 for black to move
+    z, buckets = self.embed(values, lengths, kings)
+    layers = []
+    for layer in self.mlp:
+      z = layer(z)
+      if isinstance(layer, nn.Linear):
+        layers.append(z)
+    dout = z.shape[1] // 2
+    yhat = z[:,0:dout] * (1.0 - lateness) + z[:,dout:] * lateness
+    return yhat, layers, buckets
 
 class PSTModel(nn.Module):
   def __init__(self):

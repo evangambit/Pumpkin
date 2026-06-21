@@ -94,7 +94,7 @@ class Emb(nn.Module):
     # Flip waiter's king to their perspective before bucket lookup
     waiter_king = (7 - waiter_king // 8) * 8 + waiter_king % 8
 
-    # Flip kings to left side (if necessary) and conver to 8x4 coordinates for bucket lookup.
+    # Flip kings to left side (if necessary) and convert to 8x4 coordinates for bucket lookup.
     flip_mover = mover_king % 8 >= 4
     flip_waiter = waiter_king % 8 >= 4
     mover_king = mover_king // 8 * 4 + torch.where(flip_mover, 7 - mover_king % 8, mover_king % 8)

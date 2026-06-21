@@ -72,7 +72,7 @@ struct Matrix {
     uint32_t degree;
     in.read(reinterpret_cast<char*>(&degree), sizeof(uint32_t));
     if (degree != 2) {
-      throw std::runtime_error("Only 2D matrices are supported");
+      throw std::runtime_error("Only 2D matrices are supported; cannot load matrix with degree " + std::to_string(degree));
     }
     uint32_t rows, cols;
     in.read(reinterpret_cast<char*>(&rows), sizeof(uint32_t));

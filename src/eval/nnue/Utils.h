@@ -60,7 +60,7 @@ inline int16_t flip_feature_index(int16_t index) {
 constexpr int SCALE_SHIFT = 8;
 constexpr int EMBEDDING_DIM = 384;
 constexpr int HIDDEN1_DIM = 16;
-constexpr int OUTPUT_DIM = 1;
+constexpr int OUTPUT_DIM = 2;
 
 struct Features {
   ChessEngine::SafeSquare whiteKingSquare;
