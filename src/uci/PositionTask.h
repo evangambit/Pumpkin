@@ -9,6 +9,7 @@
 #include <sstream>
 #include <unordered_set>
 
+#include "../utils/Log.h"
 #include "Task.h"
 
 namespace ChessEngine {
@@ -64,10 +65,12 @@ class PositionTask : public Task {
         }
       }
       if (!foundMove) {
+        LOG("[position] illegal move %s fen=%s", uciMove.c_str(), state->position.fen().c_str());
         std::cout << "Could not find move " << repr(uciMove) << std::endl;
         return;
       }
     }
+    LOG("[position] updated fen=%s", state->position.fen().c_str());
   }
  private:
   std::deque<std::string> command;

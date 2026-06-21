@@ -2,6 +2,7 @@
 #!/bin/bash
 
 # Base compiler flags
+# Add -DENABLE_LOGGING=1 for async file logging (see src/utils/Log.h).
 CXXFLAGS="-std=c++20"
 LDFLAGS="-pthread -L/usr/local/lib -lgflags -lz"
 INCLUDE_FLAGS=""

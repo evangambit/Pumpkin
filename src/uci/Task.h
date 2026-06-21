@@ -35,6 +35,13 @@ void invalid(const std::string& command, const std::string& message) {
 
 struct UciEngineState;
 
+class Task;
+
+struct QueuedTask {
+  std::string command;
+  std::shared_ptr<Task> task;
+};
+
 class Task {
  public:
   virtual void start(UciEngineState *state) = 0;
@@ -83,9 +90,11 @@ struct UciEngineState {
   // Signals input and worker loops to stop waiting and exit on shutdown/EOF.
   std::atomic<bool> shuttingDown = false;
 
-  std::deque<std::shared_ptr<Task>> taskQueue;
+  std::deque<QueuedTask> taskQueue;
   SpinLock taskQueueLock;
   std::shared_ptr<Task> currentTask;
+  std::string currentCommandText;
+  bool currentCommandActive = false;
   std::shared_ptr<std::atomic<bool>> stopThinking = std::make_shared<std::atomic<bool>>(false);
 
   std::shared_ptr<TranspositionTable> tt_;

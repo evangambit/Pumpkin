@@ -3,6 +3,7 @@
 #include "../game/movegen/movegen.h"
 #include "../game/Utils.h"
 #include "../utils/StringUtils.h"
+#include "../utils/Log.h"
 #include "GoTask.h"
 #include "SelfPlayTask.h"
 #include "Task.h"
@@ -19,6 +20,18 @@
 #include <unordered_set>
 
 using namespace ChessEngine;
+
+static void finish_current_uci_command(UciEngineState *state) {
+  if (state->currentCommandActive) {
+    LOG("[uci] end: %s", state->currentCommandText.c_str());
+    state->currentCommandActive = false;
+    state->currentCommandText.clear();
+  }
+}
+
+static void enqueue_uci_task(UciEngineState *state, const std::string& command, std::shared_ptr<Task> task) {
+  state->taskQueue.push_back(QueuedTask{command, task});
+}
 
 class IsReadyTask : public Task {
  public:
@@ -38,11 +51,13 @@ bool wait_for_task(UciEngineState *state) {
     return false;
   }
   state->taskQueueLock.unlock();
+  LOG("[eventRunner] waiting for task (queue empty)");
   while (true) {
     std::unique_lock<std::mutex> lock(state->mutex);
     state->condVar.wait(lock);  // Wait for data
     state->taskQueueLock.lock();
     if (state->taskQueue.size() > 0) {
+      LOG("[eventRunner] woke up, queue size=%zu", state->taskQueue.size());
       state->taskQueueLock.unlock();
       return true;
     }
@@ -89,6 +104,7 @@ struct UciEngine {
 
     if (commands.size() == 0) {
       print_preamble(state);
+      LOG("[uci] end: uci");
     }
 
     for (std::string command : commands) {
@@ -99,28 +115,43 @@ struct UciEngine {
     }
 
     std::thread eventRunner([state]() {
+      LOG("[eventRunner] started");
       while (true) {
         if (!wait_for_task(state)) {
+          LOG("[eventRunner] exiting (shutdown)");
           return;
         }
 
         // Wait until not busy.
         state->taskQueueLock.lock();
         while (state->currentTask != nullptr && state->currentTask->is_running()) {
+          LOG("[eventRunner] blocked waiting for current task to finish (running=%d queue=%zu)",
+            state->currentTask->is_running() ? 1 : 0,
+            state->taskQueue.size());
           state->taskQueueLock.unlock();
           std::unique_lock<std::mutex> lock(state->mutex);
           state->condVar.wait(lock);  // Wait for data
           state->taskQueueLock.lock();
         }
+        finish_current_uci_command(state);
 
         if (state->taskQueue.size() == 0) {
+          state->taskQueueLock.unlock();
           throw std::runtime_error("No task to enque");
         }
 
-        state->currentTask = state->taskQueue.front();
+        QueuedTask queued = state->taskQueue.front();
         state->taskQueue.pop_front();
-        state->currentTask->start(state);
+        state->currentTask = queued.task;
+        state->currentCommandText = queued.command;
         state->taskQueueLock.unlock();
+
+        LOG("[uci] start: %s", state->currentCommandText.c_str());
+        state->currentCommandActive = true;
+        state->currentTask->start(state);
+        if (!state->currentTask->is_running()) {
+          finish_current_uci_command(state);
+        }
       }
     });
     while (true) {
@@ -132,6 +163,8 @@ struct UciEngine {
         break;
       }
       if (line == "quit") {
+        LOG("[uci] received: quit");
+        LOG("[uci] start: quit");
         state->shuttingDown.store(true);
         std::unique_lock<std::mutex> lock(this->state.mutex);
         this->state.condVar.notify_all();
@@ -145,8 +178,6 @@ struct UciEngine {
       }
 
       this->handle_uci_command(state, &line);
-
-      // Notify run-loop that there may be a new command.
       std::unique_lock<std::mutex> lock(this->state.mutex);
       this->state.condVar.notify_one();
     }
@@ -172,71 +203,81 @@ struct UciEngine {
       return;
     }
 
+    LOG("[uci] received: %s", command->c_str());
+
     state->taskQueueLock.lock();
     if (parts[0] == "position" || parts[0] == "p") {
-      state->taskQueue.push_back(std::make_shared<PositionTask>(parts));
+      enqueue_uci_task(state, *command, std::make_shared<PositionTask>(parts));
     } else if (parts[0] == "go") {
-      state->taskQueue.push_back(std::make_shared<GoTask>(parts));
+      enqueue_uci_task(state, *command, std::make_shared<GoTask>(parts));
     } else if (parts[0] == "setoption" || parts[0] == "so") {
-      state->taskQueue.push_back(std::make_shared<SetOptionTask>(parts));
+      enqueue_uci_task(state, *command, std::make_shared<SetOptionTask>(parts));
     } else if (parts[0] == "ucinewgame") {
-      state->taskQueue.push_back(std::make_shared<NewGameTask>());
+      enqueue_uci_task(state, *command, std::make_shared<NewGameTask>());
     } else if (parts[0] == "stop") {
       // This runs immediately.
+      LOG("[uci] start: %s", command->c_str());
       StopTask task;
       task.start(state);
+      LOG("[uci] end: %s", command->c_str());
     } else if (parts[0] == "printoptions") {
-      state->taskQueue.push_back(std::make_shared<PrintOptionsTask>());
+      enqueue_uci_task(state, *command, std::make_shared<PrintOptionsTask>());
     } else if (parts[0] == "isready") {
-      state->taskQueue.push_back(std::make_shared<IsReadyTask>());
+      enqueue_uci_task(state, *command, std::make_shared<IsReadyTask>());
     } else if (parts[0] == "move" || parts[0] == "m") {
-      state->taskQueue.push_back(std::make_shared<MoveTask>(parts));
+      enqueue_uci_task(state, *command, std::make_shared<MoveTask>(parts));
     } else if (parts[0] == "hash") {
-      state->taskQueue.push_back(std::make_shared<HashTask>());
+      enqueue_uci_task(state, *command, std::make_shared<HashTask>());
     } else if (parts[0] == "lazyquit") {
-      state->taskQueue.push_back(std::make_shared<QuitTask>());
+      enqueue_uci_task(state, *command, std::make_shared<QuitTask>());
     } else if (parts[0] == "printfen") {
-      state->taskQueue.push_back(std::make_shared<PrintFenTask>());
+      enqueue_uci_task(state, *command, std::make_shared<PrintFenTask>());
     } else if (parts[0] == "silence") {
-      state->taskQueue.push_back(std::make_shared<SilenceTask>(parts));
+      enqueue_uci_task(state, *command, std::make_shared<SilenceTask>(parts));
     #ifdef PRINT_DEBUG
     } else if (parts[0] == "printdebug") {
-      state->taskQueue.push_back(std::make_shared<PrintDebugTask>(parts));
+      enqueue_uci_task(state, *command, std::make_shared<PrintDebugTask>(parts));
     #endif
     } else if (parts[0] == "uci") {
       // It is convenient to pretend this is successful so we can set stuff up before cutechess-cli does its thing.
+      LOG("[uci] start: %s", command->c_str());
       print_preamble(state);
+      LOG("[uci] end: %s", command->c_str());
     } else if (parts[0] == "ponderhit") {
+      LOG("[uci] start: %s", command->c_str());
       if (state->sharedSearchThreadState) {
         state->sharedSearchThreadState->ponderHit();
       }
+      LOG("[uci] end: %s", command->c_str());
     } else if (parts[0] == "probe") {
       // For probing the TT from UCI.
-      state->taskQueue.push_back(std::make_shared<ProbeTask>(parts));
+      enqueue_uci_task(state, *command, std::make_shared<ProbeTask>(parts));
     } else if (parts[0] == "debug") {
+      LOG("[uci] start: %s", command->c_str());
       // Todo
+      LOG("[uci] end: %s", command->c_str());
     } else if (parts[0] == "evaluator") {
-      state->taskQueue.push_back(std::make_shared<SetEvaluatorTask>(parts));
+      enqueue_uci_task(state, *command, std::make_shared<SetEvaluatorTask>(parts));
     } else if (parts[0] == "selfplay") {
-      state->taskQueue.push_back(std::make_shared<SelfPlayTask>(parts));
+      enqueue_uci_task(state, *command, std::make_shared<SelfPlayTask>(parts));
     } else if (parts[0] == "eval") {
-      state->taskQueue.push_back(std::make_shared<EvalTask>(parts));
+      enqueue_uci_task(state, *command, std::make_shared<EvalTask>(parts));
     } else if (parts[0] == "fenerror") {
-      state->taskQueue.push_back(std::make_shared<FenErrorTask>(parts));
+      enqueue_uci_task(state, *command, std::make_shared<FenErrorTask>(parts));
     } else if (parts[0] == "nnueevaldebug") {
-      state->taskQueue.push_back(std::make_shared<NnueEvalDebugTask>(parts));
+      enqueue_uci_task(state, *command, std::make_shared<NnueEvalDebugTask>(parts));
     } else if (parts[0] == "byhandevaldebug") {
-      state->taskQueue.push_back(std::make_shared<ByHandEvalDebugTask>(parts));
+      enqueue_uci_task(state, *command, std::make_shared<ByHandEvalDebugTask>(parts));
     } else if (parts[0] == "increment") {
-      state->taskQueue.push_back(std::make_shared<IncrementWeightTask>(parts));
+      enqueue_uci_task(state, *command, std::make_shared<IncrementWeightTask>(parts));
     } else if (parts[0] == "increment_search") {
-      state->taskQueue.push_back(std::make_shared<IncrementSearchHyperParamTask>(parts));
+      enqueue_uci_task(state, *command, std::make_shared<IncrementSearchHyperParamTask>(parts));
     } else if (parts[0] == "dumpweights") {
-      state->taskQueue.push_back(std::make_shared<DumpWeightsTask>(parts));
+      enqueue_uci_task(state, *command, std::make_shared<DumpWeightsTask>(parts));
     } else if (parts[0] == "analyzefens") {
-      state->taskQueue.push_back(std::make_shared<AnalyzeFens>(parts));
+      enqueue_uci_task(state, *command, std::make_shared<AnalyzeFens>(parts));
     } else {
-      state->taskQueue.push_back(std::make_shared<UnrecognizedCommandTask>(parts));
+      enqueue_uci_task(state, *command, std::make_shared<UnrecognizedCommandTask>(parts));
     }
     state->taskQueueLock.unlock();
 
@@ -246,6 +287,10 @@ struct UciEngine {
 };
 
 int main(int argc, char *argv[]) {
+  std::string arg0 = argv[0];
+  LOG_INIT(arg0 + "-pumpkin.log");
+  LOG("Engine starting");
+
   std::string name = std::string("Pumpkin 0.0 (") + argv[0] + ")";
   std::cout << name << std::endl;
 
@@ -262,8 +307,11 @@ int main(int argc, char *argv[]) {
         return 0;
       }
       if (line == "uci") {
+        LOG("[uci] received: uci");
+        LOG("[uci] start: uci");
         break;
       } else {
+        LOG("[uci] received: %s", line.c_str());
         std::cout << "Unrecognized command " << repr(line) << std::endl;
       }
     }
@@ -276,4 +324,7 @@ int main(int argc, char *argv[]) {
   UciEngine engine;
   engine.state.name = name;
   engine.start(std::cin, commands);
+
+  LOG("Engine shutting down");
+  LOG_SHUTDOWN();
 }

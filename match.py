@@ -32,6 +32,10 @@ _active_processes_lock = threading.Lock()
 _active_processes = set()
 
 
+class EngineTimeoutError(Exception):
+  pass
+
+
 def _kill_all_engines():
   """Kill all active engine subprocesses to unblock workers."""
   with _active_processes_lock:
@@ -101,7 +105,7 @@ class UCIEngine:
     t.join(timeout=self.timeout)
     if t.is_alive():
       self.process.kill()
-      raise RuntimeError(f"Engine {self.name} timed out after {self.timeout}s")
+      raise EngineTimeoutError(f"Engine {self.name} timed out after {self.timeout}s")
     line = result[0].decode()
     if line == "":
       raise RuntimeError(f"Engine {self.name} crashed (empty read)")
@@ -240,6 +244,8 @@ def _play_game_with_fresh_engines(white_path, black_path, white_options, black_o
     try:
       white_engine = UCIEngine(white_path, white_options, timeout=timeout)
       white_name = white_engine.name
+    except EngineTimeoutError:
+      raise
     except Exception as e:
       result = "0-1"
       game = _make_forfeit_game(
@@ -255,6 +261,8 @@ def _play_game_with_fresh_engines(white_path, black_path, white_options, black_o
     try:
       black_engine = UCIEngine(black_path, black_options, timeout=timeout)
       black_name = black_engine.name
+    except EngineTimeoutError:
+      raise
     except Exception as e:
       result = "1-0"
       game = _make_forfeit_game(
@@ -629,6 +637,8 @@ def main(concurrency, args):
 
       try:
         games, pair_score, _ = future.result()
+      except EngineTimeoutError:
+        raise
       except Exception as e:
         print(f"  [{engine_names[i]} vs {engine_names[j]}] Pair {pair_num}: ERROR - {e}")
         submit_work()
@@ -814,6 +824,10 @@ if __name__ == "__main__":
   args = parser.parse_args()
   try:
     main(concurrency=args.concurrency, args=args)
+  except EngineTimeoutError as e:
+    _kill_all_engines()
+    print(f"\n  Engine timeout: {e}", file=sys.stderr)
+    sys.exit(1)
   except KeyboardInterrupt:
     _kill_all_engines()
     print("\n  Interrupted.")

@@ -19,6 +19,7 @@
 
 #include "transposition_table.h"
 #include "negamax.h"
+#include "../utils/Log.h"
 
 namespace ChessEngine {
 
@@ -98,6 +99,12 @@ SearchResult<TURN> negamax_result_to_search_result(const NegamaxResult<TURN>& re
 // Color-templated search function to be used by the UCI interface.
 template<Color TURN>
 SearchResult<TURN> search(SearchThread* thread, std::atomic<bool> *stopThinking, std::function<void(int, SearchResult<TURN>, uint64_t, uint64_t)> onDepthCompleted) {
+  LOG("[search] begin fen=%s threads=%u depth_limit=%u node_limit=%llu pondering=%d",
+    thread->position_.fen().c_str(),
+    thread->shared_->numThreads,
+    thread->shared_->depthLimit,
+    (unsigned long long)thread->shared_->nodeLimit,
+    thread->shared_->isPondering.load() ? 1 : 0);
   thread->shared_->tt->new_search();
   auto startTime = std::chrono::high_resolution_clock::now();
   assert(thread->position_.turn_ == TURN);
@@ -120,6 +127,7 @@ SearchResult<TURN> search(SearchThread* thread, std::atomic<bool> *stopThinking,
       &neverStopThinking
     );
   }
+  LOG("[search] depth=1 starting");
   NegamaxResult<TURN> result;
   if (otherThreads.size() > 0) {
     result = negamax<TURN, SearchType::ROOT, true>(
@@ -142,9 +150,11 @@ SearchResult<TURN> search(SearchThread* thread, std::atomic<bool> *stopThinking,
       &neverStopThinking  // Guarantee we always search at least depth 1 before stopping.
     );
   }
+  LOG("[search] depth=1 joining %u worker threads", (unsigned)otherThreads.size());
   for (unsigned i = 0; i < otherThreads.size(); ++i) {
     otherThreads[i].second->join();
   }
+  LOG("[search] depth=1 complete nodes=%llu", (unsigned long long)thread->nodeCount_);
   if (result.bestMove == kNullMove) {
     std::cout << "Error (1): Search did not find a move. " << thread->position_.currentState_.hash << std::endl;
     exit(1);
@@ -157,8 +167,10 @@ SearchResult<TURN> search(SearchThread* thread, std::atomic<bool> *stopThinking,
   bool quitEarly = false;
   for (unsigned i = 2; i <= std::min(thread->shared_->depthLimit, kMaxSearchDepth) && !quitEarly; ++i) {
     if (stopThinking->load()) {
+      LOG("[search] stopping before depth=%u (stopThinking)", i);
       break;
     }
+    LOG("[search] starting depth=%u", i);
     // Experiment results:
     //  1 Win50     :     7.6    3.7  1233.5    2400    51
     //  2 Win25     :    -0.5    3.8  1198.0    2400    50
@@ -175,6 +187,7 @@ SearchResult<TURN> search(SearchThread* thread, std::atomic<bool> *stopThinking,
         std::chrono::duration<double> elapsedTimeDuringLastSearch = endTime - startTime;
         std::chrono::duration<double> timeRemaining = thread->shared_->stopTime - endTime;
         if (elapsedTimeDuringLastSearch * 2 > timeRemaining) {
+          LOG("[search] quitting early at depth=%u (time pressure)", i);
           quitEarly = true;
           break;
         }
@@ -191,6 +204,9 @@ SearchResult<TURN> search(SearchThread* thread, std::atomic<bool> *stopThinking,
           otherThreads[j].first->root_frame(),
           stopThinking
         );
+      }
+      if (otherThreads.size() > 0) {
+        LOG("[search] depth=%u joining %u worker threads", i, (unsigned)otherThreads.size());
       }
       if (otherThreads.size() > 0) {
         result = negamax<TURN, SearchType::ROOT, true>(
@@ -216,6 +232,9 @@ SearchResult<TURN> search(SearchThread* thread, std::atomic<bool> *stopThinking,
       for (unsigned j = 0; j < otherThreads.size(); ++j) {
         otherThreads[j].second->join();
       }
+      if (otherThreads.size() > 0) {
+        LOG("[search] depth=%u worker threads joined", i);
+      }
       if (result.evaluation <= alpha) {
         alpha = ColoredEvaluation<TURN>(kMinEval);
       } else if (result.evaluation >= beta) {
@@ -227,6 +246,11 @@ SearchResult<TURN> search(SearchThread* thread, std::atomic<bool> *stopThinking,
     searchResult = negamax_result_to_search_result<TURN>(result, thread);
     // TODO: why do we need "searchResult.bestMove == kNullMove" in the condition?
     if (stopThinking->load() || quitEarly || searchResult.bestMove == kNullMove) {
+      LOG("[search] returning early at depth=%u stop=%d quit_early=%d null_move=%d",
+        i,
+        stopThinking->load() ? 1 : 0,
+        quitEarly ? 1 : 0,
+        searchResult.bestMove == kNullMove ? 1 : 0);
       return lastResult;
     }
     if (searchResult.bestMove == kNullMove) {
@@ -239,9 +263,19 @@ SearchResult<TURN> search(SearchThread* thread, std::atomic<bool> *stopThinking,
     }
     if (thread->shared_->isTimeSensitive && (result.evaluation.value <= kLongestForcedMate || result.evaluation.value >= -kLongestForcedMate)) {
       // If we're in an actual game, stop searching deeper once we find a forced mate.
+      LOG("[search] stopping after mate found at depth=%u", i);
       break;
     }
+    LOG("[search] depth=%u complete best=%s score=%d nodes=%llu",
+      i,
+      searchResult.bestMove.uci().c_str(),
+      searchResult.evaluation.value,
+      (unsigned long long)thread->nodeCount_);
   }
+  LOG("[search] finished best=%s score=%d nodes=%llu",
+    searchResult.bestMove.uci().c_str(),
+    searchResult.evaluation.value,
+    (unsigned long long)thread->nodeCount_);
   return searchResult;
 }
 

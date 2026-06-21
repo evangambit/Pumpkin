@@ -6,6 +6,8 @@
 #include "../game/Position.h"
 #include "../game/movegen/movegen.h"
 #include "../game/Utils.h"
+#include "../utils/StringUtils.h"
+#include "../utils/Log.h"
 #include "Task.h"
 #include "TrivialTasks.h"
 #include "SetOptionTask.h"
@@ -111,6 +113,14 @@ class GoTask : public Task {
 
     GoCommand goCommand = make_go_command(&command, &state->position);
 
+    LOG("[go] fen=%s depth=%zu nodes=%llu time_ms=%llu ponder=%d threads=%u",
+      state->position.fen().c_str(),
+      goCommand.depthLimit,
+      (unsigned long long)goCommand.nodeLimit,
+      (unsigned long long)goCommand.timeLimitMs,
+      goCommand.isPondering ? 1 : 0,
+      state->numThreads);
+
     bool isTimeSensitive = false;
     if (goCommand.wtimeMs != 0 || goCommand.btimeMs != 0) {
       // We're in a timed game. Convert to a time limit.
@@ -139,6 +149,7 @@ class GoTask : public Task {
       stopTime = std::chrono::high_resolution_clock::now() + std::chrono::milliseconds(goCommand.timeLimitMs);
     }
     if (state->sharedSearchThreadState.get() != nullptr) {
+      LOG("[go] FATAL: search already active, exiting");
       std::cerr << "Error: Already running a search!" << std::endl;
       exit(1);
     }
@@ -151,6 +162,9 @@ class GoTask : public Task {
     );
     state->stopThinking = std::make_shared<std::atomic<bool>>(false);
     auto currentStopThinking = state->stopThinking;
+    LOG("[go] spawning search thread (time_sensitive=%d allocated_ms=%llu)",
+      isTimeSensitive ? 1 : 0,
+      (unsigned long long)goCommand.timeLimitMs);
     this->thread = new std::thread(GoTask::_threaded_think, this->baseThreadState.get(), state, currentStopThinking, &isRunning);
   }
 
@@ -161,11 +175,13 @@ class GoTask : public Task {
   ~GoTask() {
     assert(!isRunning);
     assert(this->thread != nullptr);
+    LOG("[go] destructor joining search thread");
     this->thread->join();
     delete this->thread;
   }
 
   static void _threaded_think(SearchThread* baseThread, UciEngineState* state, std::shared_ptr<std::atomic<bool>> stopThinking, bool* isRunning) {
+    LOG("[search-thread] started");
     auto startTime = std::chrono::high_resolution_clock::now();
 
     SearchResult<Color::WHITE> result = colorless_search(baseThread, stopThinking.get(), [state, &startTime](int depth, SearchResult<Color::WHITE> result, uint64_t nodeCount, uint64_t qNodeCount) {
@@ -180,9 +196,13 @@ class GoTask : public Task {
     }
     std::cout << std::endl;
 
+    LOG("[search-thread] finished bestmove=%s nodes=%llu stop=%d",
+      result.bestMove.uci().c_str(),
+      (unsigned long long)baseThread->nodeCount_,
+      stopThinking->load() ? 1 : 0);
     *isRunning = false;
     state->sharedSearchThreadState = nullptr;
-    // Notify run-loop that it can start running a new command.
+    LOG("[search-thread] notifying eventRunner");
     std::unique_lock<std::mutex> lock(state->mutex);
     state->condVar.notify_one();
   }
