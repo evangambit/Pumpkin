@@ -29,7 +29,6 @@ extern unsigned int byhand_bin_len;
 #include "../eval/byhand/byhand.h"
 #include "../eval/nnue/NnueEvaluator.h"
 #include "../eval/pst/PieceSquareEvaluator.h"
-#include "../eval/qst/QstEvaluator.h"
 #include "../game/movegen/movegen.h"
 
 namespace ChessEngine {
@@ -406,18 +405,6 @@ class SetEvaluatorTask : public Task {
       }
       state->position.set_listener(std::make_shared<NNUE::NnueEvaluator<float>>(nnue_model));
       std::cout << "info string Evaluator set to nnue." << std::endl;
-    } else if (evaluatorName == "qst") {
-      auto qst = std::make_shared<QstEvaluator>();
-      if (command.size() > 0) {
-        std::string modelFile = command.at(0);
-        command.pop_front();
-        qst->load(modelFile);
-      } else {
-        std::istringstream f(std::string(qst_bin, qst_bin_len));
-        qst->load(f);
-      }
-      state->position.set_listener(qst);
-      std::cout << "info string Evaluator set to qst." << std::endl;
     } else {
       std::cout << "Error: unrecognized evaluator name \"" << evaluatorName << "\"" << std::endl;
       exit(1);
