@@ -54,11 +54,35 @@ class CosineAnnealingWithWarmup:
     self.current_step += 1
 
 
-# We load data in chunks, rather than 1 row at a time, as it is much faster. It doesn't matter
-# much for non-trivial networks though.
-BATCH_SIZE = 4096
-CHUNK_SIZE = 128
-assert BATCH_SIZE % CHUNK_SIZE == 0
+CONFIG = {
+  'batch_size': 4096,
+  'chunk_size': 128,
+  'num_epochs': 1,
+  'betas': (0.9, 0.999),
+  'penalty_coeff': 0.02,
+  'teacher_label_weight': 0.5,
+  'model': {
+    'name': 'NNUE',
+    'args': {
+      'hidden_sizes': [384, 16],
+      'output_size': 1,
+    },
+  },
+  'teacher': {
+    'name': 'NNUE',
+    'path': 'runs/20260623-143729/model.pt',
+    'args': {
+      'hidden_sizes': [1024, 384, 128],
+      'output_size': 1,
+    },
+  },
+  'dataset_paths': [
+      r'data/de7-md4/pos.shuf.txt',
+      r'data/de7-md4-b/pos.shuf.txt',
+  ],
+}
+assert CONFIG['batch_size'] % CONFIG['chunk_size'] == 0, "Batch size must be a multiple of chunk size."
+
 
 def collate_fn(rows):
   values, lengths, labels, kings, lateness = zip(*rows)
@@ -82,28 +106,28 @@ if __name__ == "__main__":
   device = torch.device('cpu')
 
   print("Loading dataset...")
-  dataset = ndata.NnueDataset([r'data/de7-md4/pos.shuf.txt'])
-  # dataset = ndata.NnueDataset([r'data/de7-md4/tiny.txt'])
+  dataset = ndata.NnueDataset(CONFIG['dataset_paths'], chunk_size=CONFIG['chunk_size'])
 
-  print(f'Dataset loaded with {len(dataset) * CHUNK_SIZE} rows.')
+  print(f'Dataset loaded with {len(dataset) * CONFIG["chunk_size"]} rows.')
 
-  dataloader = tdata.DataLoader(dataset, batch_size=BATCH_SIZE//CHUNK_SIZE, shuffle=False, num_workers=0, pin_memory=True, drop_last=True, collate_fn=collate_fn)
+  dataloader = tdata.DataLoader(dataset, batch_size=CONFIG['batch_size']//CONFIG['chunk_size'], shuffle=False, num_workers=0, pin_memory=True, drop_last=True, collate_fn=collate_fn)
 
   print("Creating model...")
   # Simple hiiden_sizes=[1] yields (loss: 0.0262, mse: 0.6076, penalty: 0.2377)
   # loss: 0.0142, mse: 0.3296, penalty: 0.0075
 
-  # teacher = None
-  teacher = OLDNNUE(hidden_sizes=[1024, 256, 128], output_size=1).to(device)
-  with open('runs/20260618-021209/model.pt', 'rb') as f:
-    teacher.load_state_dict(torch.load(f))
-  teacher.eval()
+  teacher = None
+  if CONFIG.get('teacher') is not None:
+    teacher = NNUE(**CONFIG['teacher']['args']).to(device)
+    with open(CONFIG['teacher']['path'], 'rb') as f:
+      teacher.load_state_dict(torch.load(f))
+    teacher.eval()
 
-  model = NNUE(hidden_sizes=[384, 16], output_size=1).to(device)
+  model = NNUE(**CONFIG['model']['args']).to(device)
   # model = NNUE(hidden_sizes=[1024, 256, 128], output_size=1).to(device)
 
   print("Creating optimizer...")
-  opt = torch.optim.AdamW(model.parameters(), lr=0.0, weight_decay=1.0)
+  opt = torch.optim.AdamW(model.parameters(), lr=0.0, weight_decay=1.0, betas=CONFIG['betas'])
 
   def warmup_length(beta, c = 2.0):
     # The amount of warmup needs to increase as beta approaches 1,
@@ -112,10 +136,9 @@ if __name__ == "__main__":
     return int(c / (1 - beta))
 
   # Calculate total steps
-  NUM_EPOCHS = 2
   steps_per_epoch = len(dataloader)
-  total_steps = NUM_EPOCHS * steps_per_epoch
-  warmup_steps = warmup_length(0.999) # AdamW's beta is 0.999.
+  total_steps = CONFIG['num_epochs'] * steps_per_epoch
+  warmup_steps = warmup_length(max(CONFIG['betas']))
   assert warmup_steps < total_steps // 10, "You probably made a mistake."
   print(f"Total steps: {total_steps}, Warmup steps: {warmup_steps}")
 
@@ -136,9 +159,11 @@ if __name__ == "__main__":
     return win_mover_perspective + draw_mover_perspective * 0.5
 
   config = {
-    'batch_size': BATCH_SIZE,
-    'model': str(model).splitlines(),
-    'dataset': dataset.file_paths,
+    'model_str': str(model).splitlines(),
+    'dataset': {
+      'paths': dataset.file_paths,
+      'num_positions': len(dataset) * CONFIG['chunk_size'],
+    },
     'scheduler': {
       'min_lr': scheduler.min_lr,
       'max_lr': scheduler.max_lr,
@@ -146,13 +171,14 @@ if __name__ == "__main__":
       'total_steps': scheduler.total_steps,
     },
     'opt': str(opt).splitlines(),
+    **CONFIG
   }
 
   metrics = defaultdict(list)
   num_models_saved = 0
   last_save_time = 0
-  for epoch in range(NUM_EPOCHS):
-    print(f"Starting Epoch {epoch+1}/{NUM_EPOCHS}")
+  for epoch in range(CONFIG['num_epochs']):
+    print(f"Starting Epoch {epoch+1}/{CONFIG['num_epochs']}")
     t0 = time.time()
     for batch_idx, batch in tqdm(enumerate(dataloader), total=steps_per_epoch):
       t_data = time.time()
@@ -181,9 +207,9 @@ if __name__ == "__main__":
 
       if teacher is not None:
         with torch.no_grad():
-          teacher_output, _, _ = teacher(values, lengths, kings)
+          teacher_output, _, _ = teacher(values, lengths, kings, lateness.unsqueeze(1))
           teacher_output = torch.sigmoid(teacher_output)[:,0]
-          label = label * 0.5 + teacher_output * 0.5
+          label = label * (1.0 - CONFIG['teacher_label_weight']) + teacher_output * CONFIG['teacher_label_weight']
 
       assert output.shape == label.shape, f"{output.shape} vs {label.shape}"
       loss = (torch.abs(output - label)**2.5).mean()
@@ -192,7 +218,7 @@ if __name__ == "__main__":
       mse = loss.item()
       baseline = ((label - label.mean()) ** 2).mean().item()
 
-      (loss + penalty * 0.02).backward()
+      (loss + penalty * CONFIG['penalty_coeff']).backward()
       opt.step()
       t_backward = time.time()
       metrics["loss"].append(loss.item())
@@ -249,7 +275,9 @@ if __name__ == "__main__":
   plt.savefig(os.path.join(run_dir, 'nnue-loss.png'))
 
   with open(os.path.join(run_dir, 'config.json'), 'w') as f:
-    config['batches/epoch'] = batch_idx + 1
-    config['epochs'] = epoch + 1
-    config['sched_final'] = str(opt)
+    config['after'] = {
+      'loss': np.mean(metrics['loss'][-1000:]),
+      'mse': np.mean(metrics['mse'][-1000:]),
+      'penalty': np.mean(metrics['penalty'][-1000:]),
+    }
     json.dump(config, f, indent=2)
