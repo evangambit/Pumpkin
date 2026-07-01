@@ -3,7 +3,9 @@ declare -a values=("50" "100" "150")
 
 for i in "${values[@]}"
 do
-  sh build.sh uci-${i} src/uci/main.cpp -DNDEBUG -O3 -DPARAM=${i}
+  cmake -S . -B "build-${i}" -DCMAKE_BUILD_TYPE=Release -DPUMPKIN_PARAM="${i}"
+  cmake --build "build-${i}" --target uci
+  cp "build-${i}/uci" "uci-${i}"
 done
 
 engines=()

@@ -1,14 +1,18 @@
 
-    sudo apt-get install -y libgflags-dev libgtest-dev
+    sudo apt-get install -y cmake libgtest-dev
 
-# Run tests.
-    sh build.sh test_runner $(find src -name "*.cpp" | grep 'Tests\.cpp') -lgtest -lgtest_main -pthread && ./test_runner
+# Configure and build (Release is recommended for the engine)
+    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS="-DDEFAULT_EVALUATOR=\'n\'"
+    cmake --build build --target uci
 
-# Run one test
-    sh build.sh test_runner src/eval/nnue/tests/NnueTests.cpp -lgtest -lgtest_main && ./test_runner
-    sh build.sh test_runner src/eval/byhand/tests/ByHandTests.cpp -lgtest -lgtest_main && ./test_runner
-    sh build.sh test_runner src/game/tests/GeometryTests.cpp -lgtest -lgtest_main && ./test_runner
-    sh build.sh test_runner src/search/tests/SearchTests.cpp -lgtest -lgtest_main && ./test_runner
+# Run tests
+    ctest --test-dir build --output-on-failure
+
+# Run one test file
+    ./build/test_runner --gtest_filter='NnueTests.*'
+    ./build/test_runner --gtest_filter='ByHandTests.*'
+    ./build/test_runner --gtest_filter='GeometryTests.*'
+    ./build/test_runner --gtest_filter='SearchTests.*'
 
 # Update NNUE object file from a binary file
 
@@ -17,11 +21,8 @@
 
 # Build uci
 
-    ./build.sh uci src/uci/main.cpp -O3 -DNDEBUG
-
-# Make tables
-
-    ./build.sh mt src/eval/MakeTablesMain.cpp -O3 -DNDEBUG
+    cmake --build build --target uci
+    ./build/uci
 
 # cutechess
 
@@ -47,10 +48,6 @@ With nodes/move
     -pgnout tournament/a.pgn \
     -openings file=/Users/morganredding/Downloads/Unique_110225/Unique_v110225.pgn plies=12
 
-# pgn2fen
-
-    sh build.sh p2f src/PgnsToFensMain.cpp  -O3 -DNDEBUG
-
 Randomly drop 90% of lines (better position diversity).
 
     $ ./p2f --input_path pgns/ | awk 'BEGIN {srand()} rand() <= 0.10' > data/stock/pos.txt
@@ -61,25 +58,26 @@ Data comes from https://huggingface.co/datasets/official-stockfish/fishtest_pgns
 
 /usr/local/go/bin/go install github.com/google/pprof@latest
 
-    sh build.sh uci src/uci/main.cpp $(pkg-config --cflags --libs libprofiler) -DNDEBUG -O3
+    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_CXX_FLAGS="-g $(pkg-config --cflags --libs libprofiler)"
+    cmake --build build --target uci
 
-    CPUPROFILE=/tmp/prof.out ./uci "evaluator nnue" "move e2e4 c7c5 g1f3 d7d6" "go depth 8" "lazyquit"
+    CPUPROFILE=/tmp/prof.out ./build/uci "evaluator nnue" "move e2e4 c7c5 g1f3 d7d6" "go depth 8" "lazyquit"
 
-    ~/go/bin/pprof -png ./uci /tmp/prof.out
+    ~/go/bin/pprof -png ./build/uci /tmp/prof.out
 
 todo: make this nicer
 
 
 # "-g" allows per-line profiling
-sh build.
-sh uci src/uci/main.cpp -g -L$(brew --prefix gper
-ftools)/lib -lprofiler -DNDEBUG -O3 && CPUPROFILE
-=/tmp/prof.out ./uci "evaluator nnue" "move e2e4 
-c7c5 g1f3 d7d6" "go depth 7" "lazyquit"
+    cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+      -DCMAKE_CXX_FLAGS="-g -L$(brew --prefix gperftools)/lib -lprofiler"
+    cmake --build build --target uci
+    CPUPROFILE=/tmp/prof.out ./build/uci "evaluator nnue" "move e2e4 c7c5 g1f3 d7d6" "go depth 7" "lazyquit"
 
-~/go/bin/pprof -top ./uci /tmp/prof.out
+    ~/go/bin/pprof -top ./build/uci /tmp/prof.out
 
-~/go/bin/pprof -list _evaluate ./uci /tmp/prof.out
+    ~/go/bin/pprof -list _evaluate ./build/uci /tmp/prof.out
 
 # Build dataset
 

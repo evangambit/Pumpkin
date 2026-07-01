@@ -48,4 +48,37 @@ void extract_variation_from_tt(const Position& pos, TranspositionTable* tt, std:
   }
 }
 
+SearchResult<Color::WHITE> search(
+  Position pos,
+  std::shared_ptr<EvaluatorInterface> evaluator,
+  int depth,
+  int multiPV,
+  TranspositionTable* tt
+) {
+  pos.set_listener(evaluator);
+
+  GoCommand command;
+  command.depthLimit = depth;
+  command.nodeLimit = static_cast<uint64_t>(-1);
+  command.timeLimitMs = static_cast<uint64_t>(-1);
+
+  const auto stopTime =
+    std::chrono::high_resolution_clock::now() + std::chrono::hours(24);
+  auto shared = std::make_shared<SharedSearchThreadState>(
+    command,
+    static_cast<unsigned>(multiPV),
+    /*numThreads=*/1,
+    /*isTimeSensitive=*/false,
+    stopTime,
+    tt
+  );
+
+  SearchThread thread(0, pos, shared);
+  std::atomic<bool> stopFlag(false);
+  if (pos.turn_ == Color::WHITE) {
+    return search<Color::WHITE>(&thread, &stopFlag, nullptr);
+  }
+  return -search<Color::BLACK>(&thread, &stopFlag, nullptr);
+}
+
 }  // namespace ChessEngine

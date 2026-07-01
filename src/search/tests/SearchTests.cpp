@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <memory>
 #include <unordered_set>
 
@@ -11,24 +12,110 @@
 
 using namespace ChessEngine;
 
-template<Color TURN>
-std::pair<NegamaxResult<TURN>, std::vector<std::pair<Move, Evaluation>>> search(Position pos, std::unordered_set<Move> permittedMoves, int depth = 2, int multiPV = 1) {
-  std::shared_ptr<TranspositionTable> tt = std::make_shared<TranspositionTable>(10'000);
-  std::atomic<bool> stopFlag(false);
-  SearchThread thread(0, pos, multiPV, permittedMoves, tt.get());
+constexpr size_t kTestTTMegabytes = 1;
 
-  std::array<Frame, 20> frames;
-  NegamaxResult<TURN> result = negamax<TURN, SearchType::ROOT>(
-    &thread, 2,
+template<Color TURN>
+SearchThread make_search_thread(
+  Position pos,
+  const std::unordered_set<Move>& permittedMoves,
+  unsigned depth,
+  unsigned multiPV,
+  TranspositionTable* tt,
+  std::shared_ptr<TranspositionTable>& owned_tt,
+  std::shared_ptr<SharedSearchThreadState>& shared_out
+) {
+  if (tt == nullptr) {
+    owned_tt = std::make_shared<TranspositionTable>(kTestTTMegabytes);
+    tt = owned_tt.get();
+  }
+
+  GoCommand command;
+  command.depthLimit = depth;
+  command.moves = permittedMoves;
+  command.nodeLimit = static_cast<uint64_t>(-1);
+  command.timeLimitMs = static_cast<uint64_t>(-1);
+
+  const auto stopTime =
+    std::chrono::high_resolution_clock::now() + std::chrono::hours(24);
+  shared_out = std::make_shared<SharedSearchThreadState>(
+    command,
+    multiPV,
+    /*numThreads=*/1,
+    /*isTimeSensitive=*/false,
+    stopTime,
+    tt
+  );
+
+  return SearchThread(0, pos, shared_out);
+}
+
+template<Color TURN>
+SearchResult<TURN> run_search(
+  Position pos,
+  const std::unordered_set<Move>& permittedMoves = {},
+  unsigned depth = 2,
+  unsigned multiPV = 1,
+  TranspositionTable* tt = nullptr
+) {
+  std::shared_ptr<TranspositionTable> owned_tt;
+  std::shared_ptr<SharedSearchThreadState> shared;
+  SearchThread thread = make_search_thread<TURN>(
+    pos, permittedMoves, depth, multiPV, tt, owned_tt, shared);
+
+  std::atomic<bool> stopFlag(false);
+  return search<TURN>(&thread, &stopFlag, nullptr);
+}
+
+template<Color TURN>
+NegamaxResult<TURN> run_negamax(
+  Position pos,
+  unsigned depth = 2,
+  const std::unordered_set<Move>& permittedMoves = {},
+  unsigned multiPV = 1,
+  TranspositionTable* tt = nullptr
+) {
+  std::shared_ptr<TranspositionTable> owned_tt;
+  std::shared_ptr<SharedSearchThreadState> shared;
+  SearchThread thread = make_search_thread<TURN>(
+    pos, permittedMoves, depth, multiPV, tt, owned_tt, shared);
+
+  std::atomic<bool> stopFlag(false);
+  return negamax<TURN, SearchType::ROOT, false>(
+    &thread,
+    depth,
     ColoredEvaluation<TURN>(kMinEval),
     ColoredEvaluation<TURN>(kMaxEval),
     /*plyFromRoot=*/0,
-    &frames[2],
+    thread.root_frame(),
     &stopFlag
   );
-  return std::make_pair(result, thread.primaryVariations_);
 }
 
+template<Color TURN>
+std::pair<NegamaxResult<TURN>, std::vector<std::pair<Move, Evaluation>>> run_negamax_with_pvs(
+  Position pos,
+  unsigned depth = 2,
+  const std::unordered_set<Move>& permittedMoves = {},
+  unsigned multiPV = 1,
+  TranspositionTable* tt = nullptr
+) {
+  std::shared_ptr<TranspositionTable> owned_tt;
+  std::shared_ptr<SharedSearchThreadState> shared;
+  SearchThread thread = make_search_thread<TURN>(
+    pos, permittedMoves, depth, multiPV, tt, owned_tt, shared);
+
+  std::atomic<bool> stopFlag(false);
+  NegamaxResult<TURN> result = negamax<TURN, SearchType::ROOT, false>(
+    &thread,
+    depth,
+    ColoredEvaluation<TURN>(kMinEval),
+    ColoredEvaluation<TURN>(kMaxEval),
+    /*plyFromRoot=*/0,
+    thread.root_frame(),
+    &stopFlag
+  );
+  return {result, thread.primaryVariations_};
+}
 class SearchTest : public ::testing::Test {
  protected:
   void SetUp() override {
@@ -116,13 +203,13 @@ TEST_F(SearchTest, SimpleEvaluatorPieceValues) {
 // Test SearchThread constructor
 TEST_F(SearchTest, SearchThreadConstructor) {
   Position pos = Position::init();
-  auto evaluator = std::make_shared<SimpleEvaluator>();
-  std::unordered_set<Move> permittedMoves;
-  
-  std::shared_ptr<TranspositionTable> tt = std::make_shared<TranspositionTable>(10'000);
-  SearchThread thread(1, pos, 1, permittedMoves, tt.get());
-  
-  EXPECT_EQ(thread.id_, 1);
+  GoCommand command;
+  std::shared_ptr<TranspositionTable> tt = std::make_shared<TranspositionTable>(kTestTTMegabytes);
+  const auto stopTime =
+    std::chrono::high_resolution_clock::now() + std::chrono::hours(24);
+  auto shared = std::make_shared<SharedSearchThreadState>(
+    command, 1, 1, false, stopTime, tt.get());
+  SearchThread thread(1, pos, shared);  EXPECT_EQ(thread.id_, 1);
   EXPECT_EQ(thread.nodeCount_, 0);
   EXPECT_FALSE(thread.stopSearchFlag.load());
 }
@@ -131,8 +218,7 @@ TEST_F(SearchTest, NegamaxFindsBackRankMateIn1) {
   Position pos("6k1/1RK3p1/1P3pPp/5P1P/8/8/8/8 w - - 0 1");
   auto evaluator = std::make_shared<SimpleEvaluator>();
   std::unordered_set<Move> permittedMoves;
-  NegamaxResult<Color::WHITE> result = search<Color::WHITE>(pos, permittedMoves).first;
-  
+  SearchResult<Color::WHITE> result = run_search<Color::WHITE>(pos, permittedMoves);  
   // The best move should be Rd4d8#.
   EXPECT_EQ(int(result.bestMove.from), int(SafeSquare::SB7));
   EXPECT_EQ(int(result.bestMove.to), int(SafeSquare::SB8));
@@ -146,7 +232,7 @@ TEST_F(SearchTest, NegamaxIdentifiesStalemate) {
   Position pos("k7/2K5/1Q6/8/8/8/8/8 b - - 0 1");
   auto evaluator = std::make_shared<SimpleEvaluator>();
   std::unordered_set<Move> permittedMoves;
-  NegamaxResult<Color::BLACK> result = search<Color::BLACK>(pos, permittedMoves).first;
+  NegamaxResult<Color::BLACK> result = run_negamax<Color::BLACK>(pos, 2);
   
   // Stalemate should return evaluation close to 0 (draw)
   EXPECT_EQ(result.bestMove, kNullMove);
@@ -158,7 +244,7 @@ TEST_F(SearchTest, MaterialEvaluationStartingPosition) {
   Position pos = Position::init();
   auto evaluator = std::make_shared<SimpleEvaluator>();
   pos.set_listener(evaluator);
-  NegamaxResult<Color::WHITE> result = search<Color::WHITE>(pos, {}).first;
+  SearchResult<Color::WHITE> result = run_search<Color::WHITE>(pos, {});
   
   // Starting position should be equal (evaluation near 0)
   EXPECT_EQ(result.evaluation, ColoredEvaluation<Color::WHITE>(0));
@@ -170,7 +256,7 @@ TEST_F(SearchTest, SearchPrefersCapturingMaterial) {
   Position pos("1k6/8/8/3q4/8/5B2/5K2/8 w - - 0 1");
   auto evaluator = std::make_shared<SimpleEvaluator>();
   pos.set_listener(evaluator);
-  NegamaxResult<Color::WHITE> result = search<Color::WHITE>(pos, {}).first;
+  SearchResult<Color::WHITE> result = run_search<Color::WHITE>(pos, {});
   
   // Best move should be bishop captures queen (Bxd5)
   EXPECT_EQ(result.bestMove.from, SafeSquare::SF3);
@@ -181,7 +267,7 @@ TEST_F(SearchTest, SearchPrefersCapturingMaterial) {
 TEST_F(SearchTest, CheckmateDetectionDepth1) {
   Position pos("r2r3k/6pp/8/8/3R4/8/8/3RK3 w - - 0 1");
   pos.set_listener(std::make_shared<SimpleEvaluator>());
-  NegamaxResult<Color::WHITE> result = search<Color::WHITE>(pos, {}).first;
+  SearchResult<Color::WHITE> result = run_search<Color::WHITE>(pos, {});
   
   EXPECT_EQ(result.evaluation, ColoredEvaluation<Color::WHITE>(-kCheckmate - 3));  // Mate in 3 ply.
   EXPECT_EQ(result.bestMove.from, SafeSquare::SD4);
@@ -203,7 +289,7 @@ TEST_F(SearchTest, FiftyMoveRuleDetection) {
   Position pos("k7/P7/8/8/8/K1B5/8/8 w - - 98 120");
   pos.set_listener(std::make_shared<SimpleEvaluator>());
   // With depth > 0, should detect fifty move rule and return draw
-  NegamaxResult<Color::WHITE> result = search<Color::WHITE>(pos, {}, 2).first;
+  SearchResult<Color::WHITE> result = run_search<Color::WHITE>(pos, {}, 2);
   
   // Position should be evaluated as draw due to fifty move rule
   // (after any move, fifty move rule kicks in)
@@ -215,7 +301,7 @@ TEST_F(SearchTest, NegamaxBlackToMove) {
   // Position where black can capture white's queen with a fork.
   Position pos("4kr2/4n3/3Q4/8/8/4K3/8/8 b - - 0 1");
   pos.set_listener(std::make_shared<SimpleEvaluator>());
-  NegamaxResult<Color::BLACK> result = search<Color::BLACK>(pos, {}).first;
+  SearchResult<Color::BLACK> result = run_search<Color::BLACK>(pos, {});
   // Best move should be knight forking king and queen (Ne7-f5)
   EXPECT_EQ(result.bestMove.from, SafeSquare::SE7);
   EXPECT_EQ(result.bestMove.to, SafeSquare::SF5);
@@ -223,7 +309,7 @@ TEST_F(SearchTest, NegamaxBlackToMove) {
   make_move<Color::BLACK>(&pos, result.bestMove);
   make_move<Color::WHITE>(&pos, make_move_from_uci("e3e4", pos));
 
-  result = search<Color::BLACK>(pos, {}).first;
+  result = run_search<Color::BLACK>(pos, {});
   // Next best move should be knight captures queen (Nxf5)
   EXPECT_EQ(result.bestMove.from, SafeSquare::SF5);
   EXPECT_EQ(result.bestMove.to, SafeSquare::SD6);
@@ -234,7 +320,7 @@ TEST_F(SearchTest, SearchHandlesCheck) {
   // Black is in check. He has lots of pieces but only one legal move to get out of check (Kf7).
   Position pos("3bkbr1/4b3/8/1B6/5q2/8/K7/8 b - - 0 1");
   pos.set_listener(std::make_shared<SimpleEvaluator>());
-  NegamaxResult<Color::BLACK> result = search<Color::BLACK>(pos, {}).first;
+  SearchResult<Color::BLACK> result = run_search<Color::BLACK>(pos, {});
   
   EXPECT_EQ(result.bestMove.from, SafeSquare::SE8);
   EXPECT_EQ(result.bestMove.to, SafeSquare::SF7);
@@ -253,8 +339,7 @@ TEST_F(SearchTest, PermittedMovesFilterRestrictsSearch) {
 
   std::unordered_set<Move> permittedMoves;
   permittedMoves.insert(permittedMove);
-  NegamaxResult<Color::WHITE> result = search<Color::WHITE>(pos, permittedMoves).first;
-  
+  SearchResult<Color::WHITE> result = run_search<Color::WHITE>(pos, permittedMoves);  
   // Best move should be forced to c2c3 since that's the only permitted move.
   EXPECT_EQ(result.bestMove, permittedMove);
 }
@@ -264,7 +349,7 @@ TEST_F(SearchTest, EmptyPermittedMovesAllowsAllMoves) {
   // Same position as above - without restrictions, Bf3xd5 should be chosen
   Position pos("3k4/8/8/3q4/8/5B2/8/1K6 w - - 0 1");
   pos.set_listener(std::make_shared<SimpleEvaluator>());
-  NegamaxResult<Color::WHITE> result = search<Color::WHITE>(pos, {}).first;
+  SearchResult<Color::WHITE> result = run_search<Color::WHITE>(pos, {});
   
   // Best move should be bishop captures queen (Bf3xd5)
   EXPECT_EQ(result.bestMove.from, SafeSquare::SF3);
@@ -294,8 +379,7 @@ TEST_F(SearchTest, PermittedMovesWithMultipleMoves) {
   permittedMoves.insert(bishopCapture);
   permittedMoves.insert(kingMove);
   
-  NegamaxResult<Color::WHITE> result = search<Color::WHITE>(pos, permittedMoves).first;
-  
+  SearchResult<Color::WHITE> result = run_search<Color::WHITE>(pos, permittedMoves);  
   // Best move should still be Bxd5 since it captures the queen
   EXPECT_EQ(result.bestMove.from, SafeSquare::SF3);
   EXPECT_EQ(result.bestMove.to, SafeSquare::SD5);
@@ -306,7 +390,7 @@ TEST_F(SearchTest, PermittedMovesWithMultipleMoves) {
 TEST_F(SearchTest, PieceSquareEvaluatorStartingPosition) {
   Position pos = Position::init();
   pos.set_listener(std::make_shared<PieceSquareEvaluator>());
-  NegamaxResult<Color::WHITE> result = search<Color::WHITE>(pos, {}).first;
+  SearchResult<Color::WHITE> result = run_search<Color::WHITE>(pos, {});
   
   // Starting position should be evaluated as equal (0)
   EXPECT_EQ(result.evaluation, ColoredEvaluation<Color::WHITE>(0));
@@ -316,7 +400,7 @@ TEST_F(SearchTest, PieceSquareEvaluatorStartingPosition) {
 TEST_F(SearchTest, TranspositionTableStoresAndProbes) {
   Position pos = Position::init();
   auto evaluator = std::make_shared<SimpleEvaluator>();
-  TranspositionTable tt(1024); // Small table for test
+  TranspositionTable tt(kTestTTMegabytes);
   // First search: should fill the table
   auto result1 = search(pos, evaluator, 2, 1, &tt);
   // Probe directly
@@ -334,7 +418,7 @@ TEST_F(SearchTest, TranspositionTableStoresAndProbes) {
 }
 
 TEST_F(SearchTest, TranspositionTableStoresSignedDepths) {
-  TranspositionTable tt(1024);
+  TranspositionTable tt(kTestTTMegabytes);
   Move move = Move::create(SafeSquare::SE2, SafeSquare::SE4);
 
   tt.store(12345, move, -3, 17, BoundType::EXACT);
@@ -366,9 +450,9 @@ TEST_F(MultiPVTest, MultiPVReturnsTopNMoves) {
   Position pos("2k5/8/8/3q4/2P1P3/4N3/8/K7 w - - 0 1");
   auto evaluator = std::make_shared<SimpleEvaluator>();
   int multiPV = 3;
-  std::shared_ptr<TranspositionTable> tt = std::make_shared<TranspositionTable>(10'000);
+  std::shared_ptr<TranspositionTable> tt = std::make_shared<TranspositionTable>(kTestTTMegabytes);
   pos.set_listener(evaluator);
-  auto result = search<Color::WHITE>(pos, {}, 1, multiPV);
+  auto result = run_negamax_with_pvs<Color::WHITE>(pos, 2, {}, multiPV);
   
   // Should have exactly multiPV moves in primaryVariations_
   EXPECT_EQ(result.second.size(), multiPV);
@@ -379,8 +463,7 @@ TEST_F(MultiPVTest, MultiPVReturnsTopNMoves) {
   std::unordered_set<std::string> foundMoves;
   for (const auto& entry : result.second) {
     foundMoves.insert(entry.first.uci());
-  }
-  EXPECT_EQ(foundMoves, expectedMoves);
+  }  EXPECT_EQ(foundMoves, expectedMoves);
 }
 
 } // anonymous namespace

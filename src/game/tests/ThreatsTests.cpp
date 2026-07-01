@@ -28,7 +28,7 @@ TEST_F(ThreatsTests, NotFiftyMoveRule) {
   Position pos("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
   Threats threats;
   create_threats(pos.pieceBitboards_, pos.colorBitboards_, &threats);
-  EXPECT_BB_EQ(threats.badForOur<Color::WHITE>(Piece::PAWN), kRanks[2]);
+  EXPECT_BB_EQ(threats.badForOur<Color::WHITE>(Piece::PAWN), kRanks[Rank::RANK_6]);
 }
 
 }  // namespace ChessEngine
