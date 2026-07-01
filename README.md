@@ -1,6 +1,4 @@
 
-Rating is ~2724 (+67 from Amira 1.84 and Amira's CCRL rating is 2657)
-
     sudo apt-get install -y libgflags-dev libgtest-dev
 
 # Run tests.
