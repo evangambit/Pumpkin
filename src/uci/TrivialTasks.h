@@ -206,60 +206,6 @@ struct EvalTask : public Task {
   std::deque<std::string> command;
 };
 
-struct FenErrorResult {
-  std::string fen;
-  float expected;
-  float actual;
-  float error;
-};
-
-struct FenErrorTask : public Task {
-  FenErrorTask(std::deque<std::string> command) : command(command) {}
-  void start(UciEngineState *state) {
-    if (command.size() < 2) {
-      std::cout << "Error: fenerror command requires a file argument." << std::endl;
-      return;
-    }
-    std::string filename = command.at(1);
-    std::ifstream file(filename);
-    if (!file.is_open()) {
-      std::cout << "Error: could not open file " << filename << std::endl;
-      return;
-    }
-    
-    std::vector<FenErrorResult> results;
-    std::string line;
-    while (std::getline(file, line)) {
-      size_t pos = line.find('|');
-      if (pos == std::string::npos) continue;
-      std::string fen = line.substr(0, pos);
-      float expected = std::stof(line.substr(pos + 1));
-      
-      Position p(fen);
-      p.set_listener(state->position.evaluator_->clone());
-      Threats threats;
-      create_threats(p.pieceBitboards_, p.colorBitboards_, &threats);
-      ColoredEvaluation<WHITE> eval = evaluate<WHITE>(p.evaluator_, p, threats, 0, ColoredEvaluation<WHITE>(kMinEval), ColoredEvaluation<WHITE>(kMaxEval));
-      
-      float actual = NNUE::sigmoid(eval.value / float(1 << NNUE::SCALE_SHIFT));
-      float error = std::abs(expected - actual);
-      results.push_back({fen, expected, actual, error});
-    }
-    
-    std::sort(results.begin(), results.end(), [](const FenErrorResult& a, const FenErrorResult& b) {
-      return a.error > b.error;
-    });
-    
-    int limit = std::min(10, (int)results.size());
-    for (int i = 0; i < limit; ++i) {
-      std::cout << results[i].fen << " Expected: " << results[i].expected 
-                << " Actual: " << results[i].actual << " Error: " << results[i].error << std::endl;
-    }
-  }
- private:
-  std::deque<std::string> command;
-};
-
 struct MoveTask : public Task {
   MoveTask(std::deque<std::string> command) : command(command) {}
   void start(UciEngineState *state) {
@@ -306,7 +252,7 @@ class PrintOptionsTask : public Task {
  public:
   void start(UciEngineState *state) {
     std::cout << "MultiPV: " << state->multiPV << " variations" << std::endl;
-    // std::cout << "Threads: " << state->thinkerInterface()->get_num_threads() << " threads" << std::endl;
+    std::cout << "Threads: " << state->numThreads << " threads" << std::endl;
     std::cout << "Hash: " << state->tt_->kb_size() << " kilobytes" << std::endl;
   }
 };
@@ -410,139 +356,6 @@ class SetEvaluatorTask : public Task {
       exit(1);
     }
     state->tt_->clear();
-  }
- private:
-  std::deque<std::string> command;
-};
-
-class ByHandEvalDebugTask : public Task {
- public:
-  ByHandEvalDebugTask(std::deque<std::string> command) : command(command) {}
-  void start(UciEngineState *state) {
-    auto evaluator = std::make_shared<ByHand::ByHandEvaluator>();
-    command.pop_front();
-    if (command.size() > 0) {
-      std::string modelFile = command.at(0);
-      command.pop_front();
-      std::ifstream f(modelFile, std::ios::binary);
-      if (!f) {
-        std::cout << "Error: could not open model file \"" << modelFile << "\"" << std::endl;
-        return;
-      }
-      evaluator->load_from_stream(f);
-    } else {
-      std::istringstream f(std::string(byhand_bin, byhand_bin_len));
-      evaluator->load_from_stream(f);
-    }
-    Position pos = state->position;
-    pos.set_listener(evaluator);
-    Threats threats;
-    create_threats(pos.pieceBitboards_, pos.colorBitboards_, &threats);
-
-    const auto& weights = evaluator->weights;
-
-    int8_t features[ByHand::EF::EF_COUNT];
-    if (pos.turn_ == Color::WHITE) {
-      ByHand::pos2features<WHITE>(pos, threats, features);
-    } else {
-      ByHand::pos2features<BLACK>(pos, threats, features);
-    }
-    std::cout << "Features: ";
-    for (size_t i = 0; i < ByHand::EF::EF_COUNT; ++i) {
-      // if (features[i] != 0) {
-        int32_t v = 0;
-        for (size_t j = 0; j < 2; ++j) {
-          v += features[i] * weights(j, i) * (j == 0 ? ByHand::kMaxEarliness - features[ByHand::EF::EARLINESS] : features[ByHand::EF::EARLINESS]) / ByHand::kMaxEarliness;
-        }
-        std::cout << rjust(std::to_string(int(features[i])), 3) << " (" << rjust(std::to_string(v), 5) << ")" << " " << to_string(ByHand::EF(i)) << " " << i << " " << " weights: (" << weights(0, i) << ", " << weights(1, i) << ")" << std::endl;
-      // }
-    }
-    std::cout << std::endl;
-  }
- private:
-  std::deque<std::string> command;
-};
-
-class NnueEvalDebugTask : public Task {
- public:
-  NnueEvalDebugTask(std::deque<std::string> command) : command(command) {}
-  void start(UciEngineState *state) {
-    std::shared_ptr<NNUE::Nnue<float>> nnue_model = std::make_shared<NNUE::Nnue<float>>();
-    command.pop_front();
-    if (command.size() > 0) {
-      std::string modelFile = command.at(0);
-      command.pop_front();
-      std::ifstream f(modelFile, std::ios::binary);
-      if (!f) {
-        std::cout << "Error: could not open model file \"" << modelFile << "\"" << std::endl;
-        return;
-      }
-      nnue_model->load(f);
-    } else {
-      std::istringstream f(std::string(model_bin, model_bin_len));
-      nnue_model->load(f);
-    }
-    Position pos = state->position;
-    auto evaluator = std::make_shared<NNUE::NnueEvaluator<float>>(nnue_model);
-    pos.set_listener(evaluator);
-    Threats threats;
-    create_threats(pos.pieceBitboards_, pos.colorBitboards_, &threats);
-
-    float value;
-    if (pos.turn_ == Color::WHITE) {
-      ColoredEvaluation<WHITE> eval = evaluate<WHITE>(evaluator, pos, threats, 0, ColoredEvaluation<WHITE>(kMinEval), ColoredEvaluation<WHITE>(kMaxEval));
-      value = float(eval.value) / float(1 << NNUE::SCALE_SHIFT);
-    } else {
-      ColoredEvaluation<BLACK> eval = evaluate<BLACK>(evaluator, pos, threats, 0, ColoredEvaluation<BLACK>(kMinEval), ColoredEvaluation<BLACK>(kMaxEval));
-      value = float(eval.value) / float(1 << NNUE::SCALE_SHIFT);
-    }
-    const auto& whiteAcc = evaluator->frames[1].whiteAcc;
-    const auto& blackAcc = evaluator->frames[1].blackAcc;
-    std::streamsize ss = std::cout.precision();
-    std::cout << std::fixed << std::setprecision(3);
-    std::cout << "Emb: " << nnue_model->embWeights[0][0] << ", " << nnue_model->embWeights[0][1] << std::endl;
-    std::cout << "White Acc: " << whiteAcc.data[0] << ", " << whiteAcc.data[1] << std::endl;
-    std::cout << "Black Acc: " << blackAcc.data[0] << ", " << blackAcc.data[1] << std::endl;
-    std::cout << "layer1: " << nnue_model->layer1.data[0] << ", " << nnue_model->layer1.data[1] << std::endl;
-    std::cout << "bias1: " << nnue_model->bias1.data[0] << " " << nnue_model->bias1.data[1] << std::endl;
-    std::cout << "hidden1: " << nnue_model->hidden1.data[0] << ", " << nnue_model->hidden1.data[1] << ", " << nnue_model->hidden1.data[2] << ", " << nnue_model->hidden1.data[3] << ", " << nnue_model->hidden1.data[4] << ", " << nnue_model->hidden1.data[5] << ", " << nnue_model->hidden1.data[6] << ", " << nnue_model->hidden1.data[7] << std::endl;
-    std::cout << "layer2: " << nnue_model->layer2.data[0] << ", " << nnue_model->layer2.data[1] << std::endl;
-    std::cout << "bias2: " << nnue_model->bias2.data[0] << std::endl;
-    std::cout << value << " (" << (pos.turn_ == Color::WHITE ? "white" : "black") << ")" << std::endl;
-    std::cout.precision(ss);
-  }
- private:
-  std::deque<std::string> command;
-};
-
-class IncrementWeightTask : public Task {
- public:
-  IncrementWeightTask(std::deque<std::string> command) : command(command) {}
-  void start(UciEngineState *state) {
-    command.pop_front();
-    if (command.size() != 4) {
-      std::cout << "Error: increment_weight command requires exactly 4 arguments: <feature> [+*] <is early> <delta>" << std::endl;
-      exit(1);
-    }
-    if (state->position.evaluator_->to_string() != "ByHandEvaluator") {
-      std::cout << "Error: increment_weight command only works with byhand evaluator." << std::endl;
-      exit(1);
-    }
-    auto evaluator = std::dynamic_pointer_cast<ByHand::ByHandEvaluator>(state->position.evaluator_);
-    int featureIndex = std::stoi(command.at(0));
-    char op = command.at(1)[0];
-    if (op != '+' && op != '*') {
-      std::cout << "Error: increment_weight command requires op to be '+' or '*'" << std::endl;
-      exit(1);
-    }
-    bool isEarly = command.at(2) == "1";
-    int delta = std::stoi(command.at(3));
-    if (op == '+') {
-      evaluator->weights(isEarly ? 1 : 0, featureIndex) += delta;
-    } else {
-      int value = evaluator->weights(isEarly ? 1 : 0, featureIndex);
-      evaluator->weights(isEarly ? 1 : 0, featureIndex) = (value * delta) / 100;
-    }
   }
  private:
   std::deque<std::string> command;

@@ -221,14 +221,6 @@ struct UciEngine {
       state->taskQueue.push_back(std::make_shared<SelfPlayTask>(parts));
     } else if (parts[0] == "eval") {
       state->taskQueue.push_back(std::make_shared<EvalTask>(parts));
-    } else if (parts[0] == "fenerror") {
-      state->taskQueue.push_back(std::make_shared<FenErrorTask>(parts));
-    } else if (parts[0] == "nnueevaldebug") {
-      state->taskQueue.push_back(std::make_shared<NnueEvalDebugTask>(parts));
-    } else if (parts[0] == "byhandevaldebug") {
-      state->taskQueue.push_back(std::make_shared<ByHandEvalDebugTask>(parts));
-    } else if (parts[0] == "increment") {
-      state->taskQueue.push_back(std::make_shared<IncrementWeightTask>(parts));
     } else if (parts[0] == "increment_search") {
       state->taskQueue.push_back(std::make_shared<IncrementSearchHyperParamTask>(parts));
     } else if (parts[0] == "dumpweights") {
