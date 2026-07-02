@@ -26,23 +26,6 @@
 
 #include "transposition_table.h"
 
-
-// IS_PRINT_NODE and IS_PRINT_QNODE can be used to print debugging information for specific nodes.
-
-#ifndef IS_PRINT_NODE
-#define IS_PRINT_NODE 0
-// #define IS_PRINT_NODE (thread->position_.currentState_.hash == 8614104399537843458ULL || thread->position_.currentState_.hash == 14669261985347518465ULL)
-// #define IS_PRINT_NODE (frame->hash == hash=17514753775184410351ULL && SEARCH_TYPE == SearchType::NORMAL_SEARCH)
-// #define IS_PRINT_NODE (plyFromRoot == 0 || frame->hash == 15932567610229845462ULL || frame->hash == 15427882709703266013ULL)
-// #define IS_PRINT_NODE (thread->position_.currentState_.hash == 412260009870427727ULL)
-// #define IS_PRINT_NODE (thread->frames_[0].hash == 383495967171122001ULL && plyFromRoot <= 2)
-#endif
-
-#ifndef IS_PRINT_QNODE
-#define IS_PRINT_QNODE 0
-// #define IS_PRINT_QNODE ((frame - quiescenceDepth)->hash == 17514877330620511575ULL)
-#endif
-
 // If EVAL_AGNOSTIC, we disable optimizations that require tuning for
 // the evaluation. This makes comparing evaluators more fair.
 #ifndef EVAL_AGNOSTIC
@@ -175,6 +158,11 @@ struct SearchHyperParams {
   //  +0.0 vs +0.8  :  +1088-976=1430  0.016±0.006
   //  +0.0 vs +0.4  :  +0.0016 +/- 0.0026
   FixedPoint<int32_t, 8> lmr_null_b = 0.4;
+
+  // Time Control: 5+0.1s
+  // 20 vs 35: +555-563=784  -0.002±0.006  p=0.738
+  // 35 vs 50: +583-574=843   0.002±0.006  p=0.713
+  // 35 vs 65: + 94- 72= 98   0.042±0.016  p=0.010
   int singular_margin = 50;
 
   // 15 vs 25: +5900-6060=8040  -0.004±0.003  p=0.112  (10000/10000 total)
@@ -364,23 +352,14 @@ inline int qsearch_tt_depth(int quiescenceDepth) {
 template<Color TURN>
 NegamaxResult<TURN> qsearch(SearchThread* thread, ColoredEvaluation<TURN> alpha, ColoredEvaluation<TURN> beta, int plyFromRoot, int quiescenceDepth, Frame *frame, std::atomic<bool> *stopThinking) {
   frame->hash = thread->position_.currentState_.hash;
-  if (IS_PRINT_QNODE) {
-    std::cout << repeat("  ", plyFromRoot) << "Quiescence search called: alpha=" << alpha.value << " beta=" << beta.value << " plyFromRoot=" << plyFromRoot << " quiescenceDepth=" << quiescenceDepth << " history" << thread->position_.history_ << std::endl;
-  }
 
   // This can happen when we've already found a checkmate in a previous sibling/ancestor node.
   if (alpha >= beta) {
-    if (IS_PRINT_QNODE) {
-      std::cout << repeat("  ", plyFromRoot) << "Alpha-beta window is invalid (alpha >= beta). Returning beta." << std::endl;
-    }
     return NegamaxResult<TURN>(kNullMove, beta);
   }
 
   // Prevent overflowing the frame array (and the call stack) - return static eval if we've gone too deep
   if (quiescenceDepth >= kMaxQuiescenceDepth || thread->ply_from_root(frame) >= kMaxPlyFromRoot - 1) {
-    if (IS_PRINT_QNODE) {
-      std::cout << repeat("  ", plyFromRoot) << "Max quiescence depth or ply limit reached, returning static evaluation." << std::endl;
-    }
     Threats threats;
     create_threats(thread->position_.pieceBitboards_, thread->position_.colorBitboards_, &threats);
     return NegamaxResult<TURN>(kNullMove, evaluate<TURN>(thread->position_.evaluator_, thread->position_, threats, plyFromRoot, alpha, beta).clamp_(alpha, beta));
@@ -405,9 +384,6 @@ NegamaxResult<TURN> qsearch(SearchThread* thread, ColoredEvaluation<TURN> alpha,
   uint64_t key = thread->position_.currentState_.hash;
   const int ttDepth = qsearch_tt_depth(quiescenceDepth);
   if (thread->shared_->tt->probe(key, entry)) {
-    if (IS_PRINT_QNODE) {
-      std::cout << repeat("  ", plyFromRoot) << "qTT hit: move=" << entry.bestMove.uci() << " value=" << entry.value << " depth=" << entry.depth << " bound=" << bound_type_to_string(entry.bound) << " hash=" << key << std::endl;
-    }
     if (entry.depth >= ttDepth) {
       if (entry.bound == BoundType::EXACT) {
         return NegamaxResult<TURN>(entry.bestMove, ColoredEvaluation<TURN>(entry.value).clamp_(alpha, beta));
@@ -447,30 +423,18 @@ NegamaxResult<TURN> qsearch(SearchThread* thread, ColoredEvaluation<TURN> alpha,
   // Validate move count is within bounds
   assert(end >= moves && end <= moves + kMaxNumMoves);
 
-  if (IS_PRINT_QNODE) {
-    std::cout << repeat("  ", plyFromRoot) << "In check: " << frame->inCheck << "; numMoves = " << (end - moves) << std::endl;
-  }
   if (moves == end && frame->inCheck) {
-    if (IS_PRINT_QNODE) {
-      std::cout << repeat("  ", plyFromRoot) << "Checkmate detected in quiescence search." << std::endl;
-    }
     return NegamaxResult<TURN>(kNullMove, ColoredEvaluation<TURN>(kCheckmate).clamp_(originalAlpha, beta));
   }
   // Now that we know it's not checkmate, we can re-check for fifty-move draw.
   if (isFiftyMoveDraw) {
     return NegamaxResult<TURN>(kNullMove, ColoredEvaluation<TURN>(kDraw).clamp_(originalAlpha, beta));
   }
-  if (IS_PRINT_QNODE) {
-    std::cout << repeat("  ", plyFromRoot) << "Comparing static evaluation to alpha/beta" << std::endl;
-  }
 
   Threats threats;
   create_threats(thread->position_.pieceBitboards_, thread->position_.colorBitboards_, &threats);
   frame->staticEval = evaluate<TURN>(thread->position_.evaluator_, thread->position_, threats, plyFromRoot, alpha, beta).value;
   NegamaxResult<TURN> bestResult(kNullMove, frame->inCheck ? alpha : ColoredEvaluation<TURN>(frame->staticEval).clamp_(alpha, beta));
-  if (IS_PRINT_QNODE) {
-    std::cout << repeat("  ", plyFromRoot) << "Static evaluation: " << bestResult.evaluation.value << " (hash = " << frame->hash << ")" << std::endl;
-  }
   if (!frame->inCheck) {
     if (bestResult.evaluation >= beta) {
       bestResult.evaluation = beta;
@@ -516,21 +480,10 @@ NegamaxResult<TURN> qsearch(SearchThread* thread, ColoredEvaluation<TURN> alpha,
     }
   );
 
-  if (IS_PRINT_QNODE) {
-    std::cout << repeat("  ", plyFromRoot) << "Ordered moves: ";
-    for (ExtMove* m = moves; m != end; ++m) {
-      std::cout << m->move.uci() << "(" << m->score << ") ";
-    }
-    std::cout << std::endl;
-  }
-
   for (ExtMove* move = moves; move < end; ++move) {
     if (move->score <= 0 && !frame->inCheck) {
       // Don't consider moves that lose material according to move ordering heuristic.
       continue;
-    }
-    if (IS_PRINT_QNODE) {
-      std::cout << repeat("  ", plyFromRoot) << "Trying move: " << move->move.uci() << std::endl;
     }
     make_move<TURN>(&thread->position_, move->move);
 
@@ -549,21 +502,11 @@ NegamaxResult<TURN> qsearch(SearchThread* thread, ColoredEvaluation<TURN> alpha,
     )) {
       // Need this check because of en passant captures into check.
       // e.g. b5c6 in position 8/1k6/6R1/KPpr4/8/8/8/8 w - c6 0 62
-      if (IS_PRINT_QNODE) {
-        std::cout << repeat("  ", plyFromRoot) << "Illegal move generated that leaves us in check: " << move->move.uci() << std::endl;
-      }
       undo<TURN>(&thread->position_);
       continue;
     }
 
-    if (IS_PRINT_QNODE) {
-      std::cout << repeat("  ", plyFromRoot) << "Calling qsearch recursively." << std::endl;
-    }
-    auto foo = qsearch<opposite_color<TURN>()>(thread, to_child_eval(beta), to_child_eval(alpha), plyFromRoot + 1, quiescenceDepth + 1, frame + 1, stopThinking).evaluation;
-    ColoredEvaluation<TURN> eval = to_parent_eval(foo);
-    if (IS_PRINT_QNODE) {
-      std::cout << repeat("  ", plyFromRoot) << "Eval from recursive qsearch: " << eval.value << "( from " << foo.value << ")" << std::endl;
-    }
+    ColoredEvaluation<TURN> eval = to_parent_eval(qsearch<opposite_color<TURN>()>(thread, to_child_eval(beta), to_child_eval(alpha), plyFromRoot + 1, quiescenceDepth + 1, frame + 1, stopThinking).evaluation);
     undo<TURN>(&thread->position_);
     if (eval > bestResult.evaluation) {
       bestResult.bestMove = move->move;
@@ -591,9 +534,6 @@ NegamaxResult<TURN> qsearch(SearchThread* thread, ColoredEvaluation<TURN> alpha,
   if (bestResult.evaluation <= originalAlpha) bound = BoundType::UPPER;
   else if (bestResult.evaluation >= beta) bound = BoundType::LOWER;
 
-  if (IS_PRINT_QNODE) {
-    std::cout << repeat("  ", plyFromRoot) << "Storing in qTT: move=" << bestResult.bestMove.uci() << " eval=" << bestResult.evaluation.value << " bound=" << bound_type_to_string(bound) << " hash=" << thread->position_.currentState_.hash << " fen=" << thread->position_.fen() << std::endl;
-  }
   thread->shared_->tt->store(
     thread->position_.currentState_.hash,
     bestResult.bestMove,
@@ -601,10 +541,6 @@ NegamaxResult<TURN> qsearch(SearchThread* thread, ColoredEvaluation<TURN> alpha,
     bestResult.evaluation.value,
     bound
   );
-
-  if (IS_PRINT_QNODE) {
-    std::cout << repeat("  ", plyFromRoot) << "Quiescence search returning: bestMove=" << bestResult.bestMove.uci() << " eval=" << bestResult.evaluation.value << " hash=" << thread->position_.currentState_.hash << " fen=" << thread->position_.fen() << std::endl;
-  }
 
   return bestResult;
 }
@@ -627,35 +563,22 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
   assert(thread->position_.turn_ == TURN);
   const uint64_t key = thread->position_.currentState_.hash;
   frame->hash = key;
-  if (IS_PRINT_NODE) {
-    std::cout << repeat("  ", plyFromRoot) << "Negamax called: depth=" << depth << " alpha=" << alpha << " beta=" << beta << " plyFromRoot=" << plyFromRoot << " history " << thread->position_.history_ << std::endl;
-  }
   const ColoredEvaluation<TURN> originalAlpha = alpha;
 
   // Because of how we handle checkmate values, this condition is basically
   // how we avoid looking for mate-in-5 if we already found mate-in-4.
   if (alpha >= beta) {
-    if (IS_PRINT_NODE) {
-      std::cout << repeat("  ", plyFromRoot) << "Alpha-beta window is invalid (alpha >= beta). Returning beta." << std::endl;
-    }
     return NegamaxResult<TURN>(kNullMove, beta);
   }
 
   if (thread->ply_from_root(frame) >= kMaxPlyFromRoot - 1) {
     const auto r = qsearch<TURN>(thread, alpha, beta, plyFromRoot, kMaxQuiescenceDepth, frame, stopThinking);
-    if (IS_PRINT_NODE) {
-      std::cout << repeat("  ", plyFromRoot) << "Max ply from root reached, returning from quiescence search: " << r << std::endl;
-    }
     return r;
   }
 
   if (depth == 0) {
     assert(SEARCH_TYPE != SearchType::ROOT);
-    auto r = qsearch(thread, alpha, beta, plyFromRoot, 0, frame, stopThinking);
-    if (IS_PRINT_NODE) {
-      std::cout << repeat("  ", plyFromRoot) << "Returning from quiescence search: " << r << std::endl;
-    }
-    return r;
+    return qsearch(thread, alpha, beta, plyFromRoot, 0, frame, stopThinking);
   }
 
   // TODO: Check if any move leads to a draw by repetition.
@@ -673,9 +596,6 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
   }
 
   if (SEARCH_TYPE != SearchType::ROOT && stopThinking->load()) {
-    if (IS_PRINT_NODE) {
-      std::cout << repeat("  ", plyFromRoot) << "Returning (Search stopped externally)." << std::endl;
-    }
     return NegamaxResult<TURN>(kNullMove, originalAlpha);
   }
 
@@ -686,9 +606,6 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
   isDraw |= isFiftyMoveDraw && !frame->inCheck;
   isDraw |= thread->position_.is_material_draw();
   if (isDraw) {
-    if (IS_PRINT_NODE) {
-      std::cout << repeat("  ", plyFromRoot) << "Returning (Draw detected)." << std::endl;
-    }
     return NegamaxResult<TURN>(kNullMove, ColoredEvaluation<TURN>(kDraw).clamp_(originalAlpha, beta));
   }
 
@@ -702,19 +619,10 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
       // evaluations (e.g. from repetition draws) are incorrectly reused.
       if (SEARCH_TYPE == SearchType::NULL_WINDOW_SEARCH) {
         if (entry.bound == BoundType::EXACT) {
-          if (IS_PRINT_NODE) {
-            std::cout << repeat("  ", plyFromRoot) << "Returning (TT Hit: EXACT; eval=" << entry.bestMove << " " << entry.value << ")" << std::endl;
-          }
           return NegamaxResult<TURN>(entry.bestMove, ColoredEvaluation<TURN>(entry.value).clamp_(alpha, beta));
         } else if (entry.bound == BoundType::LOWER && entry.value >= beta.value) {
-          if (IS_PRINT_NODE) {
-            std::cout << repeat("  ", plyFromRoot) << "Returning (TT Hit: LOWER)" << std::endl;
-          }
           return NegamaxResult<TURN>(entry.bestMove, beta);
         } else if (entry.bound == BoundType::UPPER && entry.value <= alpha.value) {
-          if (IS_PRINT_NODE) {
-            std::cout << repeat("  ", plyFromRoot) << "Returning (TT Hit: UPPER)" << std::endl;
-          }
           return NegamaxResult<TURN>(entry.bestMove, alpha);
         }
       }
@@ -758,14 +666,8 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
 
   if (moves == end) {
     if (frame->inCheck) {
-      if (IS_PRINT_NODE) {
-        std::cout << repeat("  ", plyFromRoot) << "Returning (Checkmate detected)." << std::endl;
-      }
       return NegamaxResult<TURN>(kNullMove, ColoredEvaluation<TURN>(kCheckmate).clamp_(originalAlpha, beta));
     } else {
-      if (IS_PRINT_NODE) {
-        std::cout << repeat("  ", plyFromRoot) << "Returning (Stalemate detected)." << std::endl;
-      }
       return NegamaxResult<TURN>(kNullMove, ColoredEvaluation<TURN>(Evaluation(kDraw)).clamp_(originalAlpha, beta));
     }
   }
@@ -802,9 +704,6 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
   #if EVAL_AGNOSTIC == 0
   if (SEARCH_TYPE != SearchType::ROOT && depth <= 2 && frame->staticEval < alpha.value - searchHyperParams.razoring_margin * depth * depth) {
     const auto r = qsearch<TURN>(thread, alpha, beta, plyFromRoot, 0, frame, stopThinking);
-    if (IS_PRINT_NODE) {
-      std::cout << repeat("  ", plyFromRoot) << "Razoring: static eval is much worse than alpha. Returning from quiescence search: " << r << std::endl;
-    }
     // We should check "r.evaluation <= alpha" here, but omitting the check
     // seems to perform better in practice... somehow. Changing the above
     // search to a null-window search also makes us perform worse, which is
@@ -821,9 +720,6 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
   // Reverse futility pruning (+29.6 ± 2.7)
   if (SEARCH_TYPE == SearchType::NULL_WINDOW_SEARCH && depth == 1 && frame->staticEval > beta.value + searchHyperParams.futility_margin && !frame->inCheck && std::abs(beta.value) < 1000) {
     const auto r = NegamaxResult<TURN>(kNullMove, beta);
-    if (IS_PRINT_NODE) {
-      std::cout << repeat("  ", plyFromRoot) << "Reverse futility pruning: static eval is much better than beta. Returning beta." << std::endl;
-    }
     return r;
   }
 
@@ -845,9 +741,6 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
     ).evaluation);
     undo_nullmove<TURN>(&thread->position_);
     if (r >= beta) {
-      if (IS_PRINT_NODE) {
-        std::cout << repeat("  ", plyFromRoot) << "Null move pruning: null move search returned " << r.value << " which is >= beta. Returning beta." << std::endl;
-      }
       return NegamaxResult<TURN>(kNullMove, beta);
     }
   }
@@ -938,14 +831,6 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
     }
   );
 
-  if (IS_PRINT_NODE) {
-    std::cout << repeat("  ", plyFromRoot) << "Ordered moves: ";
-    for (ExtMove* m = moves; m != end; ++m) {
-      std::cout << m->move.uci() << "(" << m->score << ") ";
-    }
-    std::cout << std::endl;
-  }
-
   if (SEARCH_TYPE == SearchType::ROOT) {
     thread->primaryVariations_.clear();
   }
@@ -1017,9 +902,6 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
       if (areWeInCheck) {
         // Need this check because of en passant captures into check.
         // e.g. b5c6 in position 8/1k6/6R1/KPpr4/8/8/8/8 w - c6 0 62
-        if (IS_PRINT_NODE) {
-          std::cout << repeat("  ", plyFromRoot) << "Illegal move generated that leaves us in check: " << move->move.uci() << std::endl;
-        }
         undo<TURN>(&thread->position_);
         continue;
       }
@@ -1071,9 +953,6 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
         }
         eval = to_parent_eval(negamax<opposite_color<TURN>(), SearchType::NULL_WINDOW_SEARCH, IS_MULTITHREADED>(thread, reducedChildDepth, to_child_eval(alpha + 1), to_child_eval(alpha), plyFromRoot + 1, frame + 1, stopThinking).evaluation);
         if (eval.value > alpha.value) {
-          if (IS_PRINT_NODE) {
-            std::cout << repeat("  ", plyFromRoot) << "Null window search failed; doing full window search." << std::endl;
-          }
           constexpr SearchType searchType = SEARCH_TYPE == SearchType::ROOT ? SearchType::NORMAL_SEARCH : SEARCH_TYPE;
           eval = to_parent_eval(negamax<opposite_color<TURN>(), searchType, IS_MULTITHREADED>(thread, childDepth, to_child_eval(beta), to_child_eval(alpha), plyFromRoot + 1, frame + 1, stopThinking).evaluation);
         }
@@ -1088,18 +967,6 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
           (frame + 1)->nodeType = (frame->nodeType == NodeType::CUT_NODE ? NodeType::ALL_NODE : NodeType::CUT_NODE);
         }
         eval = to_parent_eval(negamax<opposite_color<TURN>(), firstMoveSearchType, IS_MULTITHREADED>(thread, childDepth, to_child_eval(beta), to_child_eval(alpha), plyFromRoot + 1, frame + 1, stopThinking).evaluation);
-      }
-
-      if (IS_PRINT_NODE) {
-        std::cout << repeat("  ", plyFromRoot) << "Move " << move->move.uci() << " has evaluation ";
-        if (eval <= alpha) {
-          std::cout << "≤" << alpha.value;
-        } else if (eval >= beta) {
-          std::cout << "≥" << beta.value;
-        } else {
-          std::cout << "=" << eval.value;
-        }
-        std::cout << " (" << alpha.value << " ≤ " << eval.value << " ≤ " << beta.value << ") " << thread->position_.history_ << std::endl;
       }
 
       if (IS_MULTITHREADED) {
@@ -1176,9 +1043,6 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
     // Search was stopped externally. We cannot trust the result
     // of our for loop above, so we return early to avoid writing
     // an inaccurate result to the transposition table.
-    if (IS_PRINT_NODE) {
-      std::cout << repeat("  ", plyFromRoot) << "Returning (Search stopped externally)." << std::endl;
-    }
     return bestResult;
   }
 
@@ -1189,9 +1053,6 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
 
   bestResult.evaluation.clamp_(originalAlpha, beta);
 
-  if (IS_PRINT_NODE) {
-    std::cout << repeat("  ", plyFromRoot) << "Storing in TT: depth=" << depth << " move=" << bestResult.bestMove.uci() << " eval=" << bestResult.evaluation.value << " bound=" << bound_type_to_string(bound) << " hash=" << thread->position_.currentState_.hash << " fen=" << thread->position_.fen() << std::endl;
-  }
   if (frame->excludedMove == kNullMove) {
     thread->shared_->tt->store(
       thread->position_.currentState_.hash,
@@ -1200,10 +1061,6 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
       bestResult.evaluation.value,
       bound
     );
-  }
-
-  if (IS_PRINT_NODE) {
-    std::cout << repeat("  ", plyFromRoot) << "Negamax returning: bestMove=" << bestResult.bestMove.uci() << " eval=" << bestResult.evaluation.value  << " depth=" << depth << std::endl;
   }
 
   return bestResult;
