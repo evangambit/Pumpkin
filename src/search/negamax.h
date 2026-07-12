@@ -176,6 +176,15 @@ struct SearchHyperParams {
   // 45 vs 55:    +255-202=347   0.033±0.013  p=0.009  (402/10000 total)
   int futility_margin = 30;
 
+  // Experiment results:
+  //  1 Win50     :     7.6    3.7  1233.5    2400    51
+  //  2 Win25     :    -0.5    3.8  1198.0    2400    50
+  //  3 Win100    :    -1.1    3.7  1195.0    2400    50
+  //  4 Old       :    -6.0    3.7  1173.5    2400    49
+  int aspiration_window = 50;
+
+  int max_eval_for_null_window_search = 1000;
+
   int null_move_pruning_depth_reduction = 5;
 };
 
@@ -718,7 +727,7 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
   // 20/20: +200-241=393  -0.025±0.012  p=0.038  (417/10000 total)
 
   // Reverse futility pruning (+29.6 ± 2.7)
-  if (SEARCH_TYPE == SearchType::NULL_WINDOW_SEARCH && depth == 1 && frame->staticEval > beta.value + searchHyperParams.futility_margin && !frame->inCheck && std::abs(beta.value) < 1000) {
+  if (SEARCH_TYPE == SearchType::NULL_WINDOW_SEARCH && depth == 1 && frame->staticEval > beta.value + searchHyperParams.futility_margin && !frame->inCheck && std::abs(beta.value) < searchHyperParams.max_eval_for_null_window_search) {
     const auto r = NegamaxResult<TURN>(kNullMove, beta);
     return r;
   }

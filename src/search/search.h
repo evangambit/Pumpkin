@@ -159,12 +159,7 @@ SearchResult<TURN> search(SearchThread* thread, std::atomic<bool> *stopThinking,
     if (stopThinking->load()) {
       break;
     }
-    // Experiment results:
-    //  1 Win50     :     7.6    3.7  1233.5    2400    51
-    //  2 Win25     :    -0.5    3.8  1198.0    2400    50
-    //  3 Win100    :    -1.1    3.7  1195.0    2400    50
-    //  4 Old       :    -6.0    3.7  1173.5    2400    49
-    constexpr Evaluation kWindowSize = 50;
+    const Evaluation kWindowSize = thread->shared_->search_hyper_params.aspiration_window;
     ColoredEvaluation<TURN> alpha = (thread->shared_->multiPV == 1) ? lastResult.evaluation - kWindowSize : ColoredEvaluation<TURN>(kMinEval);
     ColoredEvaluation<TURN> beta = (thread->shared_->multiPV == 1) ? lastResult.evaluation + kWindowSize : ColoredEvaluation<TURN>(kMaxEval);
     while (true) {
@@ -217,8 +212,10 @@ SearchResult<TURN> search(SearchThread* thread, std::atomic<bool> *stopThinking,
         otherThreads[j].second->join();
       }
       if (result.evaluation <= alpha) {
+        if (alpha.value == kMinEval || stopThinking->load()) break;
         alpha = ColoredEvaluation<TURN>(kMinEval);
       } else if (result.evaluation >= beta) {
+        if (beta.value == kMaxEval || stopThinking->load()) break;
         beta = ColoredEvaluation<TURN>(kMaxEval);
       } else {
         break;
