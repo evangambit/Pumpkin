@@ -38,7 +38,7 @@ void TranspositionTable::clear() {
 }
 
 int score(const TTEntry& entry, uint8_t generation) {
-  return (entry.bound == BoundType::EXACT) * 128 + (entry.generation == generation) * 256 + entry.depth;
+  return (entry.bound == BoundType::EXACT) * 2 + (entry.generation == generation) * 256 + entry.depth;
 }
 
 void TranspositionTable::store(uint64_t key, Move bestMove, int8_t depth, Evaluation value, BoundType bound) {
