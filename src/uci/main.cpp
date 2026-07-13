@@ -104,23 +104,34 @@ struct UciEngine {
           return;
         }
 
-        // Wait until not busy.
-        state->taskQueueLock.lock();
-        while (state->currentTask != nullptr && state->currentTask->is_running()) {
-          state->taskQueueLock.unlock();
-          std::unique_lock<std::mutex> lock(state->mutex);
-          state->condVar.wait(lock);  // Wait for data
+        std::shared_ptr<Task> task;
+        {
+          // Wait until not busy.
           state->taskQueueLock.lock();
+          while (state->currentTask != nullptr && state->currentTask->is_running()) {
+            state->taskQueueLock.unlock();
+            std::unique_lock<std::mutex> lock(state->mutex);
+            state->condVar.wait(lock);  // Wait for data
+            state->taskQueueLock.lock();
+          }
+
+          if (state->taskQueue.size() == 0) {
+            state->taskQueueLock.unlock();
+            throw std::runtime_error("No task to enque");
+          }
+
+          task = state->taskQueue.front();
+          state->taskQueue.pop_front();
+          // Drop the previous task (may join a search thread) outside the spinlock.
+          std::shared_ptr<Task> previous = std::move(state->currentTask);
+          state->currentTask = task;
+          state->taskQueueLock.unlock();
+          previous.reset();
         }
 
-        if (state->taskQueue.size() == 0) {
-          throw std::runtime_error("No task to enque");
-        }
-
-        state->currentTask = state->taskQueue.front();
-        state->taskQueue.pop_front();
-        state->currentTask->start(state);
-        state->taskQueueLock.unlock();
+        // Never run tasks while holding taskQueueLock: NewGameTask / GoTask setup
+        // can be slow, and the input thread needs to enqueue without busy-waiting.
+        task->start(state);
       }
     });
     while (true) {
@@ -238,6 +249,9 @@ struct UciEngine {
 };
 
 int main(int argc, char *argv[]) {
+  // UCI over pipes (match.py) needs line-buffered/flushed output on Windows.
+  std::cout << std::unitbuf;
+
   std::string name = std::string("Pumpkin 0.0 (") + argv[0] + ")";
   std::cout << name << std::endl;
 

@@ -6,7 +6,6 @@
 #include "../eval/byhand/byhand.h"
 #include "../search/transposition_table.h"
 #include "../search/negamax.h"
-#include "../utils/SpinLock.h"
 
 #include <atomic>
 #include <condition_variable>
@@ -50,7 +49,7 @@ class Task {
   }
 };
 
-constexpr int kDefaultTranspositioTableSizeMb = 100;
+constexpr int kDefaultTranspositioTableSizeMb = 16;
 struct UciEngineState {
   UciEngineState()
     : tt_(std::make_shared<TranspositionTable>(/* megabytes= */kDefaultTranspositioTableSizeMb)),
@@ -82,7 +81,7 @@ struct UciEngineState {
   std::atomic<bool> shuttingDown = false;
 
   std::deque<std::shared_ptr<Task>> taskQueue;
-  SpinLock taskQueueLock;
+  std::mutex taskQueueLock;
   std::shared_ptr<Task> currentTask;
   std::shared_ptr<std::atomic<bool>> stopThinking = std::make_shared<std::atomic<bool>>(false);
 
