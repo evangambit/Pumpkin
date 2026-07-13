@@ -17,10 +17,10 @@
 #include <sstream>
 #include <unordered_set>
 
-extern const char model_bin[];
+extern unsigned char model_bin[];
 extern unsigned int model_bin_len;
 
-extern const char byhand_bin[];
+extern unsigned char byhand_bin[];
 extern unsigned int byhand_bin_len;
 
 namespace ChessEngine {
@@ -59,23 +59,21 @@ struct UciEngineState {
       multiPV(1) {
     this->position = Position("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
     // std::shared_ptr<NNUE::Nnue> nnue_model = std::make_shared<NNUE::Nnue>();
-    // std::istringstream f(std::string(model_bin, model_bin_len));
+    // std::istringstream f(std::string(reinterpret_cast<const char*>(model_bin), model_bin_len));
     // nnue_model->load(f);
-    #ifndef DEFAULT_EVALUATOR
-    this->position.set_listener(std::make_shared<PieceSquareEvaluator>());
-    #elif DEFAULT_EVALUATOR == 'b'
+    #if defined(PUMPKIN_DEFAULT_EVALUATOR_BYHAND)
     auto evaluator = std::make_shared<ByHand::ByHandEvaluator>();
-    std::istringstream f(std::string(byhand_bin, byhand_bin_len));
+    std::istringstream f(std::string(reinterpret_cast<const char*>(byhand_bin), byhand_bin_len));
     evaluator->load_from_stream(f);
     this->position.set_listener(evaluator);
-    #elif DEFAULT_EVALUATOR == 'n'
+#elif defined(PUMPKIN_DEFAULT_EVALUATOR_NNUE)
     auto nnue_model = std::make_shared<NNUE::Nnue<int16_t>>();
-    std::istringstream f(std::string(model_bin, model_bin_len));
+    std::istringstream f(std::string(reinterpret_cast<const char*>(model_bin), model_bin_len));
     nnue_model->load(f);
     this->position.set_listener(std::make_shared<NNUE::NnueEvaluator<int16_t>>(nnue_model));
-    #else
-    static_assert(false, "Invalid DEFAULT_EVALUATOR");
-    #endif
+#else
+    this->position.set_listener(std::make_shared<PieceSquareEvaluator>());
+#endif
   }
 
   std::mutex mutex;

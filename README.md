@@ -1,11 +1,30 @@
 
-    sudo apt-get install -y cmake libgtest-dev
+# Build
 
-# Configure and build (Release is recommended for the engine)
-    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS="-DDEFAULT_EVALUATOR=\'n\'"
-    cmake --build build --target uci
+Don't reuse one `build/` directory across WSL and Windows — CMake caches absolute paths. Use separate trees (e.g. `build` in WSL, `build-win` on Windows).
+
+## Linux / WSL
+
+```bash
+sudo apt-get install -y cmake g++ libgtest-dev
+
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DPUMPKIN_DEFAULT_EVALUATOR=n
+cmake --build build --target uci
+./build/uci
+```
+
+## Windows (MSVC)
+
+```powershell
+cmake -S . -B build-win -DPUMPKIN_DEFAULT_EVALUATOR=n
+cmake --build build-win --config Release --target uci
+.\build-win\Release\uci.exe
+```
+
+Tests are built when GTest is available (`libgtest-dev` on Linux). Without GTest, configure still succeeds and only skips tests.
 
 # Run tests
+
     ctest --test-dir build --output-on-failure
 
 # Run one test file

@@ -1,6 +1,7 @@
 #ifndef POSITION_H
 #define POSITION_H
 
+#include <bit>
 #include <cassert>
 #include <cstdint>
 #include <cstring>

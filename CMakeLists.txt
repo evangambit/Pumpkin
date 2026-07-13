@@ -59,8 +59,12 @@ if(PUMPKIN_PARAM)
 endif()
 
 set(PUMPKIN_DEFAULT_EVALUATOR "" CACHE STRING "Default evaluator at startup: n=nnue, b=byhand, empty=pst")
-if(PUMPKIN_DEFAULT_EVALUATOR)
-  target_compile_definitions(uci PRIVATE "DEFAULT_EVALUATOR='${PUMPKIN_DEFAULT_EVALUATOR}'")
+if(PUMPKIN_DEFAULT_EVALUATOR STREQUAL "n")
+  target_compile_definitions(uci PRIVATE PUMPKIN_DEFAULT_EVALUATOR_NNUE=1)
+elseif(PUMPKIN_DEFAULT_EVALUATOR STREQUAL "b")
+  target_compile_definitions(uci PRIVATE PUMPKIN_DEFAULT_EVALUATOR_BYHAND=1)
+elseif(PUMPKIN_DEFAULT_EVALUATOR)
+  message(FATAL_ERROR "PUMPKIN_DEFAULT_EVALUATOR must be n, b, or empty (got '${PUMPKIN_DEFAULT_EVALUATOR}')")
 endif()
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
@@ -94,8 +98,15 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 endif()
 
 if(PUMPKIN_BUILD_TESTS)
+  find_package(GTest QUIET)
+  if(NOT GTest_FOUND)
+    message(WARNING "GTest not found; disabling tests (install libgtest-dev or pass -DPUMPKIN_BUILD_TESTS=OFF)")
+    set(PUMPKIN_BUILD_TESTS OFF CACHE BOOL "Build unit tests" FORCE)
+  endif()
+endif()
+
+if(PUMPKIN_BUILD_TESTS)
   enable_testing()
-  find_package(GTest REQUIRED)
 
   file(GLOB_RECURSE PUMPKIN_TEST_SOURCES CONFIGURE_DEPENDS
     "src/**/tests/*Tests.cpp"

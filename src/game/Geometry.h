@@ -2,6 +2,7 @@
 #define GEOMETRY_H
 
 #include <cassert>
+#include <bit>
 #include <iostream>
 #include <cstdint>
 #include <cmath>
@@ -427,17 +428,22 @@ std::string square_to_string(SafeSquare sq);
 
 template<Direction dir>
 Bitboard shift(Bitboard b) {
-  b = (dir > 0) ? (b << dir) : (b >> (-dir));
-  if ((dir + 16) % 8 == 1) {
+  constexpr int shiftAmount = static_cast<int>(dir);
+  if constexpr (shiftAmount > 0) {
+    b <<= shiftAmount;
+  } else if constexpr (shiftAmount < 0) {
+    b >>= -shiftAmount;
+  }
+  if constexpr ((shiftAmount + 16) % 8 == 1) {
     b &= ~kFiles[FILE_A];
   }
-  if ((dir + 16) % 8 == 2) {
+  if constexpr ((shiftAmount + 16) % 8 == 2) {
     b &= ~(kFiles[FILE_A] | kFiles[FILE_B]);
   }
-  if ((dir + 16) % 8 == 7) {
+  if constexpr ((shiftAmount + 16) % 8 == 7) {
     b &= ~kFiles[FILE_H];
   }
-  if ((dir + 16) % 8 == 6) {
+  if constexpr ((shiftAmount + 16) % 8 == 6) {
     b &= ~(kFiles[FILE_H] | kFiles[FILE_G]);
   }
   return b;
@@ -505,33 +511,33 @@ static_assert(SafeSquare::SA1 - Direction::WEST == SafeSquare::SB1);
 
 inline SafeSquare lsb_i_promise_board_is_not_empty(Bitboard b) {
   assert(b != 0);
-  return SafeSquare(__builtin_ctzll(b));
+  return SafeSquare(std::countr_zero(b));
 }
 
 inline SafeSquare msb_i_promise_board_is_not_empty(Bitboard b) {
   assert(b != 0);
-  return SafeSquare(63 ^ __builtin_clzll(b));
+  return SafeSquare(63 ^ std::countl_zero(b));
 }
 
 inline UnsafeSquare lsb_or_none(Bitboard b) {
-  return select<UnsafeSquare>(b != 0, UnsafeSquare(__builtin_ctzll(b)), UnsafeSquare::UNO_SQUARE);
+  return select<UnsafeSquare>(b != 0, UnsafeSquare(std::countr_zero(b)), UnsafeSquare::UNO_SQUARE);
 }
 
 inline SafeSquare lsb_or(Bitboard b, SafeSquare defaultValue) {
-  return select<SafeSquare>(b != 0, SafeSquare(__builtin_ctzll(b)), defaultValue);
+  return select<SafeSquare>(b != 0, SafeSquare(std::countr_zero(b)), defaultValue);
 }
 
 inline UnsafeSquare msb_or_none(Bitboard b) {
-  return select<UnsafeSquare>(b != 0, UnsafeSquare(63 ^ __builtin_clzll(b)), UnsafeSquare::UNO_SQUARE);
+  return select<UnsafeSquare>(b != 0, UnsafeSquare(63 ^ std::countl_zero(b)), UnsafeSquare::UNO_SQUARE);
 }
 
 inline UnsafeSquare msb_or(Bitboard b, UnsafeSquare defaultValue) {
-  return select<UnsafeSquare>(b != 0, UnsafeSquare(63 ^ __builtin_clzll(b)), defaultValue);
+  return select<UnsafeSquare>(b != 0, UnsafeSquare(63 ^ std::countl_zero(b)), defaultValue);
 }
 
 inline SafeSquare pop_lsb_i_promise_board_is_not_empty(Bitboard& b) {
   assert(b != 0);
-  SafeSquare s = SafeSquare(__builtin_ctzll(b));
+  SafeSquare s = SafeSquare(std::countr_zero(b));
   b &= b - 1;
   return s;
 }

@@ -114,7 +114,7 @@ constexpr SafePiece to_safe_piece(Piece p) {
 
 const unsigned kNumColoredPieces = 13;
 
-enum ColoredPiece : unsigned {
+enum ColoredPiece : uint8_t {
   NO_COLORED_PIECE = 0,
   WHITE_PAWN = 1,
   WHITE_KNIGHT = 2,

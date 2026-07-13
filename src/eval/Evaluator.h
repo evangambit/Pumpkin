@@ -1,6 +1,7 @@
 #ifndef SRC_SEARCH_EVALUATOR_H
 #define SRC_SEARCH_EVALUATOR_H
 
+#include <bit>
 #include <memory>
 #include "../game/Position.h"
 #include "../game/Utils.h"

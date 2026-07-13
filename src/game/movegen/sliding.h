@@ -311,7 +311,7 @@ inline uint8_t pin_lookup(size_t index) {
 // this function should accept SafeSquares.
 inline uint8_t sliding_moves(uint8_t loc, uint8_t occ) {
   assert(std::popcount(loc) == 1);
-  return kSlideLookup[256 * __builtin_ctzll(loc) + occ];
+  return kSlideLookup[256 * std::countr_zero(loc) + occ];
 }
 
 inline void initialize_sliding() {

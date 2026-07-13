@@ -46,7 +46,7 @@ void initialize_zorbrist() {
   (rd());
   #endif
 
-  std::uniform_int_distribution<long long int> dist(uint64_t(0), uint64_t(-1));
+  std::uniform_int_distribution<uint64_t> dist;
   for (ColoredPiece cp = ColoredPiece::NO_COLORED_PIECE; cp < kNumColoredPieces; cp = ColoredPiece(cp + 1)) {
     for (size_t i = 0; i < kNumSquares; ++i) {
       kZorbristNumbers[cp][i] = dist(e2);

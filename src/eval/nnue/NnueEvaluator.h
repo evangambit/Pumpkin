@@ -1,6 +1,7 @@
 #ifndef SRC_EVAL_NNUE_NNUEEVALUATIOR_H
 #define SRC_EVAL_NNUE_NNUEEVALUATIOR_H
 
+#include <bit>
 #include <chrono>
 #include <cstdint>
 #include <iostream>

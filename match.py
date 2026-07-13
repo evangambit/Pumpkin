@@ -45,7 +45,7 @@ def _kill_all_engines():
 class UCIEngine:
   def __init__(self, path, options=None, timeout=30):
     self.path = path
-    self.cmd = shlex.split(path)
+    self.cmd = shlex.split(path, posix=(os.name != "nt"))
     self.name = self.cmd[0]
     self.timeout = timeout
     self.process = None
@@ -671,7 +671,7 @@ def main(concurrency, args):
           # Convert tuple keys to strings for JSON
           "matchup_state": {f"{k[0]},{k[1]}": v for k, v in matchup_state.items()}
         }, f)
-      os.rename(temp_state, state_file)
+      os.replace(temp_state, state_file)
 
       r1, r2 = games[0][0], games[1][0]
       w, d, l = st["wins"], st["draws"], st["losses"]

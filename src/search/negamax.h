@@ -755,7 +755,9 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
   }
   #endif  // EVAL_AGNOSTIC
 
-  const Move lastMove = SEARCH_TYPE == SearchType::ROOT ? kNullMove : thread->position_.history_.back().move;
+  const Move lastMove = (SEARCH_TYPE == SearchType::ROOT || thread->position_.history_.empty())
+    ? kNullMove
+    : thread->position_.history_.back().move;
   // Move ordering operates in bands
   // +8000: is capture
   // +8000: is killer move

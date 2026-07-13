@@ -2,13 +2,13 @@
 #define PUMPKIN_UCI_TRIVIALTASKS_H
 
 // model.o
-extern const char model_bin[];
+extern unsigned char model_bin[];
 extern unsigned int model_bin_len;
 
-extern const char qst_bin[];
+extern unsigned char qst_bin[];
 extern unsigned int qst_bin_len;
 
-extern const char byhand_bin[];
+extern unsigned char byhand_bin[];
 extern unsigned int byhand_bin_len;
 
 #include <atomic>
@@ -312,7 +312,7 @@ class SetEvaluatorTask : public Task {
         }
         evaluator->load_from_stream(f);
       } else {
-        std::istringstream f(std::string(byhand_bin, byhand_bin_len));
+        std::istringstream f(std::string(reinterpret_cast<const char*>(byhand_bin), byhand_bin_len));
         evaluator->load_from_stream(f);
       }
     } else if (evaluatorName == "nnue") {
@@ -328,7 +328,7 @@ class SetEvaluatorTask : public Task {
         nnue_model->load(f);
         std::cout << "info string Model loaded successfully." << std::endl;
       } else {
-        std::istringstream f(std::string(model_bin, model_bin_len));
+        std::istringstream f(std::string(reinterpret_cast<const char*>(model_bin), model_bin_len));
         nnue_model->load(f);
       }
       state->position.set_listener(std::make_shared<NNUE::NnueEvaluator<int16_t>>(nnue_model));
@@ -346,7 +346,7 @@ class SetEvaluatorTask : public Task {
         nnue_model->load(f);
         std::cout << "info string Model loaded successfully." << std::endl;
       } else {
-        std::istringstream f(std::string(model_bin, model_bin_len));
+        std::istringstream f(std::string(reinterpret_cast<const char*>(model_bin), model_bin_len));
         nnue_model->load(f);
       }
       state->position.set_listener(std::make_shared<NNUE::NnueEvaluator<float>>(nnue_model));

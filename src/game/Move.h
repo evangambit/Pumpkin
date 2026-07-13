@@ -35,18 +35,22 @@ struct Move {
 static_assert(sizeof(Move) == 2);
 
 struct ExtMove {
-  ExtMove() {}
-  ExtMove(Piece piece, Move move) : piece(piece), capture(ColoredPiece::NO_COLORED_PIECE), move(move) {}
-  ExtMove(Piece piece, ColoredPiece capture2, Move move) : piece(piece), capture(capture2), move(move) {}
+  ExtMove() : piece(Piece::NO_PIECE), capture(ColoredPiece::NO_COLORED_PIECE), move{}, score(0) {}
+  ExtMove(Piece piece, Move move) : piece(piece), capture(ColoredPiece::NO_COLORED_PIECE), move(move), score(0) {}
+  ExtMove(Piece piece, ColoredPiece capture2, Move move) : piece(piece), capture(capture2), move(move), score(0) {}
 
   std::string str() const;
 
   std::string uci() const;
 
-  Piece piece : 4;
-  ColoredPiece capture : 4;
-  Move move;  // 16 bits
-  Evaluation score;  // 16 bits
+  Piece piece;
+  ColoredPiece capture;
+  Move move;
+  Evaluation score;
+
+  // If we wanted to, we could squeeze ExtMove down to 5 bytes. We *probably* prefer keeping it at 8 bytes
+  // for memory alignment reasons, but (todo) we should do an actual comparison to make sure.
+  uint16_t _pad = 0;
 };
 static_assert(sizeof(ExtMove) == 8);
 

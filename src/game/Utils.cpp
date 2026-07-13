@@ -1,6 +1,8 @@
 #include <iostream>
 #include <cassert>
 #include <cstdint>
+#include <stdexcept>
+#include <string>
 
 #include "Utils.h"
 
