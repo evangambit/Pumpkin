@@ -131,13 +131,6 @@ struct SearchManager {
     lock.unlock();
     return r;
   }
-  void start_searching(uint64_t hash) {
-    size_t idx = hash % kNumSearchManagerCounters;
-    SpinLock& lock = locks[hash % kNumSearchManagerLocks];
-    lock.lock();
-    counters[idx] += 1;
-    lock.unlock();
-  }
   void finished_searching(uint64_t hash) {
     size_t idx = hash % kNumSearchManagerCounters;
     SpinLock& lock = locks[hash % kNumSearchManagerLocks];
@@ -893,17 +886,6 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
       #endif  // EVAL_AGNOSTIC
 
       make_move<TURN>(&thread->position_, move->move);
-
-      // All threads proceed to the first child, but defer children that are already being searched
-      // by another thread.
-      if (IS_MULTITHREADED) {
-        if (depth > 1 && !isDeferred && move != moves && !thread->shared_->searchManager->should_start_searching(thread->position_.currentState_.hash)) {
-          *deferredMovesEnd++ = *move;
-          undo<TURN>(&thread->position_);
-          continue;
-        }
-        thread->shared_->searchManager->start_searching(thread->position_.currentState_.hash);
-      }
       ++moveIndex;
       
       const bool areWeInCheck = can_enemy_attack<TURN>(
@@ -915,6 +897,21 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
         // e.g. b5c6 in position 8/1k6/6R1/KPpr4/8/8/8/8 w - c6 0 62
         undo<TURN>(&thread->position_);
         continue;
+      }
+
+      // All threads proceed to the first child, but defer children that are already being searched
+      // by another thread.
+      bool claimedPosition = false;
+      const uint64_t childHash = thread->position_.currentState_.hash;
+      if (IS_MULTITHREADED) {
+        if (depth > 1 && !isDeferred && move != moves) {
+          if (!thread->shared_->searchManager->should_start_searching(childHash)) {
+            *deferredMovesEnd++ = *move;
+            undo<TURN>(&thread->position_);
+            continue;
+          }
+          claimedPosition = true;
+        }
       }
 
       ++numLegalMoves;
@@ -980,8 +977,8 @@ NegamaxResult<TURN> negamax(SearchThread* thread, int depth, ColoredEvaluation<T
         eval = to_parent_eval(negamax<opposite_color<TURN>(), firstMoveSearchType, IS_MULTITHREADED>(thread, childDepth, to_child_eval(beta), to_child_eval(alpha), plyFromRoot + 1, frame + 1, stopThinking).evaluation);
       }
 
-      if (IS_MULTITHREADED) {
-        thread->shared_->searchManager->finished_searching(thread->position_.currentState_.hash);
+      if (claimedPosition) {
+        thread->shared_->searchManager->finished_searching(childHash);
       }
 
       undo<TURN>(&thread->position_);
